@@ -2,6 +2,7 @@
 using Oxide.Core;
 using Oxide.Core.Libraries;
 using Oxide.Core.Libraries.Covalence;
+using System;
 using System.Collections.Generic;
 
 namespace Oxide.Plugins
@@ -13,14 +14,21 @@ namespace Oxide.Plugins
         #region Variables
         Dictionary<string, ISAPlayer> _playerData = new Dictionary<string, ISAPlayer>();
         private Time _time = GetLibrary<Time>();
-        private double MaxMinutesToRefresh = 60;
+        private double cacheLifetime = 300; // minutes
+        string[] groups;
+        private ISAConfig config;
         #endregion
 
         #region Hooks
         void Init()
         {
             Puts("Server Armour is being initialized.");
-            LoadSettings();
+            config = Config.ReadObject<ISAConfig>();
+            LoadDefaultMessages();
+
+            CheckGroups();
+
+            LoadData();
         }
 
         void Loaded()
@@ -31,7 +39,10 @@ namespace Oxide.Plugins
             foreach (IPlayer player in players.All)
             {
                 if (player != null)
-                    GetPlayerBans(player);
+                {
+                    GetPlayerBans(player, false, player.IsConnected);
+                    CheckIfBanned(player);
+                }
                 playerTotal++;
             }
 
@@ -41,7 +52,7 @@ namespace Oxide.Plugins
 
         void OnUserConnected(IPlayer player)
         {
-            GetPlayerBans(player, true);
+            GetPlayerBans(player);
 
             Puts($"{player.Name} ({player.Id}) connected from {player.Address}");
 
@@ -50,7 +61,7 @@ namespace Oxide.Plugins
                 Puts($"{player.Name} ({player.Id}) is admin");
             }
 
-            Puts($"{player.Name} is {(player.IsBanned ? "banned" : "not banned")}");
+            CheckIfBanned(player);
         }
 
         void OnUserDisconnected(IPlayer player)
@@ -96,12 +107,12 @@ namespace Oxide.Plugins
         #endregion
 
         #region WebRequests
-        void GetPlayerBans(IPlayer player, bool forceRefresh = false)
+        void GetPlayerBans(IPlayer player, bool forceRefresh = false, bool connectedTime = true)
         {
 
             if (forceRefresh)
             {
-                Puts("Forcing a refresh for newly connected user " + player.Name);
+                Puts("Forcing a refresh for user " + player.Name);
             }
             else
             {
@@ -110,9 +121,10 @@ namespace Oxide.Plugins
                     uint cachedTimestamp = _playerData[player.Id].cacheTimestamp;
                     uint currentTimestamp = _time.GetUnixTimestamp();
                     double minutesOld = (currentTimestamp - cachedTimestamp) / 60.0 / 1000.0;
-                    bool oldCache = MaxMinutesToRefresh <= minutesOld;
+                    bool oldCache = cacheLifetime <= minutesOld;
                     Puts("Player " + player.Name + " exists, " + (oldCache ? "however his cache is old and will now refresh." : "and his cache is still fresh."));
 
+                    _playerData[player.Id].lastConnected = _time.GetUnixTimestamp();
                     if (!oldCache)
                         return; //user already cached, therefore do not check again before cache time laps.
                 }
@@ -130,6 +142,7 @@ namespace Oxide.Plugins
 
                 ISAPlayer isaPlayer = JsonConvert.DeserializeObject<ISAPlayer>(response);
                 isaPlayer.cacheTimestamp = _time.GetUnixTimestamp();
+                isaPlayer.lastConnected = _time.GetUnixTimestamp();
                 _playerData.Add(isaPlayer.steamid, isaPlayer);
                 if (isaPlayer != null && isaPlayer.banCount > 0)
                 {
@@ -139,36 +152,60 @@ namespace Oxide.Plugins
                 {
                     Puts($"ServerArmour: {isaPlayer.username} checked, and user is clean");
                 }
-                SaveSettings();
+                SaveData();
             }, this, RequestMethod.GET);
         }
-        #endregion
-        #region Classes 
-        public class ISAPlayer
+
+        bool CheckIfBanned(IPlayer player)
         {
-            public string steamid;
-            public string username;
-            public int banCount;
-            public List<ISABan> banData;
-            public uint cacheTimestamp;
+            Puts($"{player.Name} is {(player.IsBanned ? "banned" : "not banned")}");
+            return false;
         }
-        public class ISABan
-        {
-            public string serverName;
-            public string reason;
-            public string date;
-        }
+
         #endregion
 
         #region Data Handling
         bool PlayerCached(string steamid) => _playerData.ContainsKey(steamid);
+        T GetConfig<T>(string name, T defaultValue) => Config[name] == null ? defaultValue : (T)Convert.ChangeType(Config[name], typeof(T));
+        protected override void LoadDefaultConfig()
+        {
+            LogWarning("Creating a new configuration file");
+            Config.WriteObject(
+                new ISAConfig
+                {
+                    AutoBanGroup = "serverarmour.bans",
+                    AutoBanOn = true,
+                    AutoBanCeiling = 1,
+                    AutoBanReasonKeywords = new string[] { "aimbot", "esp" },
+                    WatchlistGroup = "serverarmour.watchlist",
+                    WatchlistCeiling = 1,
+                    ServerAdminName = "",
+                    ServerAdminEmail = "",
+                    ServerApiKey = ""
+                }, true);
+            SaveConfig();
+        }
 
-        void SaveSettings()
+        protected override void LoadDefaultMessages()
+        {
+            lang.RegisterMessages(new Dictionary<string, string>
+            {
+                ["EpicThing"] = "An epic thing has happened",
+                ["EpicTimes"] = "An epic thing has happened: {0} time(s)"
+            }, this, "en");
+        }
+
+        string GetMsg(IPlayer player, string key)
+        {
+            return lang.GetMessage(key, this, player.Id);
+        }
+
+        void SaveData()
         {
             Interface.Oxide.DataFileSystem.WriteObject<Dictionary<string, ISAPlayer>>("ServerArmour", _playerData, true);
         }
 
-        void LoadSettings()
+        void LoadData()
         {
             if (Interface.Oxide.DataFileSystem.ExistsDatafile("ServerArmour"))
             {
@@ -177,8 +214,64 @@ namespace Oxide.Plugins
             }
             else
             {
-                SaveSettings();
+                SaveData();
             }
+        }
+
+        void CheckGroups()
+        {
+            Puts("Registering groups");
+
+            string[] groups = permission.GetGroups();
+
+            Puts("Checking if config groups exists.");
+
+            string autobanGroup = GetConfig("AutoBanGroup", "serverarmour.bans");
+            string watchlistGroup = GetConfig("AutoBanGroup", "serverarmour.watchlists");
+
+            if (!permission.GroupExists(autobanGroup))
+            {
+                permission.CreateGroup(autobanGroup, "Server Armour Autobans", 0);
+            }
+
+            if (!permission.GroupExists(watchlistGroup))
+            {
+                permission.CreateGroup(watchlistGroup, "Server Armour Watchlist", 0);
+            }
+        }
+        #endregion
+
+        #region Classes 
+        public class ISAPlayer
+        {
+            public string steamid;
+            public string username;
+            public int banCount;
+            public List<ISABan> banData;
+            public uint cacheTimestamp;
+            public uint lastConnected;
+        }
+        public class ISABan
+        {
+            public string serverName;
+            public string reason;
+            public string date;
+        }
+        private class ISAConfig
+        {
+            public bool Debug;
+
+            public string AutoBanGroup;
+            public bool AutoBanOn;
+            public int AutoBanCeiling;
+            public string[] AutoBanReasonKeywords;
+
+            public string WatchlistGroup;
+            public int WatchlistCeiling;
+
+            public string ServerAdminName;
+            public string ServerAdminEmail;
+            public string ServerApiKey;
         }
         #endregion
     }
