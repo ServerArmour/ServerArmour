@@ -9,19 +9,21 @@ namespace Oxide.Plugins {
     [Info("ServerArmour", "Pho3niX90", "0.0.1")]
     [Description("Protect your server! Auto ban hackers, and notify other server owners of hackers")]
     class ServerArmour : CovalencePlugin {
+
         #region Variables
         Dictionary<string, ISAPlayer> _playerData = new Dictionary<string, ISAPlayer>();
         private Time _time = GetLibrary<Time>();
         private double cacheLifetime = 300; // minutes
         string[] groups;
         private ISAConfig config;
+        static string thisServerIp;
         #endregion
 
         #region Hooks
         void Init() {
             Puts("Server Armour is being initialized.");
             config = Config.ReadObject<ISAConfig>();
-
+            thisServerIp = server.Address.ToString();
             if (config.ServerVersion.Equals(server.Version.ToString())) {
                 config.ServerName = server.Name;
                 config.ServerPort = server.Port;
@@ -42,11 +44,12 @@ namespace Oxide.Plugins {
             int playerTotal = 0;
             foreach (IPlayer player in players.All) {
                 if (player != null) {
-                    GetPlayerBans(player, false, player.IsConnected);
-                    CheckIfBanned(player);
+                    GetPlayerBans(player, true, player.IsConnected);
                 }
                 playerTotal++;
             }
+
+            CheckLocalBans();
 
             Puts("Checking " + playerTotal + " players");
             Puts("Server Armour finished initializing.");
@@ -68,7 +71,7 @@ namespace Oxide.Plugins {
                 Puts($"{player.Name} ({player.Id}) is admin");
             }
 
-            CheckIfBanned(player);
+            // CheckIfBanned(player);
         }
 
         void OnUserDisconnected(IPlayer player) {
@@ -103,26 +106,25 @@ namespace Oxide.Plugins {
         void OnUserUnbanned(string name, string id, string ip) {
             Puts($"Player {name} ({id}) at {ip} was unbanned");
         }
+
         #endregion
 
         #region WebRequests
-        void GetPlayerBans(IPlayer player, bool forceRefresh = false, bool connectedTime = true) {
+        void GetPlayerBans(IPlayer player, bool onlyGetUncached = false, bool connectedTime = true, bool forceRefresh = false) {
 
-            if (forceRefresh) {
-                Puts("Forcing a refresh for user " + player.Name);
-            } else {
-                if (PlayerCached(player.Id)) {
-                    uint cachedTimestamp = _playerData[player.Id].cacheTimestamp;
-                    uint currentTimestamp = _time.GetUnixTimestamp();
-                    double minutesOld = (currentTimestamp - cachedTimestamp) / 60.0 / 1000.0;
-                    bool oldCache = cacheLifetime <= minutesOld;
-                    Puts("Player " + player.Name + " exists, " + (oldCache ? "however his cache is old and will now refresh." : "and his cache is still fresh."));
 
-                    _playerData[player.Id].lastConnected = _time.GetUnixTimestamp();
-                    if (!oldCache)
-                        return; //user already cached, therefore do not check again before cache time laps.
-                }
+            if (PlayerCached(player.Id) && !onlyGetUncached) {
+                uint cachedTimestamp = _playerData[player.Id].cacheTimestamp;
+                uint currentTimestamp = _time.GetUnixTimestamp();
+                double minutesOld = (currentTimestamp - cachedTimestamp) / 60.0 / 1000.0;
+                bool oldCache = cacheLifetime <= minutesOld;
+                LogDebug("Player " + player.Name + " exists, " + (oldCache ? "however his cache is old and will now refresh." : "and his cache is still fresh."));
+
+                _playerData[player.Id].lastConnected = _time.GetUnixTimestamp();
+                if (!oldCache)
+                    return; //user already cached, therefore do not check again before cache time laps.
             }
+
 
             string url = $"http://io.serverarmour.com/checkUser?steamid={player.Id}&username={player.Name}&ip={player.Address}" + ServerGetString();
             Puts(url);
@@ -131,28 +133,52 @@ namespace Oxide.Plugins {
                     Puts($"Couldn't get an answer from ServerArmour.com!");
                     return;
                 }
-
                 ISAPlayer isaPlayer = JsonConvert.DeserializeObject<ISAPlayer>(response);
                 isaPlayer.cacheTimestamp = _time.GetUnixTimestamp();
                 isaPlayer.lastConnected = _time.GetUnixTimestamp();
-                _playerData.Add(isaPlayer.steamid, isaPlayer);
+                if (!PlayerCached(isaPlayer.steamid)) {
+                    _playerData.Add(isaPlayer.steamid, isaPlayer);
+                } else {
+                    _playerData[isaPlayer.steamid].banData = isaPlayer.banData;
+                }
+
                 if (isaPlayer != null && isaPlayer.banCount > 0) {
                     Puts($"ServerArmour: {isaPlayer.username} checked, and user is dirty with a total of ***{isaPlayer.banCount}*** bans");
                 } else if (isaPlayer != null) {
-                    Puts($"ServerArmour: {isaPlayer.username} checked, and user is clean");
+                    LogDebug($"ServerArmour: {isaPlayer.username} checked, and user is clean");
                 }
-                if (webrequest.GetQueueLength() == 0) {
-                    Puts("WebQueue now empty, will now save data");
-                    SaveData();
-                } else {
-                    Puts("WebQueue still has " + webrequest.GetQueueLength() + " tasks to process, will not save now");
-                }
+
+                SaveData();
+
             }, this, RequestMethod.GET);
         }
 
-        bool CheckIfBanned(IPlayer player) {
-            Puts($"{player.Name} is {(player.IsBanned ? "banned" : "not banned")}");
-            return false;
+        void AddBan(IPlayer player, string banreason) {
+            string dateTime = DateTime.Now.ToString("yyyy/MM/dd HH:mm").ToString();
+            string url = $"http://io.serverarmour.com/addBan?steamid={player.Id}&username={player.Name}&ip={player.Address}&reason={banreason}&dateTime={dateTime}" + ServerGetString();
+            Puts(url);
+            webrequest.Enqueue(url, null, (code, response) => {
+                if (code != 200 || response == null) {
+                    Puts($"Couldn't get an answer from ServerArmour.com!");
+                    return;
+                }
+                Puts("Ban submitted for player " + player.Name);
+
+                if (PlayerCached(player.Id.ToString())) {
+                    _playerData[player.Id.ToString()].banData.Add(new ISABan { serverName = server.Name, date = dateTime, reason = banreason, serverIp = server.Address.ToString() });
+                } else {
+                    _playerData.Add(player.Id.ToString(),
+                        new ISAPlayer {
+                            steamid = player.Id.ToString(),
+                            username = player.Name,
+                            banCount = 1,
+                            cacheTimestamp = _time.GetUnixTimestamp(),
+                            lastConnected = _time.GetUnixTimestamp(),
+                            banData = new List<ISABan> { new ISABan { serverName = server.Name, date = dateTime, reason = banreason, serverIp = server.Address.ToString() } }
+                        });
+                }
+                SaveData();
+            }, this, RequestMethod.GET);
         }
 
         #endregion
@@ -168,16 +194,22 @@ namespace Oxide.Plugins {
                     AutoBanOn = true,
                     AutoBanCeiling = 1,
                     AutoBanReasonKeywords = new string[] { "aimbot", "esp" },
+
                     WatchlistGroup = "serverarmour.watchlist",
                     WatchlistCeiling = 1,
+
                     ServerName = server.Name,
                     ServerPort = server.Port,
                     ServerVersion = server.Version,
                     ServerAdminName = "",
                     ServerAdminEmail = "",
-                    ServerApiKey = ""
+                    ServerApiKey = "FREE"
                 }, true);
             SaveConfig();
+        }
+
+        private void LogDebug(string txt) {
+            if (config.Debug) Puts(txt);
         }
 
         protected override void LoadDefaultMessages() {
@@ -197,7 +229,7 @@ namespace Oxide.Plugins {
         void LoadData() {
             if (Interface.Oxide.DataFileSystem.ExistsDatafile("ServerArmour")) {
                 _playerData = Interface.Oxide.DataFileSystem.ReadObject<Dictionary<string, ISAPlayer>>("ServerArmour");
-                Puts("Settings loaded");
+                Puts("DATA loaded");
             } else {
                 SaveData();
             }
@@ -225,6 +257,37 @@ namespace Oxide.Plugins {
         string ServerGetString() {
             return $"&sn={config.ServerName}&sp={config.ServerPort}&an={config.ServerAdminName}&ae={config.ServerAdminEmail}&gameId={covalence.ClientAppId}&gameName={covalence.Game}";
         }
+
+        void CheckLocalBans() {
+            // player.BanTimeRemaining;
+            foreach (ServerUsers.User usr in ServerUsers.GetAll(ServerUsers.UserGroup.Banned)) {
+                Puts("Banned: " + usr.group + " " + usr.notes + " " + usr.steamid);
+
+                bool containsMyBan = false;
+
+                Puts($" check steamid '{usr.steamid.ToString()}'");
+                if (PlayerCached(usr.steamid.ToString())) {
+
+                    Puts("There is cached data for player.");
+                    Puts("Player has " + _playerData[usr.steamid.ToString()].banData.Count);
+                    foreach (ISABan ban in _playerData[usr.steamid.ToString()].banData) {
+                        Puts("serverIp " + ban.serverIp + " myserverip " + thisServerIp);
+                        if (ban.serverIp.Equals(thisServerIp)) {
+                            containsMyBan = true;
+                            Puts(" " + ban.serverIp);
+                            break;
+                        }
+                    }
+                }
+
+                if (!containsMyBan) {
+                    IPlayer player = covalence.Players.FindPlayer(usr.steamid.ToString());
+                    Puts("Submitting ban for player " + player.Name);
+                    AddBan(player, usr.notes);
+                }
+            }
+        }
+
         #endregion
 
         #region Classes 
@@ -236,11 +299,14 @@ namespace Oxide.Plugins {
             public uint cacheTimestamp;
             public uint lastConnected;
         }
+
         public class ISABan {
             public string serverName;
+            public string serverIp;
             public string reason;
             public string date;
         }
+
         private class ISAConfig {
             public bool Debug;
 
