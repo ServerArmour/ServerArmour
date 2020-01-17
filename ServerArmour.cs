@@ -7,7 +7,7 @@ using System;
 using System.Collections.Generic;
 
 namespace Oxide.Plugins {
-    [Info("ServerArmour", "Pho3niX90", "0.0.2")]
+    [Info("ServerArmour", "Pho3niX90", "0.0.3")]
     [Description("Protect your server! Auto ban known hacker, scripter and griefer acounts, and notify other server owners of threats.")]
     class ServerArmour : CovalencePlugin {
 
@@ -325,22 +325,20 @@ namespace Oxide.Plugins {
         }
 
         void CheckLocalBans() {
-            // player.BanTimeRemaining;
-            int i = 1;
             foreach (ServerUsers.User usr in ServerUsers.GetAll(ServerUsers.UserGroup.Banned)) {
 
                 bool containsMyBan = false;
 
+#if RUST
                 if (PlayerCached(usr.steamid.ToString())) {
                     foreach (ISABan ban in PlayerGetBanDataCache(usr.steamid.ToString())) {
-                        i++;
                         if (ban.serverIp.Equals(thisServerIp)) {
                             containsMyBan = true;
-                            LogDebug("Contains my ban!");
                             break;
                         }
                     }
                 }
+#endif
 
                 if (!containsMyBan) {
                     IPlayer player = covalence.Players.FindPlayer(usr.steamid.ToString());
