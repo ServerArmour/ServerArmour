@@ -1,9 +1,12 @@
+please mpte this is a BETA plugin, all features not yet available
+* autobanning still beaing tested to make sure all is well. Will be available within a week. 
 # ServerArmour
 Protect your gaming server against hackers, scripters, cheats and grievers!
 
 # Configuration
 
-##Default config
+## Default config
+
 ```
 {
   "AutoBanCeiling": 1,// Auto ban players with X amount of previous bans.
@@ -23,12 +26,13 @@ Protect your gaming server against hackers, scripters, cheats and grievers!
   "WatchlistCeiling": 1, // Auto add players with X amount of previous bans to a watchlist.
   "WatchlistGroup": "serverarmour.watchlist" // the group name that watched users should be added in
 }
-
 ```
+
 
 # API Hooks
 
 ## Methods
+
 
 ```
 int API_GetServerBanCount(string steamid) // Get the count of servers this use has been banned on
@@ -40,8 +44,10 @@ string API_GetEconomyBanStatus(string steamid) // The player's ban status in the
 bool API_GetIsPlayerDirty(string steamid) // Indicates if the player has any bans at all, includes server, game and vac bans
 ```
 
+
 ## Example:
 ```
+
 [PluginReference]
 Plugin ServerArmour;
 
@@ -50,4 +56,5 @@ void OnUserConnected(IPlayer player) {
     Puts(ServerArmour.Call<bool>("API_GetIsPlayerDirty", player.Id));
 }
 ```
-* please note that the above is a covalence example, please use the steamid relevant to your game type if you aren't using covalence. 
+
+* please note that the above is a covalence example, please use the steamid relevant to your game type if you aren't using covalence.
