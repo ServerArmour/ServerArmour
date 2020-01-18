@@ -29,9 +29,6 @@ Please note, this is a BETA plugin, so not all features are available yet. Autob
 
 ## API Hooks
 
-### Methods
-
-
 ```
 int API_GetServerBanCount(string steamid) // Get the count of servers this use has been banned on
 bool API_GetIsVacBanned(string steamid) // Indicates whether or not the player has VAC bans on record.
@@ -42,8 +39,7 @@ string API_GetEconomyBanStatus(string steamid) // The player's ban status in the
 bool API_GetIsPlayerDirty(string steamid) // Indicates if the player has any bans at all, includes server, game and vac bans
 ```
 
-
-## Example
+### Example Usage
 
 ```csharp
 [PluginReference]
