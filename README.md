@@ -60,19 +60,20 @@ The above is a universal example using the universal OnUserConnected hook for al
 The plugin makes web calls to Server Armours api, which is a collection and aggregated database of multiple databases containing bans of steamid's. 
 
 Information sent to the api is as follows:
-* local server ban information
-* * player steamid - only reliable way to track all information related to a player. 
-* * player username
-* * player ip
-* * reason - used to display reasons for a ban, and also for Sentiment analysis. (when users need to ban specific people (scripters, hackers, esp, aimbot, etc)) 
+
+#### local server ban information
+* player steamid - only reliable way to track all information related to a player. 
+* player username
+* player ip
+* reason - used to display reasons for a ban, and also for Sentiment analysis. (when users need to ban specific people (scripters, hackers, esp, aimbot, etc)) 
 * * date and time
 
-* server information
-* * server name - to identify your server name
-* * server port - server port, not currently used by our services, but will be used in the future for server owners to manage their server from a web based management console. 
-* * server admin name - By default the admin needs to set this up, this is used to identify how trustworty a ban that is being submitted is. This will also be used for banned users to contact the relevant server admins, this information is NEVER made public or sold. This is only used to make the service fair for all involved and so that there is a dispute process. When not provided, your bans will have the lowest of trust scores. 
-* * server admin email - By default the admin needs to set this up, this is used to identify how trustworty a ban that is being submitted is. This will also be used for banned users to contact the relevant server admins, this information is NEVER made public or sold. This is only used to make the service fair for all involved and so that there is a dispute process. When not provided, your bans will have the lowest of trust scores. 
-* * steam game id - the steam game id, to identify what game the server is actually hosting.
-* * game name - same as above, but just in readable format.
+ #### server information
+* server name - to identify your server name
+* server port - server port, not currently used by our services, but will be used in the future for server owners to manage their server from a web based management console. 
+* server admin name - By default the admin needs to set this up, this is used to identify how trustworty a ban that is being submitted is. This will also be used for banned users to contact the relevant server admins, this information is NEVER made public or sold. This is only used to make the service fair for all involved and so that there is a dispute process. When not provided, your bans will have the lowest of trust scores. 
+* server admin email - By default the admin needs to set this up, this is used to identify how trustworty a ban that is being submitted is. This will also be used for banned users to contact the relevant server admins, this information is NEVER made public or sold. This is only used to make the service fair for all involved and so that there is a dispute process. When not provided, your bans will have the lowest of trust scores. 
+* steam game id - the steam game id, to identify what game the server is actually hosting.
+* game name - same as above, but just in readable format.
 
 If more information is needed regarding any of the above, or any concerns, please open a thread so that I can provide more information.
