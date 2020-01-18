@@ -1,10 +1,12 @@
-# ServerArmour
 Protect your gaming server against hackers, scripters, cheats and grievers!
 
-# Configuration
+Please note, this is a BETA plugin, so not all features are available yet. Autobanning is still being tested to make sure all is well, and should be available within a week.
 
-##Default config
-```
+## Configuration
+
+### Default Configuration
+
+```json
 {
   "AutoBanCeiling": 1,// Auto ban players with X amount of previous bans.
   "AutoBanGroup": "serverarmour.bans", // the group name that banned users should be added in
@@ -23,12 +25,12 @@ Protect your gaming server against hackers, scripters, cheats and grievers!
   "WatchlistCeiling": 1, // Auto add players with X amount of previous bans to a watchlist.
   "WatchlistGroup": "serverarmour.watchlist" // the group name that watched users should be added in
 }
-
 ```
 
-# API Hooks
+## API Hooks
 
-## Methods
+### Methods
+
 
 ```
 int API_GetServerBanCount(string steamid) // Get the count of servers this use has been banned on
@@ -40,14 +42,38 @@ string API_GetEconomyBanStatus(string steamid) // The player's ban status in the
 bool API_GetIsPlayerDirty(string steamid) // Indicates if the player has any bans at all, includes server, game and vac bans
 ```
 
-## Example:
-```
+
+## Example
+
+```csharp
 [PluginReference]
 Plugin ServerArmour;
 
-void OnUserConnected(IPlayer player) {
+private void OnUserConnected(IPlayer player) {
 {
     Puts(ServerArmour.Call<bool>("API_GetIsPlayerDirty", player.Id));
 }
 ```
-* please note that the above is a covalence example, please use the steamid relevant to your game type if you aren't using covalence. 
+The above is a universal example using the universal OnUserConnected hook for all Oxide supported games.
+
+## More Info
+The plugin makes web calls to Server Armours api, which is a collection and aggregated database of multiple databases containing bans of steamid's. 
+
+Information sent to the api is as follows:
+
+#### local server ban information
+* player steamid - only reliable way to track all information related to a player. 
+* player username
+* player ip
+* reason - used to display reasons for a ban, and also for Sentiment analysis. (when users need to ban specific people (scripters, hackers, esp, aimbot, etc)) 
+* * date and time
+
+ #### server information
+* server name - to identify your server name
+* server port - server port, not currently used by our services, but will be used in the future for server owners to manage their server from a web based management console. 
+* server admin name - By default the admin needs to set this up, this is used to identify how trustworty a ban that is being submitted is. This will also be used for banned users to contact the relevant server admins, this information is NEVER made public or sold. This is only used to make the service fair for all involved and so that there is a dispute process. When not provided, your bans will have the lowest of trust scores. 
+* server admin email - By default the admin needs to set this up, this is used to identify how trustworty a ban that is being submitted is. This will also be used for banned users to contact the relevant server admins, this information is NEVER made public or sold. This is only used to make the service fair for all involved and so that there is a dispute process. When not provided, your bans will have the lowest of trust scores. 
+* steam game id - the steam game id, to identify what game the server is actually hosting.
+* game name - same as above, but just in readable format.
+
+If more information is needed regarding any of the above, or any concerns, please open a thread so that I can provide more information.
