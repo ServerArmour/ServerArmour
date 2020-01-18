@@ -1,13 +1,12 @@
-please mpte this is a BETA plugin, all features not yet available
-* autobanning still beaing tested to make sure all is well. Will be available within a week. 
-# ServerArmour
 Protect your gaming server against hackers, scripters, cheats and grievers!
 
-# Configuration
+Please note, this is a BETA plugin, so not all features are available yet. Autobanning is still being tested to make sure all is well, and should be available within a week.
 
-## Default config
+## Configuration
 
-```
+### Default Configuration
+
+```json
 {
   "AutoBanCeiling": 1,// Auto ban players with X amount of previous bans.
   "AutoBanGroup": "serverarmour.bans", // the group name that banned users should be added in
@@ -28,10 +27,9 @@ Protect your gaming server against hackers, scripters, cheats and grievers!
 }
 ```
 
+## API Hooks
 
-# API Hooks
-
-## Methods
+### Methods
 
 
 ```
@@ -45,16 +43,15 @@ bool API_GetIsPlayerDirty(string steamid) // Indicates if the player has any ban
 ```
 
 
-## Example:
-```
+## Example
 
+```csharp
 [PluginReference]
 Plugin ServerArmour;
 
-void OnUserConnected(IPlayer player) {
+private void OnUserConnected(IPlayer player) {
 {
     Puts(ServerArmour.Call<bool>("API_GetIsPlayerDirty", player.Id));
 }
 ```
-
-* please note that the above is a covalence example, please use the steamid relevant to your game type if you aren't using covalence.
+The above is a universal example using the universal OnUserConnected hook for all Oxide supported games.
