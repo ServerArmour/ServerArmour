@@ -201,7 +201,7 @@ namespace Oxide.Plugins {
             }
             CheckLocalBans();
 
-            GetPlayerReport(playerToCheck, true);
+            GetPlayerReport(playerToCheck, player);
         }
         #endregion
 
@@ -225,13 +225,19 @@ namespace Oxide.Plugins {
                 GetPlayerReport(isaPlayer, player.IsConnected);
         }
 
+        void GetPlayerReport(IPlayer player, IPlayer cmdplayer) {
+            ISAPlayer isaPlayer = PlayerGetCache(player);
+            if (isaPlayer != null)
+                GetPlayerReport(isaPlayer, player.IsConnected, true, cmdplayer);
+        }
+
         void GetPlayerReport(IPlayer player, bool isCommand = false) {
             ISAPlayer isaPlayer = PlayerGetCache(player);
             if (isaPlayer != null)
                 GetPlayerReport(isaPlayer, player.IsConnected, isCommand);
         }
 
-        void GetPlayerReport(ISAPlayer isaPlayer, bool isConnected = true, bool isCommand = false) {
+        void GetPlayerReport(ISAPlayer isaPlayer, bool isConnected = true, bool isCommand = false, IPlayer cmdPlayer = null) {
 
             if (PlayerIsDirty(isaPlayer.steamid) || isCommand) {
                 string report = GetMsg("User Dirty MSG",
@@ -248,7 +254,7 @@ namespace Oxide.Plugins {
                     server.Broadcast(report.Replace(isaPlayer.steamid + ":", "").Replace(isaPlayer.steamid, ""));
                 }
                 if(isCommand) {
-                    players.FindPlayer(isaPlayer.steamid).Reply(report.Replace(isaPlayer.steamid + ":", "").Replace(isaPlayer.steamid, ""));
+                    cmdPlayer.Reply(report.Replace(isaPlayer.steamid + ":", "").Replace(isaPlayer.steamid, ""));
                 }
                 Puts(report);
             }
