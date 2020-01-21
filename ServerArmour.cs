@@ -10,7 +10,7 @@ using Time = Oxide.Core.Libraries.Time;
 
 namespace Oxide.Plugins {
     [Info("ServerArmour", "Pho3niX90", "0.0.6")]
-    [Description("Protect your server! Auto ban known hacker, scripter and griefer acounts, and notify other server owners of threats.")]
+    [Description("Protect your server! Auto ban known hacker, scripter and griefer accounts, and notify server owners of threats.")]
     class ServerArmour : CovalencePlugin {
 
         #region Variables
@@ -21,6 +21,7 @@ namespace Oxide.Plugins {
         private ISAConfig config;
         static string thisServerIp;
         char[] ipChrArray = new char[] { '.' };
+        string settingsVersion = "0.0.1";
         #region Permissions
         const string PermissionBan = "serverarmour.ban";
         #endregion
@@ -170,10 +171,10 @@ namespace Oxide.Plugins {
                 }
 
                 if (IsPlayerCached(player.Id.ToString())) {
-                    LogDebug("Ban cached, now updating.");
+                    Puts($"{player.Name} has ban cached, now updating.");
                     AddPlayerBanData(player, new ISABan { serverName = server.Name, date = dateTime, reason = banreason, serverIp = thisServerIp });
                 } else {
-                    LogDebug("Ban not cached, now creating.");
+                    Puts($"{player.Name} had no ban data cached, now creating.");
                     AddPlayerCached(player,
                         new ISAPlayer {
                             steamid = player.Id.ToString(),
@@ -216,6 +217,7 @@ namespace Oxide.Plugins {
         void SCmdCheckLocalBans(IPlayer player, string command, string[] args) {
             CheckLocalBans();
         }
+
         [Command("ban", "playerban", "sa.ban")]
         void SCmdBan(IPlayer player, string command, string[] args) {
             if (!hasPermission(player, PermissionBan)) {
@@ -247,7 +249,13 @@ namespace Oxide.Plugins {
                     reason = args[1],
                     date = new Time().GetDateTimeFromUnix(new Time().GetUnixTimestamp()).ToShortDateString()
                 })) {
-                player.Reply(GetMsg("PlayerNowBanned"));
+
+                string msg = GetMsg("Player Now Banned", new Dictionary<string, string> { ["player"] = isaPlayer.username, ["reason"] = args[1] });
+                if (config.BroadcastNewBans) {
+                    server.Broadcast(msg);
+                } else {
+                    player.Reply(msg);
+                }
             }
         }
 
@@ -341,29 +349,37 @@ namespace Oxide.Plugins {
         T GetConfig<T>(string name, T defaultValue) => Config[name] == null ? defaultValue : (T)Convert.ChangeType(Config[name], typeof(T));
         protected override void LoadDefaultConfig() {
             LogWarning("Creating a new configuration file");
-            Config.WriteObject(
-                new ISAConfig {
-                    Debug = false,
-                    ShowProtectedMsg = true,
-                    BetterChatDirtyPlayerTag = "DIRTY",
-                    BroadcastPlayerBanReport = true,
-                    AutoBanGroup = "serverarmour.bans",
-                    AutoBanOn = true,
-                    AutoBanCeiling = 5,
-                    AutoVacBanCeiling = 2,
-                    AutoBanReasonKeywords = new string[] { "aimbot", "esp" },
-
-                    WatchlistGroup = "serverarmour.watchlist",
-                    WatchlistCeiling = 1,
-
-                    ServerName = server.Name,
-                    ServerPort = server.Port,
-                    ServerVersion = server.Version,
-                    ServerAdminName = "",
-                    ServerAdminEmail = "",
-                    ServerApiKey = "FREE"
-                }, true);
+            Config.WriteObject(UpgradeConfig(), true);
             SaveConfig();
+        }
+
+        ISAConfig UpgradeConfig() {
+            return new ISAConfig {
+                Debug = false,
+
+                ShowProtectedMsg = true,
+                AutoBanOn = true,
+                BroadcastPlayerBanReport = true,
+                BroadcastNewBans = true,
+                ServerAdminShareDetails = true,
+
+                BetterChatDirtyPlayerTag = "DIRTY",
+                AutoBanGroup = "serverarmour.bans",
+                WatchlistGroup = "serverarmour.watchlist",
+                AutoBanReasonKeywords = new string[] { "*aimbot*", "*esp*", "*hack*", "*script*" },
+
+                AutoBanCeiling = 5,
+                AutoVacBanCeiling = 2,
+                WatchlistCeiling = 1,
+
+
+                ServerName = server.Name,
+                ServerPort = server.Port,
+                ServerVersion = server.Version,
+                ServerAdminName = "",
+                ServerAdminEmail = "",
+                ServerApiKey = "FREE"
+            };
         }
 
         private void LogDebug(string txt) {
@@ -371,7 +387,8 @@ namespace Oxide.Plugins {
         }
 
         void SaveData() {
-            Interface.Oxide.DataFileSystem.WriteObject<Dictionary<string, ISAPlayer>>("ServerArmour", _playerData, true);
+            if (_playerData.Count > 0)
+                Interface.Oxide.DataFileSystem.WriteObject<Dictionary<string, ISAPlayer>>("ServerArmour", _playerData, true);
         }
 
         void LoadData() {
@@ -512,7 +529,8 @@ namespace Oxide.Plugins {
                 ["Command sa.cp Error"] = "Wrong format, example: /sa.cp usernameORsteamid trueORfalse",
                 ["Arkan No Recoil Violation"] = "<color=#ff0000>{player}</color> received an Arkan no recoil violation.\n<color=#ff0000>Violation</color> #{violationNr}, <color=#ff0000>Weapon:</color> {weapon}, <color=#ff0000>Ammo:</color> {ammo}, <color=#ff0000>Shots count:</color> {shots}\n Admins will investigate ASAP, please have handcams ready.\n This might be a false-positive, but all violations need to be investigated.",
                 ["Arkan Aimbot Violation"] = "<color=#ff0000>{player}</color> received an Arkan aimbot violation.\n<color=#ff0000>Violation</color>  #{violationNr}, <color=#ff0000>Weapon:</color> {weapon}, <color=#ff0000>Ammo:</color> {ammo}, <color=#ff0000>Shots count:</color> {shots}\n Admins will investigate ASAP, please have handcams ready.\n This might be a false-positive, but all violations need to be investigated.",
-                ["Arkan In Rock Violation"] = "<color=#ff0000>{player}</color> received an Arkan in rock violation.\n<color=#ff0000>Violation</color>  #{violationNr}, <color=#ff0000>Weapon:</color> {weapon}, <color=#ff0000>Ammo:</color> {ammo}\n Admins will investigate ASAP, please have handcams ready.\n This might be a false-positive, but all violations need to be investigated."
+                ["Arkan In Rock Violation"] = "<color=#ff0000>{player}</color> received an Arkan in rock violation.\n<color=#ff0000>Violation</color>  #{violationNr}, <color=#ff0000>Weapon:</color> {weapon}, <color=#ff0000>Ammo:</color> {ammo}\n Admins will investigate ASAP, please have handcams ready.\n This might be a false-positive, but all violations need to be investigated.",
+                ["Player Now Banned"] = "<color=#ff0000>{player}</color> has been banned\n<color=#ff0000>Reason: </color> {reason}"
             }, this);
         }
 
@@ -589,8 +607,8 @@ namespace Oxide.Plugins {
         }
 
         private class ISAConfig {
-            public bool Debug;
-            public bool ShowProtectedMsg;
+            public bool Debug; //should always be false, unless explicitly asked to turn on, will cause performance issue when on.
+            public bool ShowProtectedMsg; // Show the protected by ServerArmour msg?
             public string AutoBanGroup; // the group name that banned users should be added in
             public bool AutoBanOn; // turn auto banning on or off. 
             public int AutoBanCeiling; // Auto ban players with X amount of previous bans.
@@ -603,10 +621,12 @@ namespace Oxide.Plugins {
             public string BetterChatDirtyPlayerTag; // tag for players that are dirty.
             public bool BroadcastPlayerBanReport; // tag for players that are dirty.
 
+            public bool BroadcastNewBans; // Broadcast to the entire server when true
+
             public string ServerName; // never change this, auto fetched
             public int ServerPort; // never change this, auto fetched
             public string ServerVersion; // never change this, auto fetched
-            public string ServerAdminShareDetails; // Default: false - indicates if you want your contact info to be visible to other server admins, and to users that have been auto banned. 
+            public bool ServerAdminShareDetails; // Default: false - indicates if you want your contact info to be visible to other server admins, and to users that have been auto banned. 
             public string ServerAdminName; // please fill in your main admins real name. This is to add a better trust level to your server.
             public string ServerAdminEmail; // please fill in your main admins email. This is to add a better trust level to your server.
             public string ServerApiKey; // for future reference, leave as is. 
