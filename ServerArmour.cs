@@ -99,25 +99,27 @@ namespace Oxide.Plugins {
             return !AssignGroupsAndBan(players.FindPlayer(name));
         }
 
-        void OnUserApproved(string name, string id, string ip) {
-            Puts($"{name} ({id}) at {ip} has been approved to connect");
-        }
+        /* Unused atm, will uncomment as needed
+                void OnUserApproved(string name, string id, string ip) {
+                    Puts($"{name} ({id}) at {ip} has been approved to connect");
+                }
 
-        void OnUserNameUpdated(string id, string oldName, string newName) {
-            Puts($"Player name changed from {oldName} to {newName} for ID {id}");
-        }
+                void OnUserNameUpdated(string id, string oldName, string newName) {
+                    Puts($"Player name changed from {oldName} to {newName} for ID {id}");
+                }
 
-        void OnUserKicked(IPlayer player, string reason) {
-            Puts($"Player {player.Name} ({player.Id}) was kicked");
-        }
+                void OnUserKicked(IPlayer player, string reason) {
+                    Puts($"Player {player.Name} ({player.Id}) was kicked");
+                }
 
-        void OnUserBanned(string name, string id, string ip, string reason) {
-            Puts($"Player {name} ({id}) at {ip} was banned: {reason}");
-        }
+                void OnUserBanned(string name, string id, string ip, string reason) {
+                    Puts($"Player {name} ({id}) at {ip} was banned: {reason}");
+                }
 
-        void OnUserUnbanned(string name, string id, string ip) {
-            Puts($"Player {name} ({id}) at {ip} was unbanned");
-        }
+                void OnUserUnbanned(string name, string id, string ip) {
+                    Puts($"Player {name} ({id}) at {ip} was unbanned");
+                }
+        */
 
         void OnPluginLoaded(Plugin plugin) {
             if (plugin.Title == "BetterChat") RegisterTag();
@@ -126,13 +128,13 @@ namespace Oxide.Plugins {
 
         #region WebRequests
         void GetPlayerBans(IPlayer player, bool onlyGetUncached = false, bool connectedTime = true) {
+            bool isCached = IsPlayerCached(player.Id);
 
-            if (PlayerCached(player.Id) && !onlyGetUncached) {
-                uint cachedTimestamp = PlayerGetCache(player.Id).cacheTimestamp;
+            if (isCached && !onlyGetUncached) {
                 uint currentTimestamp = _time.GetUnixTimestamp();
-                double minutesOld = (currentTimestamp - cachedTimestamp) / 60.0 / 1000.0;
+                double minutesOld = (currentTimestamp - GetPlayerCache(player.Id).cacheTimestamp) / 60.0 / 1000.0;
                 bool oldCache = cacheLifetime <= minutesOld;
-                PlayerGetCache(player).lastConnected = _time.GetUnixTimestamp();
+                GetPlayerCache(player.Id).lastConnected = currentTimestamp;
                 if (!oldCache) return; //user already cached, therefore do not check again before cache time laps.
             }
 
@@ -145,10 +147,10 @@ namespace Oxide.Plugins {
                 ISAPlayer isaPlayer = JsonConvert.DeserializeObject<ISAPlayer>(response);
                 isaPlayer.cacheTimestamp = _time.GetUnixTimestamp();
                 isaPlayer.lastConnected = _time.GetUnixTimestamp();
-                if (!PlayerCached(isaPlayer.steamid)) {
-                    PlayerAddCached(isaPlayer);
+                if (!IsPlayerCached(isaPlayer.steamid)) {
+                    AddPlayerCached(isaPlayer);
                 } else {
-                    PlayerSetBanDataCache(isaPlayer);
+                    SetPlayerBanData(isaPlayer);
                 }
 
                 GetPlayerReport(isaPlayer, player.IsConnected);
@@ -167,12 +169,12 @@ namespace Oxide.Plugins {
                     return;
                 }
 
-                if (PlayerCached(player.Id.ToString())) {
+                if (IsPlayerCached(player.Id.ToString())) {
                     LogDebug("Ban cached, now updating.");
-                    PlayerAddBanDataCache(player, new ISABan { serverName = server.Name, date = dateTime, reason = banreason, serverIp = thisServerIp });
+                    AddPlayerBanData(player, new ISABan { serverName = server.Name, date = dateTime, reason = banreason, serverIp = thisServerIp });
                 } else {
                     LogDebug("Ban not cached, now creating.");
-                    PlayerAddCached(player,
+                    AddPlayerCached(player,
                         new ISAPlayer {
                             steamid = player.Id.ToString(),
                             username = player.Name,
@@ -187,8 +189,8 @@ namespace Oxide.Plugins {
         }
 
         bool IsBanned(string steamid) {
-            if (PlayerCached(steamid)) {
-                ISAPlayer isaPlayer = PlayerGetCache(steamid);
+            if (IsPlayerCached(steamid)) {
+                ISAPlayer isaPlayer = GetPlayerCache(steamid);
                 foreach (ISABan ban in isaPlayer.serverBanData) {
                     if (ban.serverIp.Equals(thisServerIp)) {
                         return true;
@@ -231,11 +233,11 @@ namespace Oxide.Plugins {
             IPlayer iPlayer = players.FindPlayer(args[0]);
             ISAPlayer isaPlayer;
 
-            if (!PlayerCached(iPlayer.Id)) {
+            if (!IsPlayerCached(iPlayer.Id)) {
                 isaPlayer = new ISAPlayer().CreatePlayer(iPlayer);
-                PlayerAddCached(isaPlayer);
+                AddPlayerCached(isaPlayer);
             } else {
-                isaPlayer = PlayerGetCache(args[0]);
+                isaPlayer = GetPlayerCache(args[0]);
             }
 
             if (BanPlayer(iPlayer,
@@ -251,7 +253,6 @@ namespace Oxide.Plugins {
 
         [Command("sa.cp")]
         void SCmdCheckPlayer(IPlayer player, string command, string[] args) {
-            //if (args.Length == 0) player.Reply(GetMsg("Command sa.cp Error"));
             Puts("arg length " + args.Length); Puts(command);
             string playerArg = (args.Length == 0) ? player.Id : args[0];
             bool forceUpdate = false;
@@ -265,12 +266,11 @@ namespace Oxide.Plugins {
                 player.Reply(GetMsg("PlayerNotFound", new Dictionary<string, string> { ["player"] = playerArg }));
             }
 
-            if (PlayerCached(playerToCheck.Id) && forceUpdate) {
+            if (IsPlayerCached(playerToCheck.Id) && forceUpdate) {
                 GetPlayerBans(playerToCheck, !forceUpdate);
             }
 
             CheckLocalBans();
-
             GetPlayerReport(playerToCheck, player);
         }
         #endregion
@@ -283,44 +283,44 @@ namespace Oxide.Plugins {
         #endregion
 
         #region Data Handling
-        bool PlayerIsDirty(string steamid) => PlayerCached(steamid) && (PlayerGetCache(steamid).serverBanCount > 0 || PlayerGetCache(steamid).steamData.CommunityBanned > 0 || PlayerGetCache(steamid).steamData.NumberOfGameBans > 0 || PlayerGetCache(steamid).steamData.VACBanned > 0);
-        bool PlayerCached(string steamid) => _playerData.ContainsKey(steamid);
-        bool PlayerDeleteCache(string steamid) => _playerData.Remove(steamid);
-        void PlayerAddCached(ISAPlayer isaplayer) => _playerData.Add(isaplayer.steamid, isaplayer);
-        void PlayerAddCached(IPlayer iplayer, ISAPlayer isaplayer) => _playerData.Add(iplayer.Id, isaplayer);
-        ISAPlayer PlayerGetCache(string steamid) => PlayerCached(steamid) ? _playerData[steamid] : null;
-        ISAPlayer PlayerGetCache(IPlayer player) => PlayerCached(player.Id) ? _playerData[player.Id] : null;
-        List<ISABan> PlayerGetBanDataCache(string steamid) => _playerData[steamid].serverBanData;
-        int PlayerGetBanDataCountCache(string steamid) => _playerData[steamid].serverBanData.Count;
-        void PlayerSetBanDataCache(ISAPlayer isaplayer) => _playerData[isaplayer.steamid].serverBanData = isaplayer.serverBanData;
-        void PlayerAddBanDataCache(IPlayer iplayer, ISABan isaban) => _playerData[iplayer.Id].serverBanData.Add(isaban);
+        bool IsPlayerDirty(string steamid) {
+            ISAPlayer isaPlayer = GetPlayerCache(steamid);
+            return IsPlayerCached(steamid) && (isaPlayer.serverBanCount > 0 || isaPlayer.steamData.CommunityBanned > 0 || isaPlayer.steamData.NumberOfGameBans > 0 || isaPlayer.steamData.VACBanned > 0);
+        }
+
+        bool IsPlayerCached(string steamid) => _playerData.ContainsKey(steamid);
+        bool DeletePlayerCache(string steamid) => _playerData.Remove(steamid);
+        void AddPlayerCached(ISAPlayer isaplayer) => _playerData.Add(isaplayer.steamid, isaplayer);
+        void AddPlayerCached(IPlayer iplayer, ISAPlayer isaplayer) => _playerData.Add(iplayer.Id, isaplayer);
+        ISAPlayer GetPlayerCache(string steamid) => IsPlayerCached(steamid) ? _playerData[steamid] : null;
+        List<ISABan> GetPlayerBanData(string steamid) => _playerData[steamid].serverBanData;
+        int GetPlayerBanDataCount(string steamid) => _playerData[steamid].serverBanData.Count;
+        void SetPlayerBanData(ISAPlayer isaplayer) => _playerData[isaplayer.steamid].serverBanData = isaplayer.serverBanData;
+        void AddPlayerBanData(IPlayer iplayer, ISABan isaban) => _playerData[iplayer.Id].serverBanData.Add(isaban);
+        IPlayer FindIPlayer(string identifier) => players.FindPlayer(identifier);
 
         void GetPlayerReport(IPlayer player) {
-            ISAPlayer isaPlayer = PlayerGetCache(player);
-            if (isaPlayer != null)
-                GetPlayerReport(isaPlayer, player.IsConnected);
+            ISAPlayer isaPlayer = GetPlayerCache(player.Id);
+            if (isaPlayer != null) GetPlayerReport(isaPlayer, player.IsConnected);
         }
 
         void GetPlayerReport(IPlayer player, IPlayer cmdplayer) {
-            ISAPlayer isaPlayer = PlayerGetCache(player);
-            if (isaPlayer != null)
-                GetPlayerReport(isaPlayer, player.IsConnected, true, cmdplayer);
+            ISAPlayer isaPlayer = GetPlayerCache(player.Id);
+            if (isaPlayer != null) GetPlayerReport(isaPlayer, player.IsConnected, true, cmdplayer);
         }
 
         void GetPlayerReport(IPlayer player, bool isCommand = false) {
-            ISAPlayer isaPlayer = PlayerGetCache(player);
-            if (isaPlayer != null)
-                GetPlayerReport(isaPlayer, player.IsConnected, isCommand);
+            ISAPlayer isaPlayer = GetPlayerCache(player.Id);
+            if (isaPlayer != null) GetPlayerReport(isaPlayer, player.IsConnected, isCommand);
         }
 
-        string GetPlayerId(string identifier) => players.FindPlayer(identifier).Id;
 
         void GetPlayerReport(ISAPlayer isaPlayer, bool isConnected = true, bool isCommand = false, IPlayer cmdPlayer = null) {
 
-            if (PlayerIsDirty(isaPlayer.steamid) || isCommand) {
+            if (IsPlayerDirty(isaPlayer.steamid) || isCommand) {
                 string report = GetMsg("User Dirty MSG",
                         new Dictionary<string, string> {
-                            ["status"] = PlayerIsDirty(isaPlayer.steamid) ? "dirty" : "clean",
+                            ["status"] = IsPlayerDirty(isaPlayer.steamid) ? "dirty" : "clean",
                             ["steamid"] = isaPlayer.steamid,
                             ["username"] = isaPlayer.username,
                             ["serverBanCount"] = isaPlayer.serverBanCount.ToString(),
@@ -455,7 +455,7 @@ namespace Oxide.Plugins {
 
         bool AssignGroupsAndBan(IPlayer player) {
             try {
-                ISAPlayer isaPlayer = PlayerCached(player.Id) ? PlayerGetCache(player.Id) : null;
+                ISAPlayer isaPlayer = IsPlayerCached(player.Id) ? GetPlayerCache(player.Id) : null;
                 if (isaPlayer == null) return false;
 
                 if (config.AutoBanOn) {
@@ -485,13 +485,13 @@ namespace Oxide.Plugins {
         #endregion
 
         #region API Hooks
-        private int API_GetServerBanCount(string steamid) => PlayerCached(steamid) ? PlayerGetBanDataCountCache(steamid) : 0;
-        private bool API_GetIsVacBanned(string steamid) => PlayerCached(steamid) ? PlayerGetCache(steamid).steamData.VACBanned == 1 : false;
-        private bool API_GetIsCommunityBanned(string steamid) => PlayerCached(steamid) ? PlayerGetCache(steamid).steamData.CommunityBanned == 1 : false;
-        private int API_GetVacBanCount(string steamid) => PlayerCached(steamid) ? PlayerGetCache(steamid).steamData.NumberOfVACBans : 0;
-        private int API_GetGameBanCount(string steamid) => PlayerCached(steamid) ? PlayerGetCache(steamid).steamData.NumberOfGameBans : 0;
-        private string API_GetEconomyBanStatus(string steamid) => PlayerCached(steamid) ? PlayerGetCache(steamid).steamData.EconomyBan : "none";
-        private bool API_GetIsPlayerDirty(string steamid) => PlayerCached(steamid) && PlayerGetBanDataCountCache(steamid) > 0 || PlayerGetCache(steamid).steamData.VACBanned == 1;
+        private int API_GetServerBanCount(string steamid) => IsPlayerCached(steamid) ? GetPlayerBanDataCount(steamid) : 0;
+        private bool API_GetIsVacBanned(string steamid) => IsPlayerCached(steamid) ? GetPlayerCache(steamid).steamData.VACBanned == 1 : false;
+        private bool API_GetIsCommunityBanned(string steamid) => IsPlayerCached(steamid) ? GetPlayerCache(steamid).steamData.CommunityBanned == 1 : false;
+        private int API_GetVacBanCount(string steamid) => IsPlayerCached(steamid) ? GetPlayerCache(steamid).steamData.NumberOfVACBans : 0;
+        private int API_GetGameBanCount(string steamid) => IsPlayerCached(steamid) ? GetPlayerCache(steamid).steamData.NumberOfGameBans : 0;
+        private string API_GetEconomyBanStatus(string steamid) => IsPlayerCached(steamid) ? GetPlayerCache(steamid).steamData.EconomyBan : "none";
+        private bool API_GetIsPlayerDirty(string steamid) => IsPlayerCached(steamid) && GetPlayerBanDataCount(steamid) > 0 || GetPlayerCache(steamid).steamData.VACBanned == 1;
         #endregion
 
         #region Localization
@@ -529,7 +529,7 @@ namespace Oxide.Plugins {
         }
 
         string GetTag(IPlayer player) {
-            if (BetterChat != null && PlayerIsDirty(player.Id) && config.BetterChatDirtyPlayerTag != "") {
+            if (BetterChat != null && IsPlayerDirty(player.Id) && config.BetterChatDirtyPlayerTag != "") {
                 return $"[#FFA500][{config.BetterChatDirtyPlayerTag}][/#]";
             } else {
                 return string.Empty;
@@ -779,7 +779,7 @@ namespace Oxide.Plugins {
             public float NRProbabilityModifier = 1f;
         }
 
-        #if RUST
+#if RUST
         private void API_ArkanOnNoRecoilViolation(BasePlayer player, int NRViolationsNum, string json) {
             if (json != null) {
                 NoRecoilViolationData nrvd = JsonConvert.DeserializeObject<NoRecoilViolationData>(json);
@@ -830,7 +830,7 @@ namespace Oxide.Plugins {
                 }
             }
         }
-        #endif
+#endif
         #endregion
         #endregion
         #endregion
