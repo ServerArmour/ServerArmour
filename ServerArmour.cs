@@ -340,10 +340,10 @@ namespace Oxide.Plugins {
                             ["EconomyBan"] = isaPlayer.steamData.EconomyBan.ToString()
                         });
                 if (config.BroadcastPlayerBanReport && isConnected && !isCommand) {
-                    server.Broadcast(report.Replace(isaPlayer.steamid + ":", "").Replace(isaPlayer.steamid, ""));
+                    server.Broadcast(report.Replace(isaPlayer.steamid + ":", string.Empty).Replace(isaPlayer.steamid, string.Empty));
                 }
                 if (isCommand) {
-                    cmdPlayer.Reply(report.Replace(isaPlayer.steamid + ":", "").Replace(isaPlayer.steamid, ""));
+                    cmdPlayer.Reply(report.Replace(isaPlayer.steamid + ":", string.Empty).Replace(isaPlayer.steamid, string.Empty));
                 }
                 Puts(report);
             }
@@ -356,7 +356,7 @@ namespace Oxide.Plugins {
             SaveConfig();
         }
 
-        ISAConfig UpgradeConfig(string oldVersion = "", string newVersion = "null") {
+        ISAConfig UpgradeConfig(string oldVersion = "", string newVersion = "") {
             return new ISAConfig {
                 Version = settingsVersion,
                 Debug = false,
@@ -380,8 +380,8 @@ namespace Oxide.Plugins {
                 ServerName = server.Name,
                 ServerPort = server.Port,
                 ServerVersion = server.Version,
-                ServerAdminName = "",
-                ServerAdminEmail = "",
+                ServerAdminName = string.Empty,
+                ServerAdminEmail = string.Empty,
                 ServerApiKey = "FREE"
         };
         }
@@ -552,7 +552,7 @@ namespace Oxide.Plugins {
         }
 
         string GetTag(IPlayer player) {
-            if (BetterChat != null && IsPlayerDirty(player.Id) && config.BetterChatDirtyPlayerTag != "") {
+            if (BetterChat != null && IsPlayerDirty(player.Id) && config.BetterChatDirtyPlayerTag.Length > 0) {
                 return $"[#FFA500][{config.BetterChatDirtyPlayerTag}][/#]";
             } else {
                 return string.Empty;
