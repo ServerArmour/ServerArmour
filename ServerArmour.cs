@@ -5,6 +5,7 @@ using Oxide.Core.Libraries.Covalence;
 using Oxide.Core.Plugins;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using Time = Oxide.Core.Libraries.Time;
 
 #if RUST
@@ -24,6 +25,8 @@ namespace Oxide.Plugins {
         private ISAConfig config;
         static string thisServerIp;
         string settingsVersion = "0.0.1";
+        string specifier = "G";
+        CultureInfo culture = CultureInfo.CreateSpecificCulture("en-US");
         #region Permissions
         const string PermissionToBan = "serverarmour.ban";
         #endregion
@@ -383,7 +386,7 @@ namespace Oxide.Plugins {
                 ServerAdminName = string.Empty,
                 ServerAdminEmail = string.Empty,
                 ServerApiKey = "FREE"
-        };
+            };
         }
 
         private void LogDebug(string txt) {
@@ -455,8 +458,8 @@ namespace Oxide.Plugins {
                 bool containsMyBan = false;
 
 
-                if (IsPlayerCached(usr.steamid.ToString())) {
-                    List<ISABan> bans = GetPlayerBanData(usr.steamid.ToString());
+                if (IsPlayerCached(usr.steamid.ToString(specifier, culture))) {
+                    List<ISABan> bans = GetPlayerBanData(usr.steamid.ToString(specifier, culture));
                     foreach (ISABan ban in bans) {
                         if (ban.serverIp.Equals(thisServerIp)) {
                             containsMyBan = true;
@@ -466,8 +469,8 @@ namespace Oxide.Plugins {
                 }
 
 
-            if (!containsMyBan) {
-                    IPlayer player = covalence.Players.FindPlayer(usr.steamid.ToString());
+                if (!containsMyBan) {
+                    IPlayer player = covalence.Players.FindPlayer(usr.steamid.ToString(specifier, culture));
                     AddBan(player, usr.notes);
                 }
             }
@@ -496,7 +499,7 @@ namespace Oxide.Plugins {
                     return true;
                 }
             } catch (NullReferenceException nre) {
-                return false; 
+                return false;
             }
             return false;
         }
@@ -541,7 +544,7 @@ namespace Oxide.Plugins {
 
         bool hasPermission(IPlayer player, string permissionName) {
             if (player.IsAdmin) return true;
-            return permission.UserHasPermission(player.Id.ToString(), permissionName);
+            return permission.UserHasPermission(player.Id.ToString(specifier, culture), permissionName);
         }
         #endregion
 
@@ -814,9 +817,9 @@ namespace Oxide.Plugins {
                 if (nrvd != null) {
                     server.Broadcast(GetMsg("Arkan No Recoil Violation", new Dictionary<string, string> {
                         ["player"] = player.displayName,
-                        ["violationNr"] = NRViolationsNum.ToString(),
+                        ["violationNr"] = NRViolationsNum.ToString(specifier, culture),
                         ["ammo"] = nrvd.ammoShortName,
-                        ["shots"] = nrvd.ShotsCnt.ToString(),
+                        ["shots"] = nrvd.ShotsCnt.ToString(specifier, culture),
                         ["weapon"] = nrvd.weaponShortName
                     }));
                     ISAPlayer isaPlayer = GetPlayerCache(player.UserIDString);
@@ -831,9 +834,9 @@ namespace Oxide.Plugins {
                 if (aimvd != null) {
                     server.Broadcast(GetMsg("Arkan Aimbot Violation", new Dictionary<string, string> {
                         ["player"] = player.displayName,
-                        ["violationNr"] = AIMViolationsNum.ToString(),
+                        ["violationNr"] = AIMViolationsNum.ToString(specifier, culture),
                         ["ammo"] = aimvd.ammoShortName,
-                        ["shots"] = aimvd.hitsData.Count.ToString(),
+                        ["shots"] = aimvd.hitsData.Count.ToString(specifier, culture),
                         ["weapon"] = aimvd.weaponShortName
                     }));
                     ISAPlayer isaPlayer = GetPlayerCache(player.UserIDString);
@@ -848,7 +851,7 @@ namespace Oxide.Plugins {
                 if (irvd != null) {
                     server.Broadcast(GetMsg("Arkan In Rock Violation", new Dictionary<string, string> {
                         ["player"] = player.displayName,
-                        ["violationNr"] = IRViolationsNum.ToString(),
+                        ["violationNr"] = IRViolationsNum.ToString(specifier, culture),
                         ["ammo"] = irvd.inRockViolationsData[1].firedProjectile.ammoShortName,
                         ["weapon"] = irvd.inRockViolationsData[1].firedProjectile.weaponShortName,
                         ["PlayerNotFound"] = $"{player} not found, if the usernmae contains a space or special character, then please use quotes around it."
