@@ -50,7 +50,7 @@ namespace Oxide.Plugins {
             if (!config.Version.Equals(settingsVersion)) UpgradeConfig(config.Version, settingsVersion);
             thisServerIp = server.Address.ToString();
 
-            if (config.ServerVersion.Equals(server.Version.ToString())) {
+            if (config.ServerVersion.Equals(server.Version.ToString(), StringComparison.InvariantCultureIgnoreCase)) {
                 config.ServerName = server.Name;
                 config.ServerPort = server.Port;
                 config.ServerVersion = server.Version;
@@ -199,7 +199,7 @@ namespace Oxide.Plugins {
             if (IsPlayerCached(steamid)) {
                 ISAPlayer isaPlayer = GetPlayerCache(steamid);
                 foreach (ISABan ban in isaPlayer.serverBanData) {
-                    if (ban.serverIp.Equals(thisServerIp)) {
+                    if (ban.serverIp.Equals(thisServerIp, StringComparison.InvariantCultureIgnoreCase)) {
                         return true;
                     }
                 }
@@ -209,7 +209,7 @@ namespace Oxide.Plugins {
 
         string GetBanReason(ISAPlayer isaPlayer) {
             foreach (ISABan ban in isaPlayer.serverBanData) {
-                if (ban.serverIp.Equals(thisServerIp)) {
+                if (ban.serverIp.Equals(thisServerIp, StringComparison.InvariantCultureIgnoreCase)) {
                     return ban.reason;
                 }
             }
@@ -461,7 +461,7 @@ namespace Oxide.Plugins {
                 if (IsPlayerCached(usr.steamid.ToString(specifier, culture))) {
                     List<ISABan> bans = GetPlayerBanData(usr.steamid.ToString(specifier, culture));
                     foreach (ISABan ban in bans) {
-                        if (ban.serverIp.Equals(thisServerIp)) {
+                        if (ban.serverIp.Equals(thisServerIp, StringComparison.InvariantCultureIgnoreCase)) {
                             containsMyBan = true;
                             break;
                         }
@@ -544,7 +544,7 @@ namespace Oxide.Plugins {
 
         bool hasPermission(IPlayer player, string permissionName) {
             if (player.IsAdmin) return true;
-            return permission.UserHasPermission(player.Id.ToString(specifier, culture), permissionName);
+            return permission.UserHasPermission(player.Id, permissionName);
         }
         #endregion
 
