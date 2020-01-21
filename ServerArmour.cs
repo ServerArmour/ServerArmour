@@ -495,8 +495,8 @@ namespace Oxide.Plugins {
                     server.Broadcast($"{GetChatTag()} {isaPlayer.username} wasn't allowed to connect\nReason: {GetBanReason(isaPlayer)}");
                     return true;
                 }
-            } catch (Exception e) {
-                return false;
+            } catch (NullReferenceException nre) {
+                return false; 
             }
             return false;
         }
