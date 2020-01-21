@@ -450,8 +450,9 @@ namespace Oxide.Plugins {
                 bool containsMyBan = false;
 
 
-                if (PlayerCached(usr.steamid.ToString())) {
-                    foreach (ISABan ban in PlayerGetBanDataCache(usr.steamid.ToString())) {
+                if (IsPlayerCached(usr.steamid.ToString())) {
+                    List<ISABan> bans = GetPlayerBanData(usr.steamid.ToString());
+                    foreach (ISABan ban in bans) {
                         if (ban.serverIp.Equals(thisServerIp)) {
                             containsMyBan = true;
                             break;
