@@ -44,6 +44,7 @@ namespace Oxide.Plugins {
         void Init() {
             Puts("Server Armour is being initialized.");
             config = Config.ReadObject<ISAConfig>();
+            if (!config.Version.Equals(settingsVersion)) UpgradeConfig(config.Version, settingsVersion);
             thisServerIp = server.Address.ToString();
 
             if (config.ServerVersion.Equals(server.Version.ToString())) {
@@ -355,8 +356,9 @@ namespace Oxide.Plugins {
             SaveConfig();
         }
 
-        ISAConfig UpgradeConfig() {
+        ISAConfig UpgradeConfig(string oldVersion = "", string newVersion = "null") {
             return new ISAConfig {
+                Version = settingsVersion,
                 Debug = false,
 
                 ShowProtectedMsg = true,
@@ -381,7 +383,7 @@ namespace Oxide.Plugins {
                 ServerAdminName = "",
                 ServerAdminEmail = "",
                 ServerApiKey = "FREE"
-            };
+        };
         }
 
         private void LogDebug(string txt) {
@@ -611,6 +613,7 @@ namespace Oxide.Plugins {
         }
 
         private class ISAConfig {
+            public string Version;
             public bool Debug; //should always be false, unless explicitly asked to turn on, will cause performance issue when on.
             public bool ShowProtectedMsg; // Show the protected by ServerArmour msg?
             public string AutoBanGroup; // the group name that banned users should be added in
@@ -804,7 +807,7 @@ namespace Oxide.Plugins {
             public float NRProbabilityModifier = 1f;
         }
 
-#if RUST
+
         private void API_ArkanOnNoRecoilViolation(BasePlayer player, int NRViolationsNum, string json) {
             if (json != null) {
                 NoRecoilViolationData nrvd = JsonConvert.DeserializeObject<NoRecoilViolationData>(json);
@@ -816,7 +819,7 @@ namespace Oxide.Plugins {
                         ["shots"] = nrvd.ShotsCnt.ToString(),
                         ["weapon"] = nrvd.weaponShortName
                     }));
-                    ISAPlayer isaPlayer = PlayerGetCache(player.UserIDString);
+                    ISAPlayer isaPlayer = GetPlayerCache(player.UserIDString);
                     _playerData[player.UserIDString].AddArkanData(nrvd);
                 }
             }
@@ -833,7 +836,7 @@ namespace Oxide.Plugins {
                         ["shots"] = aimvd.hitsData.Count.ToString(),
                         ["weapon"] = aimvd.weaponShortName
                     }));
-                    ISAPlayer isaPlayer = PlayerGetCache(player.UserIDString);
+                    ISAPlayer isaPlayer = GetPlayerCache(player.UserIDString);
                     _playerData[player.UserIDString].AddArkanData(aimvd);
                 }
             }
@@ -850,12 +853,12 @@ namespace Oxide.Plugins {
                         ["weapon"] = irvd.inRockViolationsData[1].firedProjectile.weaponShortName,
                         ["PlayerNotFound"] = $"{player} not found, if the usernmae contains a space or special character, then please use quotes around it."
                     }));
-                    ISAPlayer isaPlayer = PlayerGetCache(player.UserIDString);
+                    ISAPlayer isaPlayer = GetPlayerCache(player.UserIDString);
                     _playerData[player.UserIDString].AddArkanData(irvd);
                 }
             }
         }
-#endif
+
         #endregion
 #endif
         #endregion
