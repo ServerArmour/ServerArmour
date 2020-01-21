@@ -226,7 +226,7 @@ namespace Oxide.Plugins {
 
         [Command("ban", "playerban", "sa.ban")]
         void SCmdBan(IPlayer player, string command, string[] args) {
-            if (!hasPermission(player, PermissionToBan)) {
+            if (!HasPermission(player, PermissionToBan)) {
                 player.Reply(GetMsg("NoPermission"));
                 return;
             }
@@ -431,7 +431,7 @@ namespace Oxide.Plugins {
         }
 
 
-        bool isIPAddress(string arg) {
+        bool IsIPAddress(string arg) {
             int subIP;
             string[] strArray = arg.Split('.');
             if (strArray.Length != 4) {
@@ -542,7 +542,7 @@ namespace Oxide.Plugins {
             }, this);
         }
 
-        bool hasPermission(IPlayer player, string permissionName) {
+        bool HasPermission(IPlayer player, string permissionName) {
             if (player.IsAdmin) return true;
             return permission.UserHasPermission(player.Id, permissionName);
         }
