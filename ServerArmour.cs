@@ -9,7 +9,7 @@ using UnityEngine;
 using Time = Oxide.Core.Libraries.Time;
 
 namespace Oxide.Plugins {
-    [Info("ServerArmour", "Pho3niX90", "0.0.6")]
+    [Info("ServerArmour", "Pho3niX90", "0.0.61")]
     [Description("Protect your server! Auto ban known hacker, scripter and griefer accounts, and notify server owners of threats.")]
     class ServerArmour : CovalencePlugin {
 
@@ -20,10 +20,9 @@ namespace Oxide.Plugins {
         string[] groups;
         private ISAConfig config;
         static string thisServerIp;
-        char[] ipChrArray = new char[] { '.' };
         string settingsVersion = "0.0.1";
         #region Permissions
-        const string PermissionBan = "serverarmour.ban";
+        const string PermissionToBan = "serverarmour.ban";
         #endregion
         #endregion
 
@@ -220,7 +219,7 @@ namespace Oxide.Plugins {
 
         [Command("ban", "playerban", "sa.ban")]
         void SCmdBan(IPlayer player, string command, string[] args) {
-            if (!hasPermission(player, PermissionBan)) {
+            if (!hasPermission(player, PermissionToBan)) {
                 player.Reply(GetMsg("NoPermission"));
                 return;
             }
@@ -426,7 +425,7 @@ namespace Oxide.Plugins {
 
         bool isIPAddress(string arg) {
             int subIP;
-            string[] strArray = arg.Split(ipChrArray);
+            string[] strArray = arg.Split('.');
             if (strArray.Length != 4) {
                 return false;
             }
