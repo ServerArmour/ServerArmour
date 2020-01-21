@@ -5,11 +5,14 @@ using Oxide.Core.Libraries.Covalence;
 using Oxide.Core.Plugins;
 using System;
 using System.Collections.Generic;
-using UnityEngine;
 using Time = Oxide.Core.Libraries.Time;
 
+#if RUST
+using UnityEngine; 
+#endif
+
 namespace Oxide.Plugins {
-    [Info("ServerArmour", "Pho3niX90", "0.0.61")]
+    [Info("ServerArmour", "Pho3niX90", "0.0.62")]
     [Description("Protect your server! Auto ban known hacker, scripter and griefer accounts, and notify server owners of threats.")]
     class ServerArmour : CovalencePlugin {
 
@@ -564,6 +567,7 @@ namespace Oxide.Plugins {
             public List<ISABan> serverBanData;
             public uint cacheTimestamp;
             public uint lastConnected;
+#if RUST
             public PlayerArkanViolationsData arkanInfo;
             public List<InRockViolationsData> arkanIRData;
             public List<AIMViolationData> arkanABData;
@@ -578,7 +582,7 @@ namespace Oxide.Plugins {
             public void AddArkanData(NoRecoilViolationData data) {
                 arkanNRData.Add(data);
             }
-
+#endif
             public ISAPlayer CreatePlayer(IPlayer bPlayer) {
                 steamid = bPlayer.Id;
                 username = bPlayer.Name;
@@ -633,6 +637,7 @@ namespace Oxide.Plugins {
         }
 
         #region Plugin Classes & Hooks Rust
+#if RUST
         #region Arkan
         public class PlayersArkanViolationsData {
             public int seed;
@@ -852,6 +857,7 @@ namespace Oxide.Plugins {
         }
 #endif
         #endregion
+#endif
         #endregion
         #endregion
     }
