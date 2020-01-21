@@ -23,7 +23,7 @@ namespace Oxide.Plugins {
         private double cacheLifetime = 300; // minutes
         string[] groups;
         private ISAConfig config;
-        static string thisServerIp;
+        string thisServerIp;
         string settingsVersion = "0.0.1";
         string specifier = "G";
         CultureInfo culture = CultureInfo.CreateSpecificCulture("en-US");
