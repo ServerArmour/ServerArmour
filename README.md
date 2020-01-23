@@ -32,7 +32,7 @@ Please note, this is a BETA plugin, so not all features are available yet. Autob
 ### Methods
 
 
-```
+```csharp
 int API_GetServerBanCount(string steamid) // Get the count of servers this use has been banned on
 bool API_GetIsVacBanned(string steamid) // Indicates whether or not the player has VAC bans on record.
 bool API_GetIsCommunityBanned(string steamid) // Indicates whether or not the player is banned from Steam Community
