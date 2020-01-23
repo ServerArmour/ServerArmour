@@ -6,14 +6,14 @@ using Oxide.Core.Plugins;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
-using Time = Oxide.Core.Libraries.Time;
-
+using System.Threading;
 #if RUST
-using UnityEngine; 
+using UnityEngine;
+using Time = Oxide.Core.Libraries.Time;
 #endif
 
 namespace Oxide.Plugins {
-    [Info("ServerArmour", "Pho3niX90", "0.0.63")]
+    [Info("ServerArmour", "Pho3niX90", "0.0.65")]
     [Description("Protect your server! Auto ban known hacker, scripter and griefer accounts, and notify server owners of threats.")]
     class ServerArmour : CovalencePlugin {
 
@@ -26,6 +26,7 @@ namespace Oxide.Plugins {
         string thisServerIp;
         string settingsVersion = "0.0.1";
         string specifier = "G";
+        int secondsBetweenWebRequests;
         CultureInfo culture = CultureInfo.CreateSpecificCulture("en-US");
         StringComparison defaultCompare = StringComparison.InvariantCultureIgnoreCase;
         #region Permissions
@@ -292,12 +293,18 @@ namespace Oxide.Plugins {
 
         #region Ban System
         bool BanPlayer(IPlayer iPlayer, ISABan ban) {
-            AddBan(iPlayer, ban.reason);
+            RunInBackground(() => AddBan(iPlayer, ban.reason));
             return true;
         }
         #endregion
 
         #region Data Handling
+        void RunInBackground(Action action) {
+            new Thread(() => {
+                Thread.CurrentThread.IsBackground = true;
+                action.DynamicInvoke();
+            }).Start();
+        }
         bool IsPlayerDirty(string steamid) {
             ISAPlayer isaPlayer = GetPlayerCache(steamid);
             return IsPlayerCached(steamid) && (isaPlayer.serverBanCount > 0 || isaPlayer.steamData.CommunityBanned > 0 || isaPlayer.steamData.NumberOfGameBans > 0 || isaPlayer.steamData.VACBanned > 0);
@@ -533,7 +540,7 @@ namespace Oxide.Plugins {
 
         protected override void LoadDefaultMessages() {
             lang.RegisterMessages(new Dictionary<string, string> {
-                ["Protected MSG"] = "Server protected by ServerArmour",
+                ["Protected MSG"] = "Server protected by <color=#008080ff>ServerArmour</color>",
                 ["User Dirty MSG"] = "<color=#008080ff>Server Armour Report:\n {steamid}:{username}</color> is {status}.\n <color=#ff0000ff>Server Bans:</color> {serverBanCount}\n <color=#ff0000ff>Game Bans:</color> {NumberOfGameBans}\n <color=#ff0000ff>Vac Bans:</color> {NumberOfVACBans}\n <color=#ff0000ff>Economy Status:</color> {EconomyBan}",
                 ["Command sa.cp Error"] = "Wrong format, example: /sa.cp usernameORsteamid trueORfalse",
                 ["Arkan No Recoil Violation"] = "<color=#ff0000>{player}</color> received an Arkan no recoil violation.\n<color=#ff0000>Violation</color> #{violationNr}, <color=#ff0000>Weapon:</color> {weapon}, <color=#ff0000>Ammo:</color> {ammo}, <color=#ff0000>Shots count:</color> {shots}\n Admins will investigate ASAP, please have handcams ready.\n This might be a false-positive, but all violations need to be investigated.",
@@ -604,6 +611,15 @@ namespace Oxide.Plugins {
             public string serverIp;
             public string reason;
             public string date;
+            public bool isAimbot;
+            public bool isHack;
+            public bool isEspHack;
+            public bool isScript;
+            public bool isCheat;
+            public bool isToxic;
+            public bool isInsult;
+            public bool isPing;
+            public bool isRacism;
         }
 
         public class ISASteamData {
@@ -646,14 +662,6 @@ namespace Oxide.Plugins {
         #region Plugin Classes & Hooks Rust
 #if RUST
         #region Arkan
-        public class PlayersArkanViolationsData {
-            public int seed;
-            public int mapSize;
-            public string serverTimeStamp;
-            public DateTime lastSaveTime;
-            public DateTime lastChangeTime;
-            public Dictionary<ulong, PlayerArkanViolationsData> Players = new Dictionary<ulong, PlayerArkanViolationsData>();
-        }
 
         public class PlayerArkanViolationsData {
             public ulong PlayerID;
