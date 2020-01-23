@@ -13,7 +13,7 @@ using UnityEngine;
 #endif
 
 namespace Oxide.Plugins {
-    [Info("ServerArmour", "Pho3niX90", "0.0.62")]
+    [Info("ServerArmour", "Pho3niX90", "0.0.63")]
     [Description("Protect your server! Auto ban known hacker, scripter and griefer accounts, and notify server owners of threats.")]
     class ServerArmour : CovalencePlugin {
 
@@ -27,6 +27,7 @@ namespace Oxide.Plugins {
         string settingsVersion = "0.0.1";
         string specifier = "G";
         CultureInfo culture = CultureInfo.CreateSpecificCulture("en-US");
+        StringComparison defaultCompare = StringComparison.InvariantCultureIgnoreCase;
         #region Permissions
         const string PermissionToBan = "serverarmour.ban";
         #endregion
@@ -50,7 +51,7 @@ namespace Oxide.Plugins {
             if (!config.Version.Equals(settingsVersion)) UpgradeConfig(config.Version, settingsVersion);
             thisServerIp = server.Address.ToString();
 
-            if (config.ServerVersion.Equals(server.Version.ToString(), StringComparison.InvariantCultureIgnoreCase)) {
+            if (config.ServerVersion.Equals(server.Version, defaultCompare)) {
                 config.ServerName = server.Name;
                 config.ServerPort = server.Port;
                 config.ServerVersion = server.Version;
@@ -145,7 +146,7 @@ namespace Oxide.Plugins {
                 if (!oldCache) return; //user already cached, therefore do not check again before cache time laps.
             }
 
-            string url = $"http://io.serverarmour.com/checkUser?steamid={player.Id}&username={player.Name}&ip={player.Address}" + ServerGetString();
+            string url = $"https://io.serverarmour.com/checkUser?steamid={player.Id}&username={player.Name}&ip={player.Address}" + ServerGetString();
             webrequest.Enqueue(url, null, (code, response) => {
                 if (code != 200 || response == null) {
                     Puts($"Couldn't get an answer from ServerArmour.com!");
@@ -168,22 +169,22 @@ namespace Oxide.Plugins {
         }
 
         void AddBan(IPlayer player, string banreason) {
-            string dateTime = DateTime.Now.ToString("yyyy/MM/dd HH:mm").ToString();
-            string url = $"http://io.serverarmour.com/addBan?steamid={player.Id}&username={player.Name}&ip={player.Address}&reason={banreason}&dateTime={dateTime}" + ServerGetString();
+            string dateTime = DateTime.Now.ToString("yyyy/MM/dd HH:mm");
+            string url = $"https://io.serverarmour.com/addBan?steamid={player.Id}&username={player.Name}&ip={player.Address}&reason={banreason}&dateTime={dateTime}" + ServerGetString();
             webrequest.Enqueue(url, null, (code, response) => {
                 if (code != 200 || response == null) {
                     Puts($"Couldn't get an answer from ServerArmour.com!");
                     return;
                 }
 
-                if (IsPlayerCached(player.Id.ToString())) {
+                if (IsPlayerCached(player.Id)) {
                     Puts($"{player.Name} has ban cached, now updating.");
                     AddPlayerBanData(player, new ISABan { serverName = server.Name, date = dateTime, reason = banreason, serverIp = thisServerIp });
                 } else {
                     Puts($"{player.Name} had no ban data cached, now creating.");
                     AddPlayerCached(player,
                         new ISAPlayer {
-                            steamid = player.Id.ToString(),
+                            steamid = player.Id,
                             username = player.Name,
                             serverBanCount = 1,
                             cacheTimestamp = _time.GetUnixTimestamp(),
@@ -199,7 +200,7 @@ namespace Oxide.Plugins {
             if (IsPlayerCached(steamid)) {
                 ISAPlayer isaPlayer = GetPlayerCache(steamid);
                 foreach (ISABan ban in isaPlayer.serverBanData) {
-                    if (ban.serverIp.Equals(thisServerIp, StringComparison.InvariantCultureIgnoreCase)) {
+                    if (ban.serverIp.Equals(thisServerIp, defaultCompare)) {
                         return true;
                     }
                 }
@@ -209,7 +210,7 @@ namespace Oxide.Plugins {
 
         string GetBanReason(ISAPlayer isaPlayer) {
             foreach (ISABan ban in isaPlayer.serverBanData) {
-                if (ban.serverIp.Equals(thisServerIp, StringComparison.InvariantCultureIgnoreCase)) {
+                if (ban.serverIp.Equals(thisServerIp, defaultCompare)) {
                     return ban.reason;
                 }
             }
@@ -461,7 +462,7 @@ namespace Oxide.Plugins {
                 if (IsPlayerCached(usr.steamid.ToString(specifier, culture))) {
                     List<ISABan> bans = GetPlayerBanData(usr.steamid.ToString(specifier, culture));
                     foreach (ISABan ban in bans) {
-                        if (ban.serverIp.Equals(thisServerIp, StringComparison.InvariantCultureIgnoreCase)) {
+                        if (ban.serverIp.Equals(thisServerIp, defaultCompare)) {
                             containsMyBan = true;
                             break;
                         }
