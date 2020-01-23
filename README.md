@@ -6,33 +6,36 @@ Please note, this is a BETA plugin, so not all features are available yet. Autob
 
 ### Default Configuration
 
-```json
-{
-  "AutoBanCeiling": 1,// Auto ban players with X amount of previous bans.
-  "AutoBanGroup": "serverarmour.bans", // the group name that banned users should be added in
-  "AutoBanOn": true, // turn auto banning on or off. 
-  "AutoBanReasonKeywords": [
-    "aimbot",
-    "esp"
-  ], // auto ban users that have these keywords in previous ban reasons.
-  "Debug": false, // never turn on, unless asked to do so by the developer, otherwise your logs will contain tons of messages.
-  "ServerAdminEmail": "", // please fill in your main admins email. This is to add a better trust level to your server.
-  "ServerAdminName": "", // please fill in your main admins real name. This is to add a better trust level to your server.
-  "ServerApiKey": "TEST", //leave as is
-  "ServerName": "", // You can change this manually if you like, but will autopopulate each startup
-  "ServerPort": "",  // You can change this manually if you like, but will autopopulate each startup
-  "ServerVersion": "", // You can change this manually if you like, but will autopopulate each startup
-  "WatchlistCeiling": 1, // Auto add players with X amount of previous bans to a watchlist.
-  "WatchlistGroup": "serverarmour.watchlist" // the group name that watched users should be added in
+
+{```
+
+"AutoBanCeiling": 1,// Auto ban players with X amount of previous bans.
+"AutoBanGroup": "serverarmour.bans", // the group name that banned users should be added in
+"AutoBanOn": true, // turn auto banning on or off. 
+"AutoBanReasonKeywords": [
+"aimbot",
+"esp"
+], // auto ban users that have these keywords in previous ban reasons.
+"Debug": false, // never turn on, unless asked to do so by the developer, otherwise your logs will contain tons of messages.
+"ServerAdminEmail": "", // please fill in your main admins email. This is to add a better trust level to your server.
+"ServerAdminName": "", // please fill in your main admins real name. This is to add a better trust level to your server.
+"ServerApiKey": "TEST", //leave as is
+"ServerName": "", // You can change this manually if you like, but will autopopulate each startup
+"ServerPort": "",  // You can change this manually if you like, but will autopopulate each startup
+"ServerVersion": "", // You can change this manually if you like, but will autopopulate each startup
+"WatchlistCeiling": 1, // Auto add players with X amount of previous bans to a watchlist.
+"WatchlistGroup": "serverarmour.watchlist" // the group name that watched users should be added in
 }
 ```
+
 
 ## API Hooks
 
 ### Methods
 
 
-```
+
+```csharp
 int API_GetServerBanCount(string steamid) // Get the count of servers this use has been banned on
 bool API_GetIsVacBanned(string steamid) // Indicates whether or not the player has VAC bans on record.
 bool API_GetIsCommunityBanned(string steamid) // Indicates whether or not the player is banned from Steam Community
@@ -54,6 +57,7 @@ private void OnUserConnected(IPlayer player) {
     Puts(ServerArmour.Call<bool>("API_GetIsPlayerDirty", player.Id));
 }
 ```
+
 The above is a universal example using the universal OnUserConnected hook for all Oxide supported games.
 
 ## More Info
