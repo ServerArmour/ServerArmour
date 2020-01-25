@@ -12,7 +12,7 @@ using Time = Oxide.Core.Libraries.Time;
 
 
 namespace Oxide.Plugins {
-    [Info("ServerArmour", "Pho3niX90", "0.0.65")]
+    [Info("ServerArmour", "Pho3niX90", "0.0.66")]
     [Description("Protect your server! Auto ban known hacker, scripter and griefer accounts, and notify server owners of threats.")]
     class ServerArmour : CovalencePlugin {
 
@@ -70,11 +70,15 @@ namespace Oxide.Plugins {
 
         void Loaded() {
             Puts("Checking all known users.");
-
+#if RUST
             ServerMgr.Instance.StartCoroutine(CheckOnlineUsers());
 
             ServerMgr.Instance.StartCoroutine(CheckLocalBans());
+#else
+            CheckOnlineUsers();
 
+            CheckLocalBans();
+#endif
             Puts("Server Armour finished initializing.");
             RegisterTag();
         }
