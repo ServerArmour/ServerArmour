@@ -6,11 +6,10 @@ using Oxide.Core.Plugins;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
-using System.Threading;
-#if RUST
+using System.Linq;
 using UnityEngine;
 using Time = Oxide.Core.Libraries.Time;
-#endif
+
 
 namespace Oxide.Plugins {
     [Info("ServerArmour", "Pho3niX90", "0.0.65")]
@@ -72,17 +71,10 @@ namespace Oxide.Plugins {
         void Loaded() {
             Puts("Checking all known users.");
 
-            int playerTotal = 0;
-            foreach (IPlayer player in players.All) {
-                if (player != null) {
-                    GetPlayerBans(player, true, player.IsConnected);
-                }
-                playerTotal++;
-            }
+            ServerMgr.Instance.StartCoroutine(CheckOnlineUsers());
 
-            timer.Once(30f, () => CheckLocalBans());
+            ServerMgr.Instance.StartCoroutine(CheckLocalBans());
 
-            Puts("Checking " + playerTotal + " players");
             Puts("Server Armour finished initializing.");
             RegisterTag();
         }
@@ -97,7 +89,7 @@ namespace Oxide.Plugins {
         void OnUserConnected(IPlayer player) {
             Puts($"{player.Name} ({player.Id}) connected from {player.Address}");
             GetPlayerBans(player, false, player.IsConnected);
-            timer.Once(30, () => GetPlayerReport(player));
+            timer.Once(5, () => GetPlayerReport(player));
         }
 
         void OnUserDisconnected(IPlayer player) {
@@ -293,18 +285,58 @@ namespace Oxide.Plugins {
 
         #region Ban System
         bool BanPlayer(IPlayer iPlayer, ISABan ban) {
-            RunInBackground(() => AddBan(iPlayer, ban.reason));
+            AddBan(iPlayer, ban.reason);
             return true;
         }
         #endregion
 
-        #region Data Handling
-        void RunInBackground(Action action) {
-            new Thread(() => {
-                Thread.CurrentThread.IsBackground = true;
-                action.DynamicInvoke();
-            }).Start();
+        #region IEnumerators
+        System.Collections.IEnumerator CheckOnlineUsers() {
+            IEnumerable<IPlayer> allPlayers = players.All;
+            for (var i = 1; i < allPlayers.Count(); i++) {
+                Puts($"Checking all user for infractions {i + 1} of {allPlayers.Count()}");
+                IPlayer player = allPlayers.ElementAt(i);
+                if (player != null) {
+                    GetPlayerBans(player, true, player.IsConnected);
+                }
+
+                yield return new WaitForSecondsRealtime(0.2f);
+
+            }
         }
+
+        private System.Collections.IEnumerator CheckLocalBans() {
+#if RUST
+            IEnumerable<ServerUsers.User> bannedUsers = ServerUsers.GetAll(ServerUsers.UserGroup.Banned);
+
+            for (var i = 0; i < bannedUsers.Count(); i++) {
+                ServerUsers.User usr = bannedUsers.ElementAt(i);
+
+                Puts($"Checking local user ban {i+1} of {bannedUsers.Count()}");
+
+                bool containsMyBan = false;
+                if (IsPlayerCached(usr.steamid.ToString(specifier, culture))) {
+                    List<ISABan> bans = GetPlayerBanData(usr.steamid.ToString(specifier, culture));
+                    foreach (ISABan ban in bans) {
+                        if (ban.serverIp.Equals(thisServerIp, defaultCompare)) {
+                            containsMyBan = true;
+                            break;
+                        }
+                    }
+                }
+                if (!containsMyBan) {
+                    IPlayer player = covalence.Players.FindPlayer(usr.steamid.ToString(specifier, culture));
+                    AddBan(player, usr.notes);
+                }
+                yield return new WaitForSecondsRealtime(1f);
+            }
+#else
+            return null;
+#endif
+        }
+        #endregion
+
+        #region Data Handling
         bool IsPlayerDirty(string steamid) {
             ISAPlayer isaPlayer = GetPlayerCache(steamid);
             return IsPlayerCached(steamid) && (isaPlayer.serverBanCount > 0 || isaPlayer.steamData.CommunityBanned > 0 || isaPlayer.steamData.NumberOfGameBans > 0 || isaPlayer.steamData.VACBanned > 0);
@@ -356,7 +388,7 @@ namespace Oxide.Plugins {
                 if (isCommand) {
                     cmdPlayer.Reply(report.Replace(isaPlayer.steamid + ":", string.Empty).Replace(isaPlayer.steamid, string.Empty));
                 }
-                Puts(report);
+                //Puts(report);
             }
         }
 
@@ -458,33 +490,6 @@ namespace Oxide.Plugins {
             }
             return true;
         }
-
-        void CheckLocalBans() {
-#if RUST
-            foreach (ServerUsers.User usr in ServerUsers.GetAll(ServerUsers.UserGroup.Banned)) {
-
-                bool containsMyBan = false;
-
-
-                if (IsPlayerCached(usr.steamid.ToString(specifier, culture))) {
-                    List<ISABan> bans = GetPlayerBanData(usr.steamid.ToString(specifier, culture));
-                    foreach (ISABan ban in bans) {
-                        if (ban.serverIp.Equals(thisServerIp, defaultCompare)) {
-                            containsMyBan = true;
-                            break;
-                        }
-                    }
-                }
-
-
-                if (!containsMyBan) {
-                    IPlayer player = covalence.Players.FindPlayer(usr.steamid.ToString(specifier, culture));
-                    AddBan(player, usr.notes);
-                }
-            }
-#endif
-        }
-
 
         bool AssignGroupsAndBan(IPlayer player) {
             try {
