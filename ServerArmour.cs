@@ -12,7 +12,7 @@ using Time = Oxide.Core.Libraries.Time;
 
 
 namespace Oxide.Plugins {
-    [Info("ServerArmour", "Pho3niX90", "0.0.66")]
+    [Info("ServerArmour", "Pho3niX90", "0.0.70")]
     [Description("Protect your server! Auto ban known hacker, scripter and griefer accounts, and notify server owners of threats.")]
     class ServerArmour : CovalencePlugin {
 
@@ -46,8 +46,10 @@ namespace Oxide.Plugins {
 
         #region Hooks
         void Init() {
+            LoadData();
             Puts("Server Armour is being initialized.");
             config = Config.ReadObject<ISAConfig>();
+
             if (!config.Version.Equals(settingsVersion)) UpgradeConfig(config.Version, settingsVersion);
             thisServerIp = server.Address.ToString();
 
@@ -55,13 +57,12 @@ namespace Oxide.Plugins {
                 config.ServerName = server.Name;
                 config.ServerPort = server.Port;
                 config.ServerVersion = server.Version;
-                SaveData();
+                SaveConfig();
                 RegisterTag();
             }
 
             LoadDefaultMessages();
             CheckGroups();
-            LoadData();
         }
 
         void OnServerInitialized() {
@@ -160,8 +161,6 @@ namespace Oxide.Plugins {
 
                 GetPlayerReport(isaPlayer, player.IsConnected);
 
-                SaveData();
-
             }, this, RequestMethod.GET);
         }
 
@@ -189,7 +188,7 @@ namespace Oxide.Plugins {
                             serverBanData = new List<ISABan> { new ISABan { serverName = server.Name, date = dateTime, reason = banreason, serverIp = thisServerIp } }
                         });
                 }
-                SaveData();
+                //SaveData();
             }, this, RequestMethod.GET);
         }
 
@@ -296,9 +295,9 @@ namespace Oxide.Plugins {
 
         #region IEnumerators
         System.Collections.IEnumerator CheckOnlineUsers() {
-            IEnumerable<IPlayer> allPlayers = players.All;
+            IEnumerable<IPlayer> allPlayers = players.Connected;
             for (var i = 1; i < allPlayers.Count(); i++) {
-                Puts($"Checking all user for infractions {i + 1} of {allPlayers.Count()}");
+                Puts($"Checking infractions for online users {i + 1} of {allPlayers.Count()}");
                 IPlayer player = allPlayers.ElementAt(i);
                 if (player != null) {
                     GetPlayerBans(player, true, player.IsConnected);
@@ -553,7 +552,7 @@ namespace Oxide.Plugins {
                 ["User Dirty MSG"] = "<color=#008080ff>Server Armour Report:\n {steamid}:{username}</color> is {status}.\n <color=#ff0000ff>Server Bans:</color> {serverBanCount}\n <color=#ff0000ff>Game Bans:</color> {NumberOfGameBans}\n <color=#ff0000ff>Vac Bans:</color> {NumberOfVACBans}\n <color=#ff0000ff>Economy Status:</color> {EconomyBan}",
                 ["Command sa.cp Error"] = "Wrong format, example: /sa.cp usernameORsteamid trueORfalse",
                 ["Arkan No Recoil Violation"] = "<color=#ff0000>{player}</color> received an Arkan no recoil violation.\n<color=#ff0000>Violation</color> #{violationNr}, <color=#ff0000>Weapon:</color> {weapon}, <color=#ff0000>Ammo:</color> {ammo}, <color=#ff0000>Shots count:</color> {shots}\n Admins will investigate ASAP, please have handcams ready.\n This might be a false-positive, but all violations need to be investigated.",
-                ["Arkan Aimbot Violation"] = "<color=#ff0000>{player}</color> received an Arkan aimbot violation.\n<color=#ff0000>Violation</color>  #{violationNr}, <color=#ff0000>Weapon:</color> {weapon}, <color=#ff0000>Ammo:</color> {ammo}, <color=#ff0000>Shots count:</color> {shots}\n Admins will investigate ASAP, please have handcams ready.\n This might be a false-positive, but all violations need to be investigated.",
+                ["Arkan Aimbot Violation"] = "<color=#ff0000>{player}</color> received an Arkan aimbot violation.\n<color=#ff0000>Violation</color>  #{violationNr}, <color=#ff0000>Weapon:</color> {weapon}, <color=#ff0000>Ammo:</color> {ammo}\n Admins will investigate ASAP, please have handcams ready.\n This might be a false-positive, but all violations need to be investigated.",
                 ["Arkan In Rock Violation"] = "<color=#ff0000>{player}</color> received an Arkan in rock violation.\n<color=#ff0000>Violation</color>  #{violationNr}, <color=#ff0000>Weapon:</color> {weapon}, <color=#ff0000>Ammo:</color> {ammo}\n Admins will investigate ASAP, please have handcams ready.\n This might be a false-positive, but all violations need to be investigated.",
                 ["Player Now Banned"] = "<color=#ff0000>{player}</color> has been banned\n<color=#ff0000>Reason: </color> {reason}"
             }, this);
@@ -680,94 +679,21 @@ namespace Oxide.Plugins {
             public SortedDictionary<string, InRockViolationsData> inRockViolations = new SortedDictionary<string, InRockViolationsData>();
         }
 
-        public class HitData {
-            public ProjectileRicochet hitData;
-            public Vector3 startProjectilePosition;
-            public Vector3 startProjectileVelocity;
-            public Vector3 hitPositionWorld;
-            public Vector3 hitPointStart;
-            public Vector3 hitPointEnd;
-            public bool isHitPointNearProjectileTrajectoryLastSegmentEndPoint = true;
-            public bool isHitPointOnProjectileTrajectory = true;
-            public bool isProjectileStartPointAtEndReverseProjectileTrajectory = true;
-            public bool isHitPointNearProjectilePlane = true;
-            public bool isLastSegmentOnProjectileTrajectoryPlane = true;
-            public float distanceFromHitPointToProjectilePlane = 0f;
-            public int side;
-            public Vector3 pointProjectedOnLastSegmentLine;
-            public float travelDistance = 0f;
-            public float delta = 1f;
-            public Vector3 lastSegmentPointStart;
-            public Vector3 lastSegmentPointEnd;
-            public Vector3 reverseLastSegmentPointStart;
-            public Vector3 reverseLastSegmentPointEnd;
-        }
-
         public class AIMViolationData {
             public int projectileID;
             public int violationID;
-            public DateTime firedTime;
-            public Vector3 startProjectilePosition;
-            public Vector3 startProjectileVelocity;
-            public string hitInfoInitiatorPlayerName;
-            public string hitInfoInitiatorPlayerUserID;
-            public string hitInfoHitEntityPlayerName;
-            public string hitInfoHitEntityPlayerUserID;
-            public string hitInfoBoneName;
-            public Vector3 hitInfoHitPositionWorld;
-            public float hitInfoProjectileDistance;
-            public Vector3 hitInfoPointStart;
-            public Vector3 hitInfoPointEnd;
-            public float hitInfoProjectilePrefabGravityModifier;
-            public float hitInfoProjectilePrefabDrag;
             public string weaponShortName;
             public string ammoShortName;
             public string bodyPart;
             public float damage;
-            public bool isEqualFiredProjectileData = true;
-            public bool isPlayerPositionToProjectileStartPositionDistanceViolation = false;
-            public float distanceDifferenceViolation = 0f;
-            public float calculatedTravelDistance;
-            public bool isAttackerMount = false;
-            public bool isTargetMount = false;
-            public string attackerMountParentName;
-            public string targetMountParentName;
-            public float firedProjectileFiredTime;
-            public float firedProjectileTravelTime;
-            public Vector3 firedProjectilePosition;
-            public Vector3 firedProjectileVelocity;
-            public Vector3 firedProjectileInitialPosition;
-            public Vector3 firedProjectileInitialVelocity;
-            public Vector3 playerEyesLookAt;
-            public Vector3 playerEyesPosition;
-            public bool hasFiredProjectile = false;
-            public List<HitData> hitsData = new List<HitData>();
-            public float gravityModifier;
-            public float drag;
-            public float forgivenessModifier = 1f;
-            public float physicsSteps = 32f;
-            public List<string> attachments = new List<string>();
-        }
-
-        public struct ProjectileRicochet {
-            public int projectileID;
-            public Vector3 hitPosition;
-            public Vector3 inVelocity;
-            public Vector3 outVelocity;
         }
 
         public class NoRecoilViolationData {
             public int ShotsCnt;
             public int NRViolationsCnt;
             public float violationProbability;
-            public bool isMounted;
-            public Vector3 mountParentPosition;
-            public Vector4 mountParentRotation;
-            public List<string> attachments = new List<string>();
             public string ammoShortName;
             public string weaponShortName;
-
-            public Dictionary<int, SuspiciousProjectileData> suspiciousNoRecoilShots = new Dictionary<int, SuspiciousProjectileData>();
         }
 
         public class InRockViolationsData {
@@ -783,48 +709,16 @@ namespace Oxide.Plugins {
             public string targetID;
             public float targetDamage;
             public string targetBodyPart;
-            public Vector3 targetHitPosition;
-            public Vector3 rockHitPosition;
             public FiredProjectile firedProjectile;
             public int projectileID;
-            public float drag;
-            public float gravityModifier;
         }
 
-        public struct SuspiciousProjectileData {
-            public DateTime timeStamp;
-            public int projectile1ID;
-            public int projectile2ID;
-            public float timeInterval;
-            public Vector3 projectile1Position;
-            public Vector3 projectile2Position;
-            public Vector3 projectile1Velocity;
-            public Vector3 projectile2Velocity;
-            public Vector3 closestPointLine1;
-            public Vector3 closestPointLine2;
-            public Vector3 prevIntersectionPoint;
-            public float recoilAngle;
-            public float recoilScreenDistance;
-            public bool isNoRecoil;
-            public bool isShootedInMotion;
-        }
+        
 
         public class FiredProjectile {
-            public DateTime firedTime;
-            public Vector3 projectileVelocity;
-            public Vector3 projectilePosition;
-            public Vector3 playerEyesLookAt;
-            public Vector3 playerEyesPosition;
             public bool isChecked;
             public string ammoShortName;
             public string weaponShortName;
-            public uint weaponUID;
-            public bool isMounted;
-            public string mountParentName;
-            public Vector3 mountParentPosition;
-            public Vector4 mountParentRotation;
-            public List<ProjectileRicochet> hitsData = new List<ProjectileRicochet>();
-            public List<string> attachments = new List<string>();
             public float NRProbabilityModifier = 1f;
         }
 
@@ -854,7 +748,6 @@ namespace Oxide.Plugins {
                         ["player"] = player.displayName,
                         ["violationNr"] = AIMViolationsNum.ToString(specifier, culture),
                         ["ammo"] = aimvd.ammoShortName,
-                        ["shots"] = aimvd.hitsData.Count.ToString(specifier, culture),
                         ["weapon"] = aimvd.weaponShortName
                     }));
                     ISAPlayer isaPlayer = GetPlayerCache(player.UserIDString);
