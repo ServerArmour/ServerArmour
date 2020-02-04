@@ -12,7 +12,7 @@ using Time = Oxide.Core.Libraries.Time;
 
 
 namespace Oxide.Plugins {
-    [Info("ServerArmour", "Pho3niX90", "0.0.70")]
+    [Info("ServerArmour", "Pho3niX90", "0.0.72")]
     [Description("Protect your server! Auto ban known hacker, scripter and griefer accounts, and notify server owners of threats.")]
     class ServerArmour : CovalencePlugin {
 
@@ -33,15 +33,13 @@ namespace Oxide.Plugins {
         #endregion
         #endregion
 
-
-
         #region Plugins
         [PluginReference]
         Plugin BetterChat;
-#if RUST
+        //#if RUST
         [PluginReference]
         Plugin Arkan;
-#endif
+        //#endif
         #endregion
 
         #region Hooks
@@ -70,11 +68,13 @@ namespace Oxide.Plugins {
         }
 
         void Loaded() {
-            Puts("Checking all known users.");
-#if RUST
-            ServerMgr.Instance.StartCoroutine(CheckOnlineUsers());
 
-            ServerMgr.Instance.StartCoroutine(CheckLocalBans());
+#if RUST
+            timer.Once(300, () => {
+                Puts("Checking all known users.");
+                ServerMgr.Instance.StartCoroutine(CheckOnlineUsers());
+                ServerMgr.Instance.StartCoroutine(CheckLocalBans());
+            });
 #else
             CheckOnlineUsers();
 
@@ -253,7 +253,7 @@ namespace Oxide.Plugins {
                     date = new Time().GetDateTimeFromUnix(new Time().GetUnixTimestamp()).ToShortDateString()
                 })) {
 
-                string msg = GetMsg("Player Now Banned", new Dictionary<string, string> { ["player"] = isaPlayer.username, ["reason"] = args[1] });
+                string msg = GetMsg("Player Now Banned", new Dictionary<string, string> { ["player"] = iPlayer.Name, ["reason"] = args[1] });
                 if (config.BroadcastNewBans) {
                     server.Broadcast(msg);
                 } else {
@@ -304,18 +304,17 @@ namespace Oxide.Plugins {
                 }
 
                 yield return new WaitForSecondsRealtime(0.2f);
-
             }
         }
 
         private System.Collections.IEnumerator CheckLocalBans() {
-#if RUST
+            //#if RUST
             IEnumerable<ServerUsers.User> bannedUsers = ServerUsers.GetAll(ServerUsers.UserGroup.Banned);
 
             for (var i = 0; i < bannedUsers.Count(); i++) {
                 ServerUsers.User usr = bannedUsers.ElementAt(i);
 
-                Puts($"Checking local user ban {i+1} of {bannedUsers.Count()}");
+                Puts($"Checking local user ban {i + 1} of {bannedUsers.Count()}");
 
                 bool containsMyBan = false;
                 if (IsPlayerCached(usr.steamid.ToString(specifier, culture))) {
@@ -333,9 +332,9 @@ namespace Oxide.Plugins {
                 }
                 yield return new WaitForSecondsRealtime(1f);
             }
-#else
-            return null;
-#endif
+            //#else
+            //           return null;
+            //#endif
         }
         #endregion
 
@@ -567,7 +566,8 @@ namespace Oxide.Plugins {
         #region Plugins methods
         string GetChatTag() => "<color=#008080ff>[Server Armour]: </color>";
         void RegisterTag() {
-            BetterChat?.Call("API_RegisterThirdPartyTitle", new object[] { this, new Func<IPlayer, string>(GetTag) });
+            if (BetterChat != null)
+                BetterChat?.Call("API_RegisterThirdPartyTitle", new object[] { this, new Func<IPlayer, string>(GetTag) });
         }
 
         string GetTag(IPlayer player) {
@@ -588,27 +588,14 @@ namespace Oxide.Plugins {
             public List<ISABan> serverBanData;
             public uint cacheTimestamp;
             public uint lastConnected;
-#if RUST
-            public PlayerArkanViolationsData arkanInfo;
-            public List<InRockViolationsData> arkanIRData;
-            public List<AIMViolationData> arkanABData;
-            public List<NoRecoilViolationData> arkanNRData;
 
-            public void AddArkanData(InRockViolationsData data) {
-                arkanIRData.Add(data);
-            }
-            public void AddArkanData(AIMViolationData data) {
-                arkanABData.Add(data);
-            }
-            public void AddArkanData(NoRecoilViolationData data) {
-                arkanNRData.Add(data);
-            }
-#endif
             public ISAPlayer CreatePlayer(IPlayer bPlayer) {
                 steamid = bPlayer.Id;
                 username = bPlayer.Name;
                 cacheTimestamp = new Time().GetUnixTimestamp();
                 lastConnected = new Time().GetUnixTimestamp();
+                steamData = new ISASteamData();
+                serverBanData = new List<ISABan>();
                 return this;
             }
         }
@@ -668,64 +655,13 @@ namespace Oxide.Plugins {
         }
 
         #region Plugin Classes & Hooks Rust
-#if RUST
+        //#if RUST
         #region Arkan
-
-        public class PlayerArkanViolationsData {
-            public ulong PlayerID;
-            public string PlayerName;
-            public SortedDictionary<string, NoRecoilViolationData> noRecoilViolations = new SortedDictionary<string, NoRecoilViolationData>();
-            public SortedDictionary<string, AIMViolationData> AIMViolations = new SortedDictionary<string, AIMViolationData>();
-            public SortedDictionary<string, InRockViolationsData> inRockViolations = new SortedDictionary<string, InRockViolationsData>();
-        }
-
-        public class AIMViolationData {
-            public int projectileID;
-            public int violationID;
-            public string weaponShortName;
-            public string ammoShortName;
-            public string bodyPart;
-            public float damage;
-        }
-
-        public class NoRecoilViolationData {
-            public int ShotsCnt;
-            public int NRViolationsCnt;
-            public float violationProbability;
-            public string ammoShortName;
-            public string weaponShortName;
-        }
-
-        public class InRockViolationsData {
-            public DateTime dateTime;
-            public Dictionary<int, InRockViolationData> inRockViolationsData = new Dictionary<int, InRockViolationData>();
-        }
-
-        public class InRockViolationData {
-            public DateTime dateTime;
-            public float physicsSteps;
-            public float targetHitDistance;
-            public string targetName;
-            public string targetID;
-            public float targetDamage;
-            public string targetBodyPart;
-            public FiredProjectile firedProjectile;
-            public int projectileID;
-        }
-
-        
-
-        public class FiredProjectile {
-            public bool isChecked;
-            public string ammoShortName;
-            public string weaponShortName;
-            public float NRProbabilityModifier = 1f;
-        }
-
 
         private void API_ArkanOnNoRecoilViolation(BasePlayer player, int NRViolationsNum, string json) {
             if (json != null) {
-                NoRecoilViolationData nrvd = JsonConvert.DeserializeObject<NoRecoilViolationData>(json);
+                Puts("Arkan: " + json);
+                /*NoRecoilViolationData nrvd = JsonConvert.DeserializeObject<NoRecoilViolationData>(json);
                 if (nrvd != null) {
                     server.Broadcast(GetMsg("Arkan No Recoil Violation", new Dictionary<string, string> {
                         ["player"] = player.displayName,
@@ -736,13 +672,14 @@ namespace Oxide.Plugins {
                     }));
                     ISAPlayer isaPlayer = GetPlayerCache(player.UserIDString);
                     _playerData[player.UserIDString].AddArkanData(nrvd);
-                }
+                }*/
             }
         }
 
         private void API_ArkanOnAimbotViolation(BasePlayer player, int AIMViolationsNum, string json) {
             if (json != null) {
-                AIMViolationData aimvd = JsonConvert.DeserializeObject<AIMViolationData>(json);
+                Puts("Arkan: " + json);
+                /*AIMViolationData aimvd = JsonConvert.DeserializeObject<AIMViolationData>(json);
                 if (aimvd != null) {
                     server.Broadcast(GetMsg("Arkan Aimbot Violation", new Dictionary<string, string> {
                         ["player"] = player.displayName,
@@ -752,14 +689,16 @@ namespace Oxide.Plugins {
                     }));
                     ISAPlayer isaPlayer = GetPlayerCache(player.UserIDString);
                     _playerData[player.UserIDString].AddArkanData(aimvd);
-                }
+                }*/
             }
         }
 
         private void API_ArkanOnInRockViolation(BasePlayer player, int IRViolationsNum, string json) {
             if (json != null) {
-                InRockViolationsData irvd = JsonConvert.DeserializeObject<InRockViolationsData>(json);
+                Puts("Arkan: " + json);
+                /*InRockViolationsData irvd = JsonConvert.DeserializeObject<InRockViolationsData>(json);
                 if (irvd != null) {
+                    Puts("Arkan: " + json);
                     server.Broadcast(GetMsg("Arkan In Rock Violation", new Dictionary<string, string> {
                         ["player"] = player.displayName,
                         ["violationNr"] = IRViolationsNum.ToString(specifier, culture),
@@ -769,12 +708,12 @@ namespace Oxide.Plugins {
                     }));
                     ISAPlayer isaPlayer = GetPlayerCache(player.UserIDString);
                     _playerData[player.UserIDString].AddArkanData(irvd);
-                }
+                }*/
             }
         }
 
         #endregion
-#endif
+        //#endif
         #endregion
         #endregion
     }
