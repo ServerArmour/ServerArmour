@@ -2,6 +2,12 @@ Protect your gaming server against hackers, scripters, cheats and grievers!
 
 Please note, this is a BETA plugin, so not all features are available yet. Autobanning is still being tested to make sure all is well, and should be available within a week.
 
+## Commands
+```
+	/sa.cp username <force:boolean> - This will show you the ServerArmour report for a specific user, when the force true is added, it will skip checking local cache and update it from the server.
+	/sa.ban "username/id" "reason" - This will ban a player, please keep reason english for now (this helps with sentiment analysis.)
+```
+
 ## Configuration
 
 ### Default Configuration
@@ -23,7 +29,18 @@ Please note, this is a BETA plugin, so not all features are available yet. Autob
   "ServerPort": "",  // You can change this manually if you like, but will autopopulate each startup
   "ServerVersion": "", // You can change this manually if you like, but will autopopulate each startup
   "WatchlistCeiling": 1, // Auto add players with X amount of previous bans to a watchlist.
-  "WatchlistGroup": "serverarmour.watchlist" // the group name that watched users should be added in
+  "WatchlistGroup": "serverarmour.watchlist", // the group name that watched users should be added in
+
+  // The below options are to ban based on sentiment analysis on previous bans within the reason. Currently ONLY english is supported. please note that autoban above should also be true for this to work. 
+  "AutoBan_Reason_Keyword_Aimbot": false,
+  "AutoBan_Reason_Keyword_Hack": false,
+  "AutoBan_Reason_Keyword_EspHack": false,
+  "AutoBan_Reason_Keyword_Script": false,
+  "AutoBan_Reason_Keyword_Cheat": false,
+  "AutoBan_Reason_Keyword_Toxic": false,
+  "AutoBan_Reason_Keyword_Insult": false,
+  "AutoBan_Reason_Keyword_Ping": false,
+  "AutoBan_Reason_Keyword_Racism": false
 }
 ```
 
