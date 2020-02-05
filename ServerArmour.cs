@@ -12,7 +12,7 @@ using Time = Oxide.Core.Libraries.Time;
 
 
 namespace Oxide.Plugins {
-    [Info("ServerArmour", "Pho3niX90", "0.0.72")]
+    [Info("ServerArmour", "Pho3niX90", "0.0.75")]
     [Description("Protect your server! Auto ban known hacker, scripter and griefer accounts, and notify server owners of threats.")]
     class ServerArmour : CovalencePlugin {
 
@@ -23,7 +23,7 @@ namespace Oxide.Plugins {
         string[] groups;
         private ISAConfig config;
         string thisServerIp;
-        string settingsVersion = "0.0.1";
+        string settingsVersion = "0.0.2";
         string specifier = "G";
         int secondsBetweenWebRequests;
         CultureInfo culture = CultureInfo.CreateSpecificCulture("en-US");
@@ -528,7 +528,22 @@ namespace Oxide.Plugins {
 
         bool ShouldBan(ISAPlayer isaPlayer) {
             bool ceilingBan = config.AutoBanOn && (config.AutoVacBanCeiling <= isaPlayer.steamData.NumberOfVACBans || config.AutoBanCeiling < isaPlayer.serverBanCount);
-            bool keywordBan = config.AutoBanOn && (config.AutoBan_Reason_Keyword_Aimbot || config.AutoBan_Reason_Keyword_Cheat || config.AutoBan_Reason_Keyword_EspHack || config.AutoBan_Reason_Keyword_Hack || config.AutoBan_Reason_Keyword_Insult || config.AutoBan_Reason_Keyword_Ping || config.AutoBan_Reason_Keyword_Racism || config.AutoBan_Reason_Keyword_Script || config.AutoBan_Reason_Keyword_Toxic);
+            bool keywordBan = false;
+            bool keywordBanCheck = config.AutoBanOn && (config.AutoBan_Reason_Keyword_Aimbot || config.AutoBan_Reason_Keyword_Cheat || config.AutoBan_Reason_Keyword_EspHack || config.AutoBan_Reason_Keyword_Hack || config.AutoBan_Reason_Keyword_Insult || config.AutoBan_Reason_Keyword_Ping || config.AutoBan_Reason_Keyword_Racism || config.AutoBan_Reason_Keyword_Script || config.AutoBan_Reason_Keyword_Toxic);
+            if (keywordBanCheck) {
+                foreach (ISABan ban in isaPlayer.serverBanData) {
+                    if (config.AutoBan_Reason_Keyword_Aimbot && ban.isAimbot) keywordBan = true;
+                    if (config.AutoBan_Reason_Keyword_Cheat && ban.isAimbot) keywordBan = true;
+                    if (config.AutoBan_Reason_Keyword_EspHack && ban.isAimbot) keywordBan = true;
+                    if (config.AutoBan_Reason_Keyword_Hack && ban.isAimbot) keywordBan = true;
+                    if (config.AutoBan_Reason_Keyword_Insult && ban.isAimbot) keywordBan = true;
+                    if (config.AutoBan_Reason_Keyword_Ping && ban.isAimbot) keywordBan = true;
+                    if (config.AutoBan_Reason_Keyword_Racism && ban.isAimbot) keywordBan = true;
+                    if (config.AutoBan_Reason_Keyword_Script && ban.isAimbot) keywordBan = true;
+                    if (config.AutoBan_Reason_Keyword_Toxic && ban.isAimbot) keywordBan = true;
+                }
+            }
+
             return ceilingBan || keywordBan;
         }
         #endregion
