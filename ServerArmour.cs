@@ -308,6 +308,8 @@ namespace Oxide.Plugins {
         #endregion
 
         #region IEnumerators
+
+#if RUST || HURTWORLD || SEVENDAYSTODIE || THEFOREST
         System.Collections.IEnumerator CheckOnlineUsers() {
             IEnumerable<IPlayer> allPlayers = players.Connected;
             for (var i = 1; i < allPlayers.Count(); i++) {
@@ -316,13 +318,24 @@ namespace Oxide.Plugins {
                 if (player != null) {
                     GetPlayerBans(player, true);
                 }
-#if RUST || HURTWORLD || SEVENDAYSTODIE || THEFOREST
                 yield return new WaitForSecondsRealtime(0.2f);
-#else
-                return null;
-#endif
+
             }
         }
+#else
+
+        void CheckOnlineUsers() {
+            IEnumerable<IPlayer> allPlayers = players.Connected;
+            for (var i = 1; i < allPlayers.Count(); i++) {
+                Puts($"Checking infractions for online users {i + 1} of {allPlayers.Count()}");
+                IPlayer player = allPlayers.ElementAt(i);
+                if (player != null) {
+                    GetPlayerBans(player, true);
+                }
+
+            }
+        }
+#endif
 
         private System.Collections.IEnumerator CheckLocalBans() {
 #if RUST
