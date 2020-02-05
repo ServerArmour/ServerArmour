@@ -70,11 +70,17 @@ namespace Oxide.Plugins {
         void Loaded() {
 
 #if RUST
-            timer.Once(300, () => {
+            if (ServerMgr.Instance != null) {
                 Puts("Checking all known users.");
                 ServerMgr.Instance.StartCoroutine(CheckOnlineUsers());
                 ServerMgr.Instance.StartCoroutine(CheckLocalBans());
-            });
+            } else {
+                timer.Once(300, () => {
+                    Puts("Checking all known users.");
+                    ServerMgr.Instance.StartCoroutine(CheckOnlineUsers());
+                    ServerMgr.Instance.StartCoroutine(CheckLocalBans());
+                });
+            }
 #else
             CheckOnlineUsers();
 
@@ -102,7 +108,11 @@ namespace Oxide.Plugins {
         }
 
         bool CanUserLogin(string name, string id, string ip) {
-            return !AssignGroupsAndBan(players.FindPlayer(name));
+            bool canLogin = !AssignGroupsAndBan(players.FindPlayer(name));
+            if (!canLogin) {
+                Puts($"{ip}:{id}:{name} tried to connect. But the connection was rejected due to him being banned");
+            }
+            return canLogin;
         }
 
         /* Unused atm, will uncomment as needed
@@ -289,6 +299,7 @@ namespace Oxide.Plugins {
         #region Ban System
         bool BanPlayer(IPlayer iPlayer, ISABan ban) {
             AddBan(iPlayer, ban.reason);
+            iPlayer.Kick(ban.reason);
             return true;
         }
         #endregion
