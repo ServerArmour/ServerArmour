@@ -1,6 +1,10 @@
 Protect your gaming server against hackers, scripters, cheats and grievers!
 
 Please note, this is a BETA plugin, so not all features are available yet. Autobanning is still being tested to make sure all is well, and should be available within a week.
+## Permissions
+```
+/sa.ban - requires permission serverarmour.ban
+```
 
 ## Commands
 ```

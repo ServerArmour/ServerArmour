@@ -99,7 +99,7 @@ namespace Oxide.Plugins {
 
         void OnUserConnected(IPlayer player) {
             Puts($"{player.Name} ({player.Id}) connected from {player.Address}");
-            GetPlayerBans(player, false, player.IsConnected);
+            GetPlayerBans(player, true);
             timer.Once(5, () => GetPlayerReport(player));
         }
 
@@ -143,14 +143,15 @@ namespace Oxide.Plugins {
         #endregion
 
         #region WebRequests
-        void GetPlayerBans(IPlayer player, bool onlyGetUncached = false, bool connectedTime = true) {
+        void GetPlayerBans(IPlayer player, bool skipCache = false) {
             bool isCached = IsPlayerCached(player.Id);
 
-            if (isCached && !onlyGetUncached) {
+            if (isCached && !skipCache) {
                 uint currentTimestamp = _time.GetUnixTimestamp();
                 double minutesOld = (currentTimestamp - GetPlayerCache(player.Id).cacheTimestamp) / 60.0 / 1000.0;
                 bool oldCache = cacheLifetime <= minutesOld;
                 GetPlayerCache(player.Id).lastConnected = currentTimestamp;
+                GetPlayerReport(player, player.IsConnected);
                 if (!oldCache) return; //user already cached, therefore do not check again before cache time laps.
             }
 
@@ -288,7 +289,7 @@ namespace Oxide.Plugins {
             }
 
             if (IsPlayerCached(playerToCheck.Id) && forceUpdate) {
-                GetPlayerBans(playerToCheck, !forceUpdate);
+                GetPlayerBans(playerToCheck, forceUpdate);
             }
 
             CheckLocalBans();
@@ -311,7 +312,7 @@ namespace Oxide.Plugins {
                 Puts($"Checking infractions for online users {i + 1} of {allPlayers.Count()}");
                 IPlayer player = allPlayers.ElementAt(i);
                 if (player != null) {
-                    GetPlayerBans(player, true, player.IsConnected);
+                    GetPlayerBans(player, true);
                 }
 
                 yield return new WaitForSecondsRealtime(0.2f);
