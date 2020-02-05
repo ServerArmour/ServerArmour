@@ -468,7 +468,7 @@ namespace Oxide.Plugins {
             Puts("Checking if config groups exists.");
 
             string autobanGroup = GetConfig("AutoBanGroup", "serverarmour.bans");
-            string watchlistGroup = GetConfig("AutoBanGroup", "serverarmour.watchlists");
+            string watchlistGroup = GetConfig("WatchlistGroup", "serverarmour.watchlists");
 
             if (!permission.GroupExists(autobanGroup)) {
                 permission.CreateGroup(autobanGroup, "Server Armour Autobans", 0);
@@ -509,12 +509,8 @@ namespace Oxide.Plugins {
                 ISAPlayer isaPlayer = IsPlayerCached(player.Id) ? GetPlayerCache(player.Id) : null;
                 if (isaPlayer == null) return false;
 
-                if (config.AutoBanOn) {
-                    if (config.AutoVacBanCeiling <= isaPlayer.steamData.NumberOfVACBans) {
+                if (config.AutoBanOn) return ShouldBan(isaPlayer);
 
-                        return true;
-                    }
-                }
 
                 if (config.WatchlistCeiling <= isaPlayer.serverBanCount) {
 
@@ -531,7 +527,9 @@ namespace Oxide.Plugins {
         }
 
         bool ShouldBan(ISAPlayer isaPlayer) {
-            return config.AutoBanOn && (config.AutoVacBanCeiling <= isaPlayer.steamData.NumberOfVACBans || config.AutoBanCeiling < isaPlayer.serverBanCount);
+            bool ceilingBan = config.AutoBanOn && (config.AutoVacBanCeiling <= isaPlayer.steamData.NumberOfVACBans || config.AutoBanCeiling < isaPlayer.serverBanCount);
+            bool keywordBan = config.AutoBanOn && (config.AutoBan_Reason_Keyword_Aimbot || config.AutoBan_Reason_Keyword_Cheat || config.AutoBan_Reason_Keyword_EspHack || config.AutoBan_Reason_Keyword_Hack || config.AutoBan_Reason_Keyword_Insult || config.AutoBan_Reason_Keyword_Ping || config.AutoBan_Reason_Keyword_Racism || config.AutoBan_Reason_Keyword_Script || config.AutoBan_Reason_Keyword_Toxic);
+            return ceilingBan || keywordBan;
         }
         #endregion
 
@@ -663,6 +661,16 @@ namespace Oxide.Plugins {
             public string ServerAdminName; // please fill in your main admins real name. This is to add a better trust level to your server.
             public string ServerAdminEmail; // please fill in your main admins email. This is to add a better trust level to your server.
             public string ServerApiKey; // for future reference, leave as is. 
+
+            public bool AutoBan_Reason_Keyword_Aimbot;
+            public bool AutoBan_Reason_Keyword_Hack;
+            public bool AutoBan_Reason_Keyword_EspHack;
+            public bool AutoBan_Reason_Keyword_Script;
+            public bool AutoBan_Reason_Keyword_Cheat;
+            public bool AutoBan_Reason_Keyword_Toxic;
+            public bool AutoBan_Reason_Keyword_Insult;
+            public bool AutoBan_Reason_Keyword_Ping;
+            public bool AutoBan_Reason_Keyword_Racism;
         }
 
         #region Plugin Classes & Hooks Rust
