@@ -7,7 +7,9 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+#if RUST || HURTWORLD || SEVENDAYSTODIE || REIGNOFKINGS || THEFOREST
 using UnityEngine;
+#endif
 using Time = Oxide.Core.Libraries.Time;
 
 
@@ -314,8 +316,11 @@ namespace Oxide.Plugins {
                 if (player != null) {
                     GetPlayerBans(player, true);
                 }
-
+#if RUST || HURTWORLD || SEVENDAYSTODIE || THEFOREST
                 yield return new WaitForSecondsRealtime(0.2f);
+#else
+                return null;
+#endif
             }
         }
 
