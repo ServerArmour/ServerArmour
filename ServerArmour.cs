@@ -12,7 +12,7 @@ using Time = Oxide.Core.Libraries.Time;
 
 
 namespace Oxide.Plugins {
-    [Info("ServerArmour", "Pho3niX90", "0.0.75")]
+    [Info("ServerArmour", "Pho3niX90", "0.0.76")]
     [Description("Protect your server! Auto ban known hacker, scripter and griefer accounts, and notify server owners of threats.")]
     class ServerArmour : CovalencePlugin {
 
@@ -36,10 +36,10 @@ namespace Oxide.Plugins {
         #region Plugins
         [PluginReference]
         Plugin BetterChat;
-        //#if RUST
+#if RUST
         [PluginReference]
         Plugin Arkan;
-        //#endif
+#endif
         #endregion
 
         #region Hooks
@@ -320,7 +320,7 @@ namespace Oxide.Plugins {
         }
 
         private System.Collections.IEnumerator CheckLocalBans() {
-            //#if RUST
+#if RUST
             IEnumerable<ServerUsers.User> bannedUsers = ServerUsers.GetAll(ServerUsers.UserGroup.Banned);
 
             for (var i = 0; i < bannedUsers.Count(); i++) {
@@ -344,9 +344,9 @@ namespace Oxide.Plugins {
                 }
                 yield return new WaitForSecondsRealtime(1f);
             }
-            //#else
-            //           return null;
-            //#endif
+#else
+            return null;
+#endif
         }
         #endregion
 
@@ -690,7 +690,7 @@ namespace Oxide.Plugins {
         }
 
         #region Plugin Classes & Hooks Rust
-        //#if RUST
+#if RUST
         #region Arkan
 
         private void API_ArkanOnNoRecoilViolation(BasePlayer player, int NRViolationsNum, string json) {
@@ -748,7 +748,7 @@ namespace Oxide.Plugins {
         }
 
         #endregion
-        //#endif
+#endif
         #endregion
         #endregion
     }
