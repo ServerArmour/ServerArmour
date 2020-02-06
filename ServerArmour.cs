@@ -160,7 +160,7 @@ namespace Oxide.Plugins {
             }
 
 
-            string playerName = System.Uri.EscapeDataString(player.Name);
+            string playerName = Uri.EscapeDataString(player.Name);
             string url = $"https://io.serverarmour.com/checkUser?steamid={player.Id}&username={playerName}&ip={player.Address}" + ServerGetString();
             webrequest.Enqueue(url, null, (code, response) => {
                 if (code != 200 || response == null) {

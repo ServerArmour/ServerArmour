@@ -44,9 +44,15 @@ Please note, this is a BETA plugin, so not all features are available yet. Autob
   "AutoBan_Reason_Keyword_Toxic": false,
   "AutoBan_Reason_Keyword_Insult": false,
   "AutoBan_Reason_Keyword_Ping": false,
-  "AutoBan_Reason_Keyword_Racism": false
+  "AutoBan_Reason_Keyword_Racism": false,
+
+  "AutoKick_BadIp": false // WIll automatically kick a player if they are either using a proxy, vpn or is a bad IP;
 }
 ```
+#### Bad IP: 
+It refers any combination of crawlers / comment & email spammers / brute force attacks. IPs that are behaving "badly" in an automated manner. Networks that are infected with malware / trojans / botnet / etc are also considered "bad". It may be possible that the user is not aware that their systems are infected or they have received an IP by their ISP that was recently infected with malicious code. If you wish to skip this, see variations of implementation.
+#### Service used: 
+https://getipintel.net
 
 ## API Hooks
 
