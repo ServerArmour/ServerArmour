@@ -14,7 +14,7 @@ using Time = Oxide.Core.Libraries.Time;
 
 
 namespace Oxide.Plugins {
-    [Info("ServerArmour", "Pho3niX90", "0.0.80")]
+    [Info("ServerArmour", "Pho3niX90", "0.0.81")]
     [Description("Protect your server! Auto ban known hacker, scripter and griefer accounts, and notify server owners of threats.")]
     class ServerArmour : CovalencePlugin {
 
@@ -95,7 +95,6 @@ namespace Oxide.Plugins {
         void OnUserConnected(IPlayer player) {
             Puts($"{player.Name} ({player.Id}) connected from {player.Address}");
             GetPlayerBans(player, true);
-            timer.Once(5, () => GetPlayerReport(player));
         }
 
         void OnUserDisconnected(IPlayer player) {
@@ -142,6 +141,7 @@ namespace Oxide.Plugins {
         void GetPlayerBans(IPlayer player, bool reCache = false) {
             bool isCached = IsPlayerCached(player.Id);
             uint currentTimestamp = _time.GetUnixTimestamp();
+            bool reportSent = false;
 
             if (isCached) {
                 GetPlayerCache(player.Id).lastConnected = currentTimestamp;
@@ -152,7 +152,9 @@ namespace Oxide.Plugins {
                     DeletePlayerCache(player.Id);
                     LogDebug($"Will now update local cache for player {player.Name}");
                     isCached = false;
+                    reportSent = true;
                 } else {
+                    GetPlayerReport(player, player.IsConnected);
                     return; //user already cached, therefore do not check again before cache time laps.
                 }
             } else {
@@ -180,8 +182,11 @@ namespace Oxide.Plugins {
                 } else {
                     SetPlayerBanData(isaPlayer);
                 }
+                if (!reportSent) {
+                    GetPlayerReport(isaPlayer, player.IsConnected);
+                    reportSent = false;
+                }
 
-                GetPlayerReport(isaPlayer, player.IsConnected);
 
             }, this, RequestMethod.GET);
         }
@@ -214,16 +219,16 @@ namespace Oxide.Plugins {
             }, this, RequestMethod.GET);
         }
 
-        bool IsBanned(string steamid) {
+        ISABan IsBanned(string steamid) {
             if (IsPlayerCached(steamid)) {
                 ISAPlayer isaPlayer = GetPlayerCache(steamid);
                 foreach (ISABan ban in isaPlayer.serverBanData) {
                     if (ban.serverIp.Equals(thisServerIp, defaultCompare)) {
-                        return true;
+                        return ban;
                     }
                 }
             }
-            return false;
+            return null;
         }
 
         string GetBanReason(ISAPlayer isaPlayer) {
@@ -518,40 +523,21 @@ namespace Oxide.Plugins {
             return $"&sn={config.ServerName}&sp={config.ServerPort}&an={config.ServerAdminName}&ae={config.ServerAdminEmail}&gameId={covalence.ClientAppId}&gameName={covalence.Game}";
         }
 
-
-        bool IsIPAddress(string arg) {
-            int subIP;
-            string[] strArray = arg.Split('.');
-            if (strArray.Length != 4) {
-                return false;
-            }
-            foreach (string str in strArray) {
-                if (str.Length == 0) {
-                    return false;
-                }
-                if (!int.TryParse(str, out subIP) && str != "*") {
-                    return false;
-                }
-                if (!(str == "*" || (subIP >= 0 && subIP <= 255))) {
-                    return false;
-                }
-            }
-            return true;
-        }
-
         bool AssignGroupsAndBan(IPlayer player) {
             try {
                 ISAPlayer isaPlayer = IsPlayerCached(player.Id) ? GetPlayerCache(player.Id) : null;
                 if (isaPlayer == null) return false;
 
-                if (config.AutoBanOn) return ShouldBan(isaPlayer);
+                if (config.AutoBanOn && ShouldBan(isaPlayer)) return ShouldBan(isaPlayer);
 
 
                 if (config.WatchlistCeiling <= isaPlayer.serverBanCount) {
 
                 }
-
-                if (IsBanned(isaPlayer.steamid)) {
+                ISABan ban = IsBanned(isaPlayer.steamid);
+                bool isBanned = ban != null;
+                if (isBanned) {
+                    player.Kick(ban.reason);
                     server.Broadcast($"{GetChatTag()} {isaPlayer.username} wasn't allowed to connect\nReason: {GetBanReason(isaPlayer)}");
                     return true;
                 }
@@ -568,14 +554,15 @@ namespace Oxide.Plugins {
             if (keywordBanCheck) {
                 foreach (ISABan ban in isaPlayer.serverBanData) {
                     if (config.AutoBan_Reason_Keyword_Aimbot && ban.isAimbot) keywordBan = true;
-                    if (config.AutoBan_Reason_Keyword_Cheat && ban.isAimbot) keywordBan = true;
-                    if (config.AutoBan_Reason_Keyword_EspHack && ban.isAimbot) keywordBan = true;
-                    if (config.AutoBan_Reason_Keyword_Hack && ban.isAimbot) keywordBan = true;
-                    if (config.AutoBan_Reason_Keyword_Insult && ban.isAimbot) keywordBan = true;
-                    if (config.AutoBan_Reason_Keyword_Ping && ban.isAimbot) keywordBan = true;
-                    if (config.AutoBan_Reason_Keyword_Racism && ban.isAimbot) keywordBan = true;
-                    if (config.AutoBan_Reason_Keyword_Script && ban.isAimbot) keywordBan = true;
-                    if (config.AutoBan_Reason_Keyword_Toxic && ban.isAimbot) keywordBan = true;
+                    if (config.AutoBan_Reason_Keyword_Cheat && ban.isCheat) keywordBan = true;
+                    if (config.AutoBan_Reason_Keyword_EspHack && ban.isEspHack) keywordBan = true;
+                    if (config.AutoBan_Reason_Keyword_Hack && ban.isHack) keywordBan = true;
+                    if (config.AutoBan_Reason_Keyword_Insult && ban.isInsult) keywordBan = true;
+                    if (config.AutoBan_Reason_Keyword_Ping && ban.isPing) keywordBan = true;
+                    if (config.AutoBan_Reason_Keyword_Racism && ban.isRacism) keywordBan = true;
+                    if (config.AutoBan_Reason_Keyword_Script && ban.isScript) keywordBan = true;
+                    if (config.AutoBan_Reason_Keyword_Toxic && ban.isToxic) keywordBan = true;
+
                 }
             }
 
