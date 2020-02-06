@@ -139,7 +139,7 @@ namespace Oxide.Plugins {
         #endregion
 
         #region WebRequests
-        void GetPlayerBans(IPlayer player, bool skipCache = false) {
+        void GetPlayerBans(IPlayer player, bool reCache = false) {
             bool isCached = IsPlayerCached(player.Id);
             uint currentTimestamp = _time.GetUnixTimestamp();
 
@@ -147,15 +147,16 @@ namespace Oxide.Plugins {
                 GetPlayerCache(player.Id).lastConnected = currentTimestamp;
                 double minutesOld = Math.Round((currentTimestamp - GetPlayerCache(player.Id).cacheTimestamp) / 60.0);
                 bool oldCache = minutesOld >= cacheLifetime;
-                Puts($"Player {player.Name}'s cache is {minutesOld} minutes old. " + ((oldCache) ? "Cache is old" : "Cache is fresh"));
-                if (oldCache || skipCache) {
+                LogDebug($"Player {player.Name}'s cache is {minutesOld} minutes old. " + ((oldCache) ? "Cache is old" : "Cache is fresh"));
+                if (oldCache || reCache) {
                     DeletePlayerCache(player.Id);
+                    LogDebug($"Will now update local cache for player {player.Name}");
                     isCached = false;
                 } else {
                     return; //user already cached, therefore do not check again before cache time laps.
                 }
             } else {
-                Puts($"Player {player.Name} not cached");
+                LogDebug($"Player {player.Name} not cached");
             }
 
 
@@ -163,7 +164,7 @@ namespace Oxide.Plugins {
             string url = $"https://io.serverarmour.com/checkUser?steamid={player.Id}&username={playerName}&ip={player.Address}" + ServerGetString();
             webrequest.Enqueue(url, null, (code, response) => {
                 if (code != 200 || response == null) {
-                    Puts($"Couldn't get an answer from ServerArmour.com!");
+                    Puts($"Couldn't get an answer from ServerArmour.com! Error: {code} {response}");
                     return;
                 }
                 ISAPlayer isaPlayer = JsonConvert.DeserializeObject<ISAPlayer>(response);
