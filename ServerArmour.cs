@@ -144,16 +144,20 @@ namespace Oxide.Plugins {
             uint currentTimestamp = _time.GetUnixTimestamp();
 
             if (isCached) {
-                double minutesOld = (currentTimestamp - GetPlayerCache(player.Id).cacheTimestamp) / 60.0;
+                GetPlayerCache(player.Id).lastConnected = currentTimestamp;
+                double minutesOld = Math.Round((currentTimestamp - GetPlayerCache(player.Id).cacheTimestamp) / 60.0);
                 bool oldCache = minutesOld >= cacheLifetime;
                 Puts($"Player {player.Name}'s cache is {minutesOld} minutes old. " + ((oldCache) ? "Cache is old" : "Cache is fresh"));
-                if (!oldCache) return; //user already cached, therefore do not check again before cache time laps.
+                if (oldCache || skipCache) {
+                    DeletePlayerCache(player.Id);
+                    isCached = false;
+                } else {
+                    return; //user already cached, therefore do not check again before cache time laps.
+                }
+            } else {
+                Puts($"Player {player.Name} not cached");
             }
 
-            if (isCached && !skipCache) {
-                GetPlayerCache(player.Id).lastConnected = currentTimestamp;
-                GetPlayerReport(player, player.IsConnected);
-            }
 
             string playerName = System.Uri.EscapeDataString(player.Name);
             string url = $"https://io.serverarmour.com/checkUser?steamid={player.Id}&username={playerName}&ip={player.Address}" + ServerGetString();
@@ -386,7 +390,7 @@ namespace Oxide.Plugins {
         }
 
         bool IsPlayerCached(string steamid) => _playerData.ContainsKey(steamid);
-        bool DeletePlayerCache(string steamid) => _playerData.Remove(steamid);
+        bool DeletePlayerCache(string steamid) { bool res = _playerData.Remove(steamid); SaveData(); return res; }
         void AddPlayerCached(ISAPlayer isaplayer) => _playerData.Add(isaplayer.steamid, isaplayer);
         void AddPlayerCached(IPlayer iplayer, ISAPlayer isaplayer) => _playerData.Add(iplayer.Id, isaplayer);
         ISAPlayer GetPlayerCache(string steamid) => IsPlayerCached(steamid) ? _playerData[steamid] : null;
