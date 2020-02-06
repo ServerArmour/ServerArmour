@@ -14,7 +14,7 @@ using Time = Oxide.Core.Libraries.Time;
 
 
 namespace Oxide.Plugins {
-    [Info("ServerArmour", "Pho3niX90", "0.0.78")]
+    [Info("ServerArmour", "Pho3niX90", "0.0.80")]
     [Description("Protect your server! Auto ban known hacker, scripter and griefer accounts, and notify server owners of threats.")]
     class ServerArmour : CovalencePlugin {
 
@@ -73,20 +73,12 @@ namespace Oxide.Plugins {
         void Loaded() {
 
 #if RUST
-            if (ServerMgr.Instance != null) {
-                Puts("Checking all known users.");
+            timer.Once((ServerMgr.Instance != null) ? 10 : 300, () => {
                 ServerMgr.Instance.StartCoroutine(CheckOnlineUsers());
                 ServerMgr.Instance.StartCoroutine(CheckLocalBans());
-            } else {
-                timer.Once(300, () => {
-                    Puts("Checking all known users.");
-                    ServerMgr.Instance.StartCoroutine(CheckOnlineUsers());
-                    ServerMgr.Instance.StartCoroutine(CheckLocalBans());
-                });
-            }
+            });
 #else
             CheckOnlineUsers();
-
             CheckLocalBans();
 #endif
             Puts("Server Armour finished initializing.");
@@ -118,17 +110,18 @@ namespace Oxide.Plugins {
             return canLogin;
         }
 
+        void OnUserKicked(IPlayer player, string reason) {
+            Puts($"Player {player.Name} ({player.Id}) was kicked, reason: {reason}");
+        }
+
+        void OnUserApproved(string name, string id, string ip) {
+            Puts($"{name} ({id}) at {ip} has been approved to connect");
+        }
+
         /* Unused atm, will uncomment as needed
-                void OnUserApproved(string name, string id, string ip) {
-                    Puts($"{name} ({id}) at {ip} has been approved to connect");
-                }
 
                 void OnUserNameUpdated(string id, string oldName, string newName) {
                     Puts($"Player name changed from {oldName} to {newName} for ID {id}");
-                }
-
-                void OnUserKicked(IPlayer player, string reason) {
-                    Puts($"Player {player.Name} ({player.Id}) was kicked");
                 }
 
                 void OnUserBanned(string name, string id, string ip, string reason) {
@@ -148,17 +141,22 @@ namespace Oxide.Plugins {
         #region WebRequests
         void GetPlayerBans(IPlayer player, bool skipCache = false) {
             bool isCached = IsPlayerCached(player.Id);
+            uint currentTimestamp = _time.GetUnixTimestamp();
 
-            if (isCached && !skipCache) {
-                uint currentTimestamp = _time.GetUnixTimestamp();
-                double minutesOld = (currentTimestamp - GetPlayerCache(player.Id).cacheTimestamp) / 60.0 / 1000.0;
-                bool oldCache = cacheLifetime <= minutesOld;
-                GetPlayerCache(player.Id).lastConnected = currentTimestamp;
-                GetPlayerReport(player, player.IsConnected);
+            if (isCached) {
+                double minutesOld = (currentTimestamp - GetPlayerCache(player.Id).cacheTimestamp) / 60.0;
+                bool oldCache = minutesOld >= cacheLifetime;
+                Puts($"Player {player.Name}'s cache is {minutesOld} minutes old. " + ((oldCache) ? "Cache is old" : "Cache is fresh"));
                 if (!oldCache) return; //user already cached, therefore do not check again before cache time laps.
             }
 
-            string url = $"https://io.serverarmour.com/checkUser?steamid={player.Id}&username={player.Name}&ip={player.Address}" + ServerGetString();
+            if (isCached && !skipCache) {
+                GetPlayerCache(player.Id).lastConnected = currentTimestamp;
+                GetPlayerReport(player, player.IsConnected);
+            }
+
+            string playerName = System.Uri.EscapeDataString(player.Name);
+            string url = $"https://io.serverarmour.com/checkUser?steamid={player.Id}&username={playerName}&ip={player.Address}" + ServerGetString();
             webrequest.Enqueue(url, null, (code, response) => {
                 if (code != 200 || response == null) {
                     Puts($"Couldn't get an answer from ServerArmour.com!");
@@ -167,6 +165,11 @@ namespace Oxide.Plugins {
                 ISAPlayer isaPlayer = JsonConvert.DeserializeObject<ISAPlayer>(response);
                 isaPlayer.cacheTimestamp = _time.GetUnixTimestamp();
                 isaPlayer.lastConnected = _time.GetUnixTimestamp();
+
+                if (config.AutoKick_BadIp && isaPlayer.ipRating > 0.98) {
+                    player.Kick(GetMsg("Reason: Bad IP"));
+                }
+
                 if (!IsPlayerCached(isaPlayer.steamid)) {
                     AddPlayerCached(isaPlayer);
                 } else {
@@ -300,6 +303,9 @@ namespace Oxide.Plugins {
         }
         #endregion
 
+        #region VPN/Proxy
+        #endregion
+
         #region Ban System
         bool BanPlayer(IPlayer iPlayer, ISABan ban) {
             AddBan(iPlayer, ban.reason);
@@ -312,29 +318,33 @@ namespace Oxide.Plugins {
 
 #if RUST || HURTWORLD || SEVENDAYSTODIE || THEFOREST
         System.Collections.IEnumerator CheckOnlineUsers() {
+            var waitTime = 0.2f;
             IEnumerable<IPlayer> allPlayers = players.Connected;
+            Puts("Will now inspect all online users, time etimation: " + (allPlayers.Count() * waitTime) + " seconds");
             for (var i = 1; i < allPlayers.Count(); i++) {
-                Puts($"Checking infractions for online users {i + 1} of {allPlayers.Count()}");
+                Puts($"Inpecting online user {i + 1} of {allPlayers.Count()} for infractions");
                 IPlayer player = allPlayers.ElementAt(i);
                 if (player != null) {
                     GetPlayerBans(player, true);
                 }
-                yield return new WaitForSecondsRealtime(0.2f);
+                yield return new WaitForSecondsRealtime(waitTime);
 
             }
+            Puts("Inspection completed.");
         }
 #else
 
         void CheckOnlineUsers() {
             IEnumerable<IPlayer> allPlayers = players.Connected;
             for (var i = 1; i < allPlayers.Count(); i++) {
-                Puts($"Checking infractions for online users {i + 1} of {allPlayers.Count()}");
+                Puts($"Inpecting online user {i + 1} of {allPlayers.Count()} for infractions");
                 IPlayer player = allPlayers.ElementAt(i);
                 if (player != null) {
                     GetPlayerBans(player, true);
                 }
 
             }
+            Puts("Checking completed.");
         }
 #endif
 
@@ -597,7 +607,8 @@ namespace Oxide.Plugins {
                 ["Arkan No Recoil Violation"] = "<color=#ff0000>{player}</color> received an Arkan no recoil violation.\n<color=#ff0000>Violation</color> #{violationNr}, <color=#ff0000>Weapon:</color> {weapon}, <color=#ff0000>Ammo:</color> {ammo}, <color=#ff0000>Shots count:</color> {shots}\n Admins will investigate ASAP, please have handcams ready.\n This might be a false-positive, but all violations need to be investigated.",
                 ["Arkan Aimbot Violation"] = "<color=#ff0000>{player}</color> received an Arkan aimbot violation.\n<color=#ff0000>Violation</color>  #{violationNr}, <color=#ff0000>Weapon:</color> {weapon}, <color=#ff0000>Ammo:</color> {ammo}\n Admins will investigate ASAP, please have handcams ready.\n This might be a false-positive, but all violations need to be investigated.",
                 ["Arkan In Rock Violation"] = "<color=#ff0000>{player}</color> received an Arkan in rock violation.\n<color=#ff0000>Violation</color>  #{violationNr}, <color=#ff0000>Weapon:</color> {weapon}, <color=#ff0000>Ammo:</color> {ammo}\n Admins will investigate ASAP, please have handcams ready.\n This might be a false-positive, but all violations need to be investigated.",
-                ["Player Now Banned"] = "<color=#ff0000>{player}</color> has been banned\n<color=#ff0000>Reason: </color> {reason}"
+                ["Player Now Banned"] = "<color=#ff0000>{player}</color> has been banned\n<color=#ff0000>Reason: </color> {reason}",
+                ["Reason: Bad IP"] = "Bad IP Detected, either due to a VPN/Proxy"
             }, this);
         }
 
@@ -632,6 +643,7 @@ namespace Oxide.Plugins {
             public List<ISABan> serverBanData;
             public uint cacheTimestamp;
             public uint lastConnected;
+            public double ipRating;
 
             public ISAPlayer CreatePlayer(IPlayer bPlayer) {
                 steamid = bPlayer.Id;
@@ -706,6 +718,8 @@ namespace Oxide.Plugins {
             public bool AutoBan_Reason_Keyword_Insult;
             public bool AutoBan_Reason_Keyword_Ping;
             public bool AutoBan_Reason_Keyword_Racism;
+
+            public bool AutoKick_BadIp;
         }
 
         #region Plugin Classes & Hooks Rust
