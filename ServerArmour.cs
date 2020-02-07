@@ -14,7 +14,7 @@ using Time = Oxide.Core.Libraries.Time;
 
 
 namespace Oxide.Plugins {
-    [Info("ServerArmour", "Pho3niX90", "0.0.81")]
+    [Info("ServerArmour", "Pho3niX90", "0.0.82")]
     [Description("Protect your server! Auto ban known hacker, scripter and griefer accounts, and notify server owners of threats.")]
     class ServerArmour : CovalencePlugin {
 
@@ -95,6 +95,12 @@ namespace Oxide.Plugins {
         void OnUserConnected(IPlayer player) {
             Puts($"{player.Name} ({player.Id}) connected from {player.Address}");
             GetPlayerBans(player, true);
+            ISABan ban = IsBanned(player.Id);
+            if (ban != null) {
+                player.Kick(ban.reason);
+            }
+            if (config.ShowProtectedMsg)
+                player.Reply(GetMsg("Protected MSG"));
         }
 
         void OnUserDisconnected(IPlayer player) {
@@ -103,8 +109,10 @@ namespace Oxide.Plugins {
 
         bool CanUserLogin(string name, string id, string ip) {
             bool canLogin = !AssignGroupsAndBan(players.FindPlayer(name));
+            ISABan ban = IsBanned(id);
+            canLogin = ban != null ? false : canLogin;
             if (!canLogin) {
-                Puts($"{ip}:{id}:{name} tried to connect. But the connection was rejected due to him being banned");
+                Puts($"{ip}:{id}:{name} tried to connect. But the connection was rejected due to him being banned, Reason: " + ban.reason);
             }
             return canLogin;
         }
@@ -223,6 +231,7 @@ namespace Oxide.Plugins {
             if (IsPlayerCached(steamid)) {
                 ISAPlayer isaPlayer = GetPlayerCache(steamid);
                 foreach (ISABan ban in isaPlayer.serverBanData) {
+                    Puts($"thisServerIp {thisServerIp} : {ban.serverIp}");
                     if (ban.serverIp.Equals(thisServerIp, defaultCompare)) {
                         return ban;
                     }
