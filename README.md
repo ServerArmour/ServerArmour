@@ -25,6 +25,8 @@ Please note, this is a BETA plugin, so not all features are available yet. Autob
     "aimbot",
     "esp"
   ], // auto ban users that have these keywords in previous ban reasons.
+  "AutoBanFamilyShare": false, // Auto ban players that are lending (Family sharing) the game.
+  "AutoBanFamilyShareIfDirty": false, // Auto ban players that are lending (Family sharing) the game, and the owner of the game is dirty.
   "Debug": false, // never turn on, unless asked to do so by the developer, otherwise your logs will contain tons of messages.
   "ServerAdminEmail": "", // please fill in your main admins email. This is to add a better trust level to your server.
   "ServerAdminName": "", // please fill in your main admins real name. This is to add a better trust level to your server.
@@ -67,6 +69,8 @@ int API_GetVacBanCount(string steamid) // Number of VAC bans on record.
 int API_GetGameBanCount(string steamid) // Number of bans in games, this includes CS:GO Overwatch bans.
 string API_GetEconomyBanStatus(string steamid) // The player's ban status in the economy. If the player has no bans on record the string will be "none", if the player is on probation it will say "probation", etc.
 bool API_GetIsPlayerDirty(string steamid) // Indicates if the player has any bans at all, includes server, game and vac bans
+bool API_GetIsPlayerDirty(string steamid) // Indicates if the game is a family shared game, true indicates the player doesnt own it but lending it. 
+string API_GetFamilyShareLenderSteamId(string steamid) // Gets the steamid of the person lending the game. Returns "0" if there isn't a lender and it's not family share.
 ```
 
 

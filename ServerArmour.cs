@@ -14,7 +14,7 @@ using Time = Oxide.Core.Libraries.Time;
 
 
 namespace Oxide.Plugins {
-    [Info("ServerArmour", "Pho3niX90", "0.0.82")]
+    [Info("ServerArmour", "Pho3niX90", "0.0.83")]
     [Description("Protect your server! Auto ban known hacker, scripter and griefer accounts, and notify server owners of threats.")]
     class ServerArmour : CovalencePlugin {
 
@@ -404,6 +404,16 @@ namespace Oxide.Plugins {
             return IsPlayerCached(steamid) && (isaPlayer.serverBanCount > 0 || isaPlayer.steamData.CommunityBanned > 0 || isaPlayer.steamData.NumberOfGameBans > 0 || isaPlayer.steamData.VACBanned > 0);
         }
 
+        bool IsFamilyShare(string steamid) {
+            ISAPlayer player = GetPlayerCache(steamid);
+            return !GetFamilyShareLenderSteamId(steamid).Equals("0");
+        }
+
+        string GetFamilyShareLenderSteamId(string steamid) {
+            ISAPlayer player = GetPlayerCache(steamid);
+            return (player != null && !player.lendersteamid.Equals("0") && !player.lendersteamid.Equals("")) ? player.lendersteamid : "0";
+        }
+
         bool IsPlayerCached(string steamid) => _playerData.ContainsKey(steamid);
         bool DeletePlayerCache(string steamid) { bool res = _playerData.Remove(steamid); SaveData(); return res; }
         void AddPlayerCached(ISAPlayer isaplayer) => _playerData.Add(isaplayer.steamid, isaplayer);
@@ -477,10 +487,12 @@ namespace Oxide.Plugins {
                 WatchlistGroup = "serverarmour.watchlist",
                 AutoBanReasonKeywords = new string[] { "*aimbot*", "*esp*", "*hack*", "*script*" },
 
+                AutoBanFamilyShare = false,
+                AutoBanFamilyShareIfDirty = false,
+
                 AutoBanCeiling = 5,
                 AutoVacBanCeiling = 2,
                 WatchlistCeiling = 1,
-
 
                 ServerName = server.Name,
                 ServerPort = server.Port,
@@ -586,7 +598,9 @@ namespace Oxide.Plugins {
         private int API_GetVacBanCount(string steamid) => IsPlayerCached(steamid) ? GetPlayerCache(steamid).steamData.NumberOfVACBans : 0;
         private int API_GetGameBanCount(string steamid) => IsPlayerCached(steamid) ? GetPlayerCache(steamid).steamData.NumberOfGameBans : 0;
         private string API_GetEconomyBanStatus(string steamid) => IsPlayerCached(steamid) ? GetPlayerCache(steamid).steamData.EconomyBan : "none";
-        private bool API_GetIsPlayerDirty(string steamid) => IsPlayerCached(steamid) && GetPlayerBanDataCount(steamid) > 0 || GetPlayerCache(steamid).steamData.VACBanned == 1;
+        private bool API_GetIsPlayerDirty(string steamid) => IsPlayerDirty(steamid);
+        private bool API_GetIsFamilyShare(string steamid) => IsFamilyShare(steamid);
+        private string API_GetFamilyShareLenderSteamId(string steamid) => GetFamilyShareLenderSteamId(steamid);
         #endregion
 
         #region Localization
@@ -638,6 +652,7 @@ namespace Oxide.Plugins {
         #region Classes 
         public class ISAPlayer {
             public string steamid;
+            public string lendersteamid;
             public string username;
             public ISASteamData steamData;
             public int serverBanCount;
@@ -693,6 +708,9 @@ namespace Oxide.Plugins {
             public int AutoBanCeiling; // Auto ban players with X amount of previous bans.
             public int AutoVacBanCeiling; //  Auto ban players with X amount of vac bans.
             public string[] AutoBanReasonKeywords; // auto ban users that have these keywords in previous ban reasons.
+
+            public bool AutoBanFamilyShare;
+            public bool AutoBanFamilyShareIfDirty;
 
             public string WatchlistGroup; // the group name that watched users should be added in
             public int WatchlistCeiling; // Auto add players with X amount of previous bans to a watchlist.
