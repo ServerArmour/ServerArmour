@@ -1,5 +1,11 @@
 Protect your gaming server against hackers, scripters, cheats and grievers!
 
+The plugin allows you to auto kick known hackers and scripters, as well as cheaters, griefers, toxic playes, racist players etc, the list goes on and growing each day. 
+
+You can also auto kick users that are on VPN, PROXY or a BAD IP (See more at the bottom)
+
+This tool is a combination of wealth of information regarding players, from their vac ban counts, economy bans, game bans and server bans. It also gives you the family share information, if they are lending, and whom they are lending from, as well if the lender is either vac banned or community banned. 
+
 Please note, this is a BETA plugin, so not all features are available yet. Autobanning is still being tested to make sure all is well, and should be available within a week.
 ## Permissions
 ```
