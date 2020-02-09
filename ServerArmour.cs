@@ -14,7 +14,7 @@ using Time = Oxide.Core.Libraries.Time;
 
 
 namespace Oxide.Plugins {
-    [Info("ServerArmour", "Pho3niX90", "0.0.83")]
+    [Info("ServerArmour", "Pho3niX90", "0.0.84")]
     [Description("Protect your server! Auto ban known hacker, scripter and griefer accounts, and notify server owners of threats.")]
     class ServerArmour : CovalencePlugin {
 
@@ -341,7 +341,7 @@ namespace Oxide.Plugins {
             var waitTime = 0.2f;
             IEnumerable<IPlayer> allPlayers = players.Connected;
             Puts("Will now inspect all online users, time etimation: " + (allPlayers.Count() * waitTime) + " seconds");
-            for (var i = 1; i < allPlayers.Count(); i++) {
+            for (var i = 0; i < allPlayers.Count()-1; i++) {
                 Puts($"Inpecting online user {i + 1} of {allPlayers.Count()} for infractions");
                 IPlayer player = allPlayers.ElementAt(i);
                 if (player != null) {
@@ -356,13 +356,12 @@ namespace Oxide.Plugins {
 
         void CheckOnlineUsers() {
             IEnumerable<IPlayer> allPlayers = players.Connected;
-            for (var i = 1; i < allPlayers.Count(); i++) {
+            for (var i = 0; i < allPlayers.Count()-1; i++) {
                 Puts($"Inpecting online user {i + 1} of {allPlayers.Count()} for infractions");
                 IPlayer player = allPlayers.ElementAt(i);
                 if (player != null) {
                     GetPlayerBans(player, true);
                 }
-
             }
             Puts("Checking completed.");
         }
@@ -378,14 +377,15 @@ namespace Oxide.Plugins {
                 Puts($"Checking local user ban {i + 1} of {bannedUsers.Count()}");
 
                 bool containsMyBan = false;
-                if (IsPlayerCached(usr.steamid.ToString(specifier, culture))) {
+                if (usr != null && IsPlayerCached(usr.steamid.ToString(specifier, culture))) {
                     List<ISABan> bans = GetPlayerBanData(usr.steamid.ToString(specifier, culture));
-                    foreach (ISABan ban in bans) {
-                        if (ban.serverIp.Equals(thisServerIp, defaultCompare)) {
-                            containsMyBan = true;
-                            break;
+                    if (bans != null || bans.Count() != 0)
+                        foreach (ISABan ban in bans) {
+                            if (ban.serverIp.Equals(thisServerIp, defaultCompare)) {
+                                containsMyBan = true;
+                                break;
+                            }
                         }
-                    }
                 }
                 if (!containsMyBan) {
                     IPlayer player = covalence.Players.FindPlayer(usr.steamid.ToString(specifier, culture));
