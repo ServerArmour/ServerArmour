@@ -310,7 +310,8 @@ namespace Oxide.Plugins {
 
             IPlayer playerToCheck = players.FindPlayer(playerArg.Trim());
             if (playerToCheck == null) {
-                player.Reply(GetMsg("PlayerNotFound", new Dictionary<string, string> { ["player"] = playerArg }));
+                player.Reply(GetMsg("Player Not Found", new Dictionary<string, string> { ["player"] = playerArg }));
+                return;
             }
 
             if (IsPlayerCached(playerToCheck.Id) && forceUpdate) {
@@ -623,7 +624,8 @@ namespace Oxide.Plugins {
                 ["Arkan Aimbot Violation"] = "<color=#ff0000>{player}</color> received an Arkan aimbot violation.\n<color=#ff0000>Violation</color>  #{violationNr}, <color=#ff0000>Weapon:</color> {weapon}, <color=#ff0000>Ammo:</color> {ammo}\n Admins will investigate ASAP, please have handcams ready.\n This might be a false-positive, but all violations need to be investigated.",
                 ["Arkan In Rock Violation"] = "<color=#ff0000>{player}</color> received an Arkan in rock violation.\n<color=#ff0000>Violation</color>  #{violationNr}, <color=#ff0000>Weapon:</color> {weapon}, <color=#ff0000>Ammo:</color> {ammo}\n Admins will investigate ASAP, please have handcams ready.\n This might be a false-positive, but all violations need to be investigated.",
                 ["Player Now Banned"] = "<color=#ff0000>{player}</color> has been banned\n<color=#ff0000>Reason: </color> {reason}",
-                ["Reason: Bad IP"] = "Bad IP Detected, either due to a VPN/Proxy"
+                ["Reason: Bad IP"] = "Bad IP Detected, either due to a VPN/Proxy",
+                ["Player Not Found"] = "Player wasn't found"
             }, this);
         }
 
