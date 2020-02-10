@@ -272,6 +272,7 @@ namespace Oxide.Plugins {
             }
 
             IPlayer iPlayer = players.FindPlayer(args[0]);
+            if (iPlayer == null) { GetMsg("Player Not Found", new Dictionary<string, string> { ["player"] = args[0] }); return; }
             ISAPlayer isaPlayer;
 
             if (!IsPlayerCached(iPlayer.Id)) {
@@ -329,7 +330,8 @@ namespace Oxide.Plugins {
         #region Ban System
         bool BanPlayer(IPlayer iPlayer, ISABan ban) {
             AddBan(iPlayer, ban.reason);
-            iPlayer.Kick(ban.reason);
+            if (iPlayer.IsConnected)
+                iPlayer.Kick(ban.reason);
             return true;
         }
         #endregion
@@ -356,7 +358,7 @@ namespace Oxide.Plugins {
 
         void CheckOnlineUsers() {
             IEnumerable<IPlayer> allPlayers = players.Connected;
-            for (var i = 0; i < allPlayers.Count()-1; i++) {
+            for (var i = 0; i < allPlayers.Count() - 1; i++) {
                 Puts($"Inpecting online user {i + 1} of {allPlayers.Count()} for infractions");
                 IPlayer player = allPlayers.ElementAt(i);
                 if (player != null) {
@@ -453,7 +455,8 @@ namespace Oxide.Plugins {
                             ["serverBanCount"] = isaPlayer.serverBanCount.ToString(),
                             ["NumberOfGameBans"] = isaPlayer.steamData.NumberOfGameBans.ToString(),
                             ["NumberOfVACBans"] = isaPlayer.steamData.NumberOfVACBans.ToString(),
-                            ["EconomyBan"] = isaPlayer.steamData.EconomyBan.ToString()
+                            ["EconomyBan"] = (!isaPlayer.steamData.EconomyBan.Equals("none")).ToString(),
+                            ["FamShare"] = IsFamilyShare(isaPlayer.steamid).ToString()
                         });
                 if (config.BroadcastPlayerBanReport && isConnected && !isCommand) {
                     server.Broadcast(report.Replace(isaPlayer.steamid + ":", string.Empty).Replace(isaPlayer.steamid, string.Empty));
@@ -618,7 +621,7 @@ namespace Oxide.Plugins {
         protected override void LoadDefaultMessages() {
             lang.RegisterMessages(new Dictionary<string, string> {
                 ["Protected MSG"] = "Server protected by <color=#008080ff>ServerArmour</color>",
-                ["User Dirty MSG"] = "<color=#008080ff>Server Armour Report:\n {steamid}:{username}</color> is {status}.\n <color=#ff0000ff>Server Bans:</color> {serverBanCount}\n <color=#ff0000ff>Game Bans:</color> {NumberOfGameBans}\n <color=#ff0000ff>Vac Bans:</color> {NumberOfVACBans}\n <color=#ff0000ff>Economy Status:</color> {EconomyBan}",
+                ["User Dirty MSG"] = "<color=#008080ff>Server Armour Report:\n {steamid}:{username}</color> is {status}.\n <color=#ff0000ff>Server Bans:</color> {serverBanCount}\n <color=#ff0000ff>Game Bans:</color> {NumberOfGameBans}\n <color=#ff0000ff>Vac Bans:</color> {NumberOfVACBans}\n <color=#ff0000ff>Economy Status:</color> {EconomyBan}\n <color=#ff0000ff>Family Share:</color> {FamShare}",
                 ["Command sa.cp Error"] = "Wrong format, example: /sa.cp usernameORsteamid trueORfalse",
                 ["Arkan No Recoil Violation"] = "<color=#ff0000>{player}</color> received an Arkan no recoil violation.\n<color=#ff0000>Violation</color> #{violationNr}, <color=#ff0000>Weapon:</color> {weapon}, <color=#ff0000>Ammo:</color> {ammo}, <color=#ff0000>Shots count:</color> {shots}\n Admins will investigate ASAP, please have handcams ready.\n This might be a false-positive, but all violations need to be investigated.",
                 ["Arkan Aimbot Violation"] = "<color=#ff0000>{player}</color> received an Arkan aimbot violation.\n<color=#ff0000>Violation</color>  #{violationNr}, <color=#ff0000>Weapon:</color> {weapon}, <color=#ff0000>Ammo:</color> {ammo}\n Admins will investigate ASAP, please have handcams ready.\n This might be a false-positive, but all violations need to be investigated.",
