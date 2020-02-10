@@ -107,12 +107,13 @@ namespace Oxide.Plugins {
             Puts($"{player.Name} ({player.Id}) disconnected");
         }
 
-        bool CanUserLogin(string name, string id, string ip) {
+        object CanUserLogin(string name, string id, string ip) {
             bool canLogin = !AssignGroupsAndBan(players.FindPlayer(name));
             ISABan ban = IsBanned(id);
             canLogin = ban != null ? false : canLogin;
             if (!canLogin) {
                 Puts($"{ip}:{id}:{name} tried to connect. But the connection was rejected due to him being banned, Reason: " + ban.reason);
+                return ban.reason;
             }
             return canLogin;
         }
@@ -252,9 +253,44 @@ namespace Oxide.Plugins {
         #endregion
 
         #region Commands
-        [Command("sa.clb")]
+        [Command("sa.clb", "getreport")]
         void SCmdCheckLocalBans(IPlayer player, string command, string[] args) {
             CheckLocalBans();
+        }
+
+
+        [Command("unban", "playerunban", "sa.unban")]
+        void SCmdUnban(IPlayer player, string command, string[] args) {
+            if (!HasPermission(player, PermissionToBan)) {
+                player.Reply(GetMsg("NoPermission"));
+                return;
+            }
+            if (args == null || (args.Length != 2)) {
+                player.Reply(GetMsg("BanSyntax"));
+                return;
+            }
+
+            IPlayer iPlayer = players.FindPlayer(args[0]);
+            if (iPlayer == null) { GetMsg("Player Not Found", new Dictionary<string, string> { ["player"] = args[0] }); return; }
+            ISAPlayer isaPlayer;
+
+            if (!IsPlayerCached(iPlayer.Id)) {
+                player.Reply("Player isn't banned.");
+                return;
+            }
+
+            isaPlayer = GetPlayerCache(args[0]);
+            RemoveBans(isaPlayer);
+        }
+
+        bool RemoveBans(ISAPlayer player) {
+            int bansRemoved = 0;
+            foreach (ISABan ban in player.serverBanData) {
+                if (player.serverBanData.Remove(ban)) {
+                    bansRemoved++;
+                }
+            }
+            return false;
         }
 
         [Command("ban", "playerban", "sa.ban")]
@@ -263,9 +299,6 @@ namespace Oxide.Plugins {
                 player.Reply(GetMsg("NoPermission"));
                 return;
             }
-
-            ///ban "player name" "reason"
-
             if (args == null || (args.Length != 2)) {
                 player.Reply(GetMsg("BanSyntax"));
                 return;
@@ -683,6 +716,7 @@ namespace Oxide.Plugins {
             public string serverIp;
             public string reason;
             public string date;
+            public uint banUntil;
             public bool isAimbot;
             public bool isHack;
             public bool isEspHack;
