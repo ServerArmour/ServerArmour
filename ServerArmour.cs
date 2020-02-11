@@ -14,7 +14,7 @@ using Time = Oxide.Core.Libraries.Time;
 
 
 namespace Oxide.Plugins {
-    [Info("ServerArmour", "Pho3niX90", "0.0.86")]
+    [Info("ServerArmour", "Pho3niX90", "0.0.85")]
     [Description("Protect your server! Auto ban known hacker, scripter and griefer accounts, and notify server owners of threats.")]
     class ServerArmour : CovalencePlugin {
 
@@ -25,7 +25,7 @@ namespace Oxide.Plugins {
         string[] groups;
         private ISAConfig config;
         string thisServerIp;
-        string settingsVersion = "0.0.2";
+        string ConfigVersion = "0.0.3";
         string specifier = "G";
         int secondsBetweenWebRequests;
         CultureInfo culture = CultureInfo.CreateSpecificCulture("en-US");
@@ -40,7 +40,7 @@ namespace Oxide.Plugins {
         Plugin BetterChat;
 
         [PluginReference]
-        Plugin DiscordMessages;
+        private Plugin DiscordMessages;
 
 #if RUST
         [PluginReference]
@@ -51,23 +51,27 @@ namespace Oxide.Plugins {
             DiscordSend(players.FindPlayer(iPlayer.steamid), type, report);
         }
         void DiscordSend(IPlayer iPlayer, int type = 1, string report = null) {
+            if(config.DiscordWebhookURL.Length == 0) { Puts("Discord webhook not setup."); return; }
             if (type == 1) {
                 List<EmbedFieldList> fields = new List<EmbedFieldList>();
 
                 string playerReport = $"[{iPlayer.Name}\n{iPlayer.Id}](https://steamcommunity.com/profiles/{iPlayer.Id})";
                 fields.Add(new EmbedFieldList() {
                     name = "Player ",
-                    inline = true,
-                    value = playerReport
+                    value = playerReport,
+                    inline = true
                 });
                 if (report != null)
                     fields.Add(new EmbedFieldList() {
                         name = "Report ",
-                        inline = true,
-                        value = report
+                        value = report,
+                        inline = true
                     });
-                config.DiscordWebhookURL = "https://discordapp.com/api/webhooks/676876445670309898/L_FpOsscfiLl4RCUbZeZOTjkMV7qvGsQDQcLhSEVx12ZHduEf1hy-VXAgcS33ra9i0-s";
-                DiscordMessages?.Call("API_SendFancyMessage", config.DiscordWebhookURL, "Server Armour Report: ", 39423, JsonConvert.SerializeObject(fields.Cast<object>().ToArray()));
+                var fieldsObject = fields.Cast<object>().ToArray();
+                string json = JsonConvert.SerializeObject(fieldsObject);
+                string jsonformatted = json.Replace("<color=#008080ff>", "```diff ").Replace("</color>", "```");
+                
+                    DiscordMessages?.Call("API_SendFancyMessage", config.DiscordWebhookURL, "Server Armour Report: ", 39423, json);
             }
         }
 
@@ -79,7 +83,8 @@ namespace Oxide.Plugins {
             Puts("Server Armour is being initialized.");
             config = Config.ReadObject<ISAConfig>();
 
-            if (!config.Version.Equals(settingsVersion)) UpgradeConfig(config.Version, settingsVersion);
+            if (!config.Version.Equals(ConfigVersion)) UpgradeConfig(config.Version, ConfigVersion);
+
             thisServerIp = server.Address.ToString();
 
             if (config.ServerVersion.Equals(server.Version, defaultCompare)) {
@@ -190,8 +195,8 @@ namespace Oxide.Plugins {
                     DeletePlayerCache(player.Id);
                     LogDebug($"Will now update local cache for player {player.Name}");
                     isCached = false;
-                    reportSent = true;
                 } else {
+                    reportSent = true;
                     GetPlayerReport(player, player.IsConnected);
                     return; //user already cached, therefore do not check again before cache time laps.
                 }
@@ -222,7 +227,7 @@ namespace Oxide.Plugins {
                 }
                 if (!reportSent) {
                     GetPlayerReport(isaPlayer, player.IsConnected);
-                    reportSent = false;
+                    reportSent = true;
                 }
 
 
@@ -508,19 +513,20 @@ namespace Oxide.Plugins {
 
         void GetPlayerReport(ISAPlayer isaPlayer, bool isConnected = true, bool isCommand = false, IPlayer cmdPlayer = null) {
 
+            Dictionary<string, string> data =
+                       new Dictionary<string, string> {
+                           ["status"] = IsPlayerDirty(isaPlayer.steamid) ? "dirty" : "clean",
+                           ["steamid"] = isaPlayer.steamid,
+                           ["username"] = isaPlayer.username,
+                           ["serverBanCount"] = isaPlayer.serverBanCount.ToString(),
+                           ["NumberOfGameBans"] = isaPlayer.steamData.NumberOfGameBans.ToString(),
+                           ["NumberOfVACBans"] = isaPlayer.steamData.NumberOfVACBans.ToString(),
+                           ["EconomyBan"] = (!isaPlayer.steamData.EconomyBan.Equals("none")).ToString(),
+                           ["FamShare"] = IsFamilyShare(isaPlayer.steamid).ToString()
+                       };
+
             if (IsPlayerDirty(isaPlayer.steamid) || isCommand) {
-                string report = GetMsg("User Dirty MSG",
-                        new Dictionary<string, string> {
-                            ["status"] = IsPlayerDirty(isaPlayer.steamid) ? "dirty" : "clean",
-                            ["steamid"] = isaPlayer.steamid,
-                            ["username"] = isaPlayer.username,
-                            ["serverBanCount"] = isaPlayer.serverBanCount.ToString(),
-                            ["NumberOfGameBans"] = isaPlayer.steamData.NumberOfGameBans.ToString(),
-                            ["NumberOfVACBans"] = isaPlayer.steamData.NumberOfVACBans.ToString(),
-                            ["EconomyBan"] = (!isaPlayer.steamData.EconomyBan.Equals("none")).ToString(),
-                            ["FamShare"] = IsFamilyShare(isaPlayer.steamid).ToString()
-                        });
-                DiscordSend(isaPlayer, report);
+                string report = GetMsg("User Dirty MSG", data);
                 if (config.BroadcastPlayerBanReport && isConnected && !isCommand) {
                     server.Broadcast(report.Replace(isaPlayer.steamid + ":", string.Empty).Replace(isaPlayer.steamid, string.Empty));
                 }
@@ -529,6 +535,8 @@ namespace Oxide.Plugins {
                 }
                 //Puts(report);
             }
+
+            DiscordSend(isaPlayer, GetMsg("User Dirty DISCORD MSG", data));
         }
 
         T GetConfig<T>(string name, T defaultValue) => Config[name] == null ? defaultValue : (T)Convert.ChangeType(Config[name], typeof(T));
@@ -539,8 +547,18 @@ namespace Oxide.Plugins {
         }
 
         ISAConfig UpgradeConfig(string oldVersion = "", string newVersion = "") {
+            if(!oldVersion.Equals("") && !newVersion.Equals("") && !oldVersion.Equals(newVersion)) {
+                if(newVersion == "0.0.3") {
+                    Puts($"Upgrading config to {newVersion}");
+                    config.Version = newVersion;
+                    config.DiscordWebhookURL = "";
+                    Config.WriteObject(config, true);
+                    SaveConfig();
+                    return config;
+                }
+            }
             return new ISAConfig {
-                Version = settingsVersion,
+                Version = ConfigVersion,
                 Debug = false,
 
                 ShowProtectedMsg = true,
@@ -686,6 +704,7 @@ namespace Oxide.Plugins {
             lang.RegisterMessages(new Dictionary<string, string> {
                 ["Protected MSG"] = "Server protected by <color=#008080ff>ServerArmour</color>",
                 ["User Dirty MSG"] = "<color=#008080ff>Server Armour Report:\n {steamid}:{username}</color> is {status}.\n <color=#ff0000ff>Server Bans:</color> {serverBanCount}\n <color=#ff0000ff>Game Bans:</color> {NumberOfGameBans}\n <color=#ff0000ff>Vac Bans:</color> {NumberOfVACBans}\n <color=#ff0000ff>Economy Banned:</color> {EconomyBan}\n <color=#ff0000ff>Family Share:</color> {FamShare}",
+                ["User Dirty DISCORD MSG"] = "**Server Bans:** {serverBanCount}\n **Game Bans:** {NumberOfGameBans}\n **Vac Bans:** {NumberOfVACBans}\n **Economy Banned:** {EconomyBan}\n **Family Share:** {FamShare}",
                 ["Command sa.cp Error"] = "Wrong format, example: /sa.cp usernameORsteamid trueORfalse",
                 ["Arkan No Recoil Violation"] = "<color=#ff0000>{player}</color> received an Arkan no recoil violation.\n<color=#ff0000>Violation</color> #{violationNr}, <color=#ff0000>Weapon:</color> {weapon}, <color=#ff0000>Ammo:</color> {ammo}, <color=#ff0000>Shots count:</color> {shots}\n Admins will investigate ASAP, please have handcams ready.\n This might be a false-positive, but all violations need to be investigated.",
                 ["Arkan Aimbot Violation"] = "<color=#ff0000>{player}</color> received an Arkan aimbot violation.\n<color=#ff0000>Violation</color>  #{violationNr}, <color=#ff0000>Weapon:</color> {weapon}, <color=#ff0000>Ammo:</color> {ammo}\n Admins will investigate ASAP, please have handcams ready.\n This might be a false-positive, but all violations need to be investigated.",
