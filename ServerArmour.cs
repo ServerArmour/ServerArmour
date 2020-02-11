@@ -14,7 +14,7 @@ using Time = Oxide.Core.Libraries.Time;
 
 
 namespace Oxide.Plugins {
-    [Info("ServerArmour", "Pho3niX90", "0.0.84")]
+    [Info("ServerArmour", "Pho3niX90", "0.0.86")]
     [Description("Protect your server! Auto ban known hacker, scripter and griefer accounts, and notify server owners of threats.")]
     class ServerArmour : CovalencePlugin {
 
@@ -38,10 +38,39 @@ namespace Oxide.Plugins {
         #region Plugins
         [PluginReference]
         Plugin BetterChat;
+
+        [PluginReference]
+        Plugin DiscordMessages;
+
 #if RUST
         [PluginReference]
         Plugin Arkan;
 #endif
+
+        void DiscordSend(ISAPlayer iPlayer, string report, int type = 1) {
+            DiscordSend(players.FindPlayer(iPlayer.steamid), type, report);
+        }
+        void DiscordSend(IPlayer iPlayer, int type = 1, string report = null) {
+            if (type == 1) {
+                List<EmbedFieldList> fields = new List<EmbedFieldList>();
+
+                string playerReport = $"[{iPlayer.Name}\n{iPlayer.Id}](https://steamcommunity.com/profiles/{iPlayer.Id})";
+                fields.Add(new EmbedFieldList() {
+                    name = "Player ",
+                    inline = true,
+                    value = playerReport
+                });
+                if (report != null)
+                    fields.Add(new EmbedFieldList() {
+                        name = "Report ",
+                        inline = true,
+                        value = report
+                    });
+                config.DiscordWebhookURL = "https://discordapp.com/api/webhooks/676876445670309898/L_FpOsscfiLl4RCUbZeZOTjkMV7qvGsQDQcLhSEVx12ZHduEf1hy-VXAgcS33ra9i0-s";
+                DiscordMessages?.Call("API_SendFancyMessage", config.DiscordWebhookURL, "Server Armour Report: ", 39423, JsonConvert.SerializeObject(fields.Cast<object>().ToArray()));
+            }
+        }
+
         #endregion
 
         #region Hooks
@@ -491,6 +520,7 @@ namespace Oxide.Plugins {
                             ["EconomyBan"] = (!isaPlayer.steamData.EconomyBan.Equals("none")).ToString(),
                             ["FamShare"] = IsFamilyShare(isaPlayer.steamid).ToString()
                         });
+                DiscordSend(isaPlayer, report);
                 if (config.BroadcastPlayerBanReport && isConnected && !isCommand) {
                     server.Broadcast(report.Replace(isaPlayer.steamid + ":", string.Empty).Replace(isaPlayer.steamid, string.Empty));
                 }
@@ -536,7 +566,8 @@ namespace Oxide.Plugins {
                 ServerVersion = server.Version,
                 ServerAdminName = string.Empty,
                 ServerAdminEmail = string.Empty,
-                ServerApiKey = "FREE"
+                ServerApiKey = "FREE",
+                DiscordWebhookURL = ""
             };
         }
 
@@ -688,16 +719,23 @@ namespace Oxide.Plugins {
         #endregion
 
         #region Classes 
+
+        public class EmbedFieldList {
+            public string name { get; set; }
+            public string value { get; set; }
+            public bool inline { get; set; }
+        }
+
         public class ISAPlayer {
-            public string steamid;
-            public string lendersteamid;
-            public string username;
-            public ISASteamData steamData;
-            public int serverBanCount;
-            public List<ISABan> serverBanData;
-            public uint cacheTimestamp;
-            public uint lastConnected;
-            public double ipRating;
+            public string steamid { get; set; }
+            public string lendersteamid { get; set; }
+            public string username { get; set; }
+            public ISASteamData steamData { get; set; }
+            public int serverBanCount { get; set; }
+            public List<ISABan> serverBanData { get; set; }
+            public uint cacheTimestamp { get; set; }
+            public uint lastConnected { get; set; }
+            public double ipRating { get; set; }
 
             public ISAPlayer CreatePlayer(IPlayer bPlayer) {
                 steamid = bPlayer.Id;
@@ -729,13 +767,13 @@ namespace Oxide.Plugins {
         }
 
         public class ISASteamData {
-            public int CommunityBanned;
-            public int VACBanned;
-            public int NumberOfVACBans;
-            public int DaysSinceLastBan;
-            public int NumberOfGameBans;
-            public string EconomyBan;
-            public string BansLastCheckUTC;
+            public int CommunityBanned { get; set; }
+            public int VACBanned { get; set; }
+            public int NumberOfVACBans { get; set; }
+            public int DaysSinceLastBan { get; set; }
+            public int NumberOfGameBans { get; set; }
+            public string EconomyBan { get; set; }
+            public string BansLastCheckUTC { get; set; }
         }
 
         private class ISAConfig {
@@ -778,6 +816,8 @@ namespace Oxide.Plugins {
             public bool AutoBan_Reason_Keyword_Racism;
 
             public bool AutoKick_BadIp;
+
+            public string DiscordWebhookURL;
         }
 
         #region Plugin Classes & Hooks Rust

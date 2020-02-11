@@ -4,7 +4,7 @@ namespace Oxide.Plugins {
     class ForceRespawn : RustPlugin {
 
         void OnPlayerInit(BasePlayer player) {
-            timer.Once(15f, () => RespawnPlayer(player));
+            timer.Once(60f, () => RespawnPlayer(player));
         }
 
         [Command("frespawn")]
