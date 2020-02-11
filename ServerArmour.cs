@@ -51,7 +51,7 @@ namespace Oxide.Plugins {
             DiscordSend(players.FindPlayer(iPlayer.steamid), type, report);
         }
         void DiscordSend(IPlayer iPlayer, int type = 1, string report = null) {
-            if(config.DiscordWebhookURL.Length == 0) { Puts("Discord webhook not setup."); return; }
+            if (config.DiscordWebhookURL.Length == 0) { Puts("Discord webhook not setup."); return; }
             if (type == 1) {
                 List<EmbedFieldList> fields = new List<EmbedFieldList>();
 
@@ -69,9 +69,7 @@ namespace Oxide.Plugins {
                     });
                 var fieldsObject = fields.Cast<object>().ToArray();
                 string json = JsonConvert.SerializeObject(fieldsObject);
-                string jsonformatted = json.Replace("<color=#008080ff>", "```diff ").Replace("</color>", "```");
-                
-                    DiscordMessages?.Call("API_SendFancyMessage", config.DiscordWebhookURL, "Server Armour Report: ", 39423, json);
+                DiscordMessages?.Call("API_SendFancyMessage", config.DiscordWebhookURL, "Server Armour Report: ", 39423, json);
             }
         }
 
@@ -547,8 +545,8 @@ namespace Oxide.Plugins {
         }
 
         ISAConfig UpgradeConfig(string oldVersion = "", string newVersion = "") {
-            if(!oldVersion.Equals("") && !newVersion.Equals("") && !oldVersion.Equals(newVersion)) {
-                if(newVersion == "0.0.3") {
+            if (!oldVersion.Equals("") && !newVersion.Equals("") && !oldVersion.Equals(newVersion)) {
+                if (newVersion == "0.0.3") {
                     Puts($"Upgrading config to {newVersion}");
                     config.Version = newVersion;
                     config.DiscordWebhookURL = "";
