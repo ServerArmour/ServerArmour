@@ -325,7 +325,7 @@ namespace Oxide.Plugins {
                 default:
                     List<string> playersFoundNames = new List<string>();
                     for (int i = 0; i < playersFoundCount; i++) playersFoundNames.Add(playersFound.ElementAt(i).Name);
-                    string playersFoundNamesString = String.Join(", ", playersFoundNames);
+                    string playersFoundNamesString = String.Join(", ", playersFoundNames.ToArray());
                     errMsg = GetMsg("Multiple Players Found", new Dictionary<string, string> { ["players"] = playersFoundNamesString });
                     break;
             }

@@ -77,6 +77,8 @@ string API_GetEconomyBanStatus(string steamid) // The player's ban status in the
 bool API_GetIsPlayerDirty(string steamid) // Indicates if the player has any bans at all, includes server, game and vac bans
 bool API_GetIsPlayerDirty(string steamid) // Indicates if the game is a family shared game, true indicates the player doesnt own it but lending it. 
 string API_GetFamilyShareLenderSteamId(string steamid) // Gets the steamid of the person lending the game. Returns "0" if there isn't a lender and it's not family share.
+bool API_GetIsFamilyShareLenderDirty(string steamid) // Checks if the current users family share account is dirty
+int API_GetDaysSinceLastVacBan(string steamid) // Get amount of days since last vac ban. This will retun 0 if there is no vac ban
 ```
 
 
