@@ -51,8 +51,9 @@ namespace Oxide.Plugins {
         void DiscordSend(ISAPlayer iPlayer, string report, int type = 1) {
             DiscordSend(players.FindPlayer(iPlayer.steamid), type, report);
         }
+
         void DiscordSend(IPlayer iPlayer, int type = 1, string report = null) {
-            if (config.DiscordWebhookURL.Length == 0) { Puts("Discord webhook not setup."); return; }
+            if (config.DiscordWebhookURL.Length == 0 && !config.DiscordWebhookURL.Equals("https://support.discordapp.com/hc/en-us/articles/228383668-Intro-to-Webhooks")) { Puts("Discord webhook not setup."); return; }
             if (type == 1) {
                 List<EmbedFieldList> fields = new List<EmbedFieldList>();
 
@@ -208,6 +209,7 @@ namespace Oxide.Plugins {
                 } else {
                     SetPlayerBanData(isaPlayer);
                 }
+
                 if (!reportSent) {
                     GetPlayerReport(isaPlayer, player.IsConnected);
                     reportSent = true;
@@ -249,29 +251,13 @@ namespace Oxide.Plugins {
         }
 
         ISABan IsBanned(string steamid) {
-            uint now = _time.GetUnixTimestamp();
-            if (IsPlayerCached(steamid)) {
-                ISAPlayer isaPlayer = GetPlayerCache(steamid);
-                if (isaPlayer != null)
-                    foreach (ISABan ban in isaPlayer.serverBanData) {
-                        Puts($"thisServerIp {thisServerIp} : {ban.serverIp}");
-                        if (ban.serverIp.Equals(thisServerIp, defaultCompare) && ban.banUntil < now) {
-                            return ban;
-                        }
-                    }
-            }
-            return null;
+            if (!IsPlayerCached(steamid)) return null;
+            return GetPlayerCache(steamid)?.serverBanData.First(x => x.serverIp.Equals(thisServerIp));
         }
 
         string GetBanReason(ISAPlayer isaPlayer) {
-            foreach (ISABan ban in isaPlayer.serverBanData) {
-                if (ban.serverIp.Equals(thisServerIp, defaultCompare)) {
-                    return ban.reason;
-                }
-            }
-            return "UNKOWN";
+            return isaPlayer?.serverBanData.First(x => x.serverIp.Equals(thisServerIp)).reason;
         }
-
         #endregion
 
         #region Commands
@@ -307,14 +293,8 @@ namespace Oxide.Plugins {
             RemoveBans(isaPlayer);
         }
 
-        bool RemoveBans(ISAPlayer player) {
-            int bansRemoved = 0;
-            foreach (ISABan ban in player.serverBanData) {
-                if (player.serverBanData.Remove(ban)) {
-                    bansRemoved++;
-                }
-            }
-            return false;
+        int RemoveBans(ISAPlayer player) {
+            return player.serverBanData.RemoveAll(x => x.serverIp == thisServerIp);
         }
 
         [Command("ban", "playerban", "sa.ban")]
@@ -350,6 +330,8 @@ namespace Oxide.Plugins {
                     break;
             }
 
+            if (iPlayer == null || !errMsg.Equals("")) { player.Reply(errMsg); return; }
+
             string banReason = args[1];
             int banDuration = 0;
 
@@ -362,7 +344,6 @@ namespace Oxide.Plugins {
                 }
             }
 
-            if (iPlayer == null || !errMsg.Equals("")) { player.Reply(errMsg); return; }
             ISAPlayer isaPlayer;
 
             if (!IsPlayerCached(iPlayer.Id)) {
@@ -377,7 +358,6 @@ namespace Oxide.Plugins {
             uint dateBanUntil = ConvertToTimestamp(now.AddDays(banDuration == 0 ? 3650 : banDuration));
 
             if (BanPlayer(iPlayer,
-                //new ISABan { serverName = server.Name, date = dateTime, reason = banreason, serverIp = thisServerIp, banUntil = dateBanUntil }
                 new ISABan {
                     serverName = server.Name,
                     serverIp = thisServerIp,
@@ -425,9 +405,17 @@ namespace Oxide.Plugins {
         #region Ban System
         bool BanPlayer(IPlayer iPlayer, ISABan ban) {
             AddBan(iPlayer, ban);
+
             if (iPlayer.IsConnected)
                 iPlayer.Kick(ban.reason);
             return true;
+        }
+
+        void NativeBan(IPlayer iPlayer, ISABan ban) {
+            uint secondsLeft = ban.banUntil - _time.GetUnixTimestamp();
+
+            if (iPlayer.IsBanned) return;
+            iPlayer.Ban(ban.reason, TimeSpan.FromSeconds(secondsLeft));
         }
         #endregion
 
@@ -587,7 +575,7 @@ namespace Oxide.Plugins {
                 if (newVersion == 3) {
                     Puts($"Upgrading config to {newVersion}");
                     config.Version = newVersion;
-                    config.DiscordWebhookURL = "";
+                    config.DiscordWebhookURL = "https://support.discordapp.com/hc/en-us/articles/228383668-Intro-to-Webhooks";
                 }
                 if (newVersion == 4) {
                     config.DiscordOnlySendDirtyReports = true;
@@ -626,7 +614,7 @@ namespace Oxide.Plugins {
                 ServerAdminName = string.Empty,
                 ServerAdminEmail = string.Empty,
                 ServerApiKey = "FREE",
-                DiscordWebhookURL = "",
+                DiscordWebhookURL = "https://support.discordapp.com/hc/en-us/articles/228383668-Intro-to-Webhooks",
                 DiscordOnlySendDirtyReports = true
             };
         }
