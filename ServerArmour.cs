@@ -80,20 +80,16 @@ namespace Oxide.Plugins {
         #region Hooks
         void Init() {
             LoadData();
+            LoadConfig();
             Puts("Server Armour is being initialized.");
-            config = Config.ReadObject<ISAConfig>();
-
-            if (!config.Version.Equals(ConfigVersion)) UpgradeConfig(config.Version, ConfigVersion);
 
             thisServerIp = server.Address.ToString();
 
-            if (config.ServerVersion.Equals(server.Version, defaultCompare)) {
-                config.ServerName = server.Name;
-                config.ServerPort = server.Port;
-                config.ServerVersion = server.Version;
-                SaveConfig();
-                RegisterTag();
-            }
+            config.ServerName = server.Name;
+            config.ServerPort = server.Port;
+            config.ServerVersion = server.Version;
+
+            SaveConfig();
 
             LoadDefaultMessages();
             CheckGroups();
@@ -162,6 +158,12 @@ namespace Oxide.Plugins {
 
         void OnPluginLoaded(Plugin plugin) {
             if (plugin.Title == "BetterChat") RegisterTag();
+        }
+        void OnUserUnbanned(string name, string id, string ipAddress) {
+            Puts($"Player {name} ({id}) at {ipAddress} was unbanned");
+            IPlayer iPlayer = players.FindPlayer(id);
+            if (iPlayer != null)
+                Unban(iPlayer);
         }
         #endregion
 
@@ -269,15 +271,14 @@ namespace Oxide.Plugins {
 
         [Command("unban", "playerunban", "sa.unban")]
         void SCmdUnban(IPlayer player, string command, string[] args) {
-            ISAPlayer isaPlayer;
 
             if (!HasPermission(player, PermissionToBan)) {
                 player.Reply(GetMsg("NoPermission"));
                 return;
             }
 
-            if (args == null || (args.Length != 2)) {
-                player.Reply(GetMsg("Ban Syntax"));
+            if (args == null || (args.Length != 1)) {
+                player.Reply(GetMsg("UnBan Syntax"));
                 return;
             }
 
@@ -288,8 +289,12 @@ namespace Oxide.Plugins {
                 player.Reply("Player isn't banned.");
                 return;
             }
+            Unban(iPlayer);
+        }
 
-            isaPlayer = GetPlayerCache(args[0]);
+        void Unban(IPlayer iPlayer) {
+            ISAPlayer isaPlayer = GetPlayerCache(iPlayer.Id);
+            if (iPlayer.IsBanned) iPlayer.Unban();
             RemoveBans(isaPlayer);
         }
 
@@ -405,6 +410,7 @@ namespace Oxide.Plugins {
         #region Ban System
         bool BanPlayer(IPlayer iPlayer, ISABan ban) {
             AddBan(iPlayer, ban);
+            NativeBan(iPlayer, ban);
 
             if (iPlayer.IsConnected)
                 iPlayer.Kick(ban.reason);
@@ -414,8 +420,7 @@ namespace Oxide.Plugins {
         void NativeBan(IPlayer iPlayer, ISABan ban) {
             uint secondsLeft = ban.banUntil - _time.GetUnixTimestamp();
 
-            if (iPlayer.IsBanned) return;
-            iPlayer.Ban(ban.reason, TimeSpan.FromSeconds(secondsLeft));
+            if (!iPlayer.IsBanned) iPlayer.Ban(ban.reason, TimeSpan.FromSeconds(secondsLeft));
         }
         #endregion
 
@@ -564,59 +569,37 @@ namespace Oxide.Plugins {
         }
 
         T GetConfig<T>(string name, T defaultValue) => Config[name] == null ? defaultValue : (T)Convert.ChangeType(Config[name], typeof(T));
-        protected override void LoadDefaultConfig() {
-            LogWarning("Creating a new configuration file");
-            Config.WriteObject(UpgradeConfig(), true);
-            SaveConfig();
-        }
 
-        ISAConfig UpgradeConfig(int oldVersion = 0, int newVersion = 0) {
-            if (oldVersion != 0 && newVersion != 0 && oldVersion != newVersion) {
-                if (newVersion == 3) {
-                    Puts($"Upgrading config to {newVersion}");
-                    config.Version = newVersion;
-                    config.DiscordWebhookURL = "https://support.discordapp.com/hc/en-us/articles/228383668-Intro-to-Webhooks";
-                }
-                if (newVersion == 4) {
-                    config.DiscordOnlySendDirtyReports = true;
-                    Config.WriteObject(config, true);
-                }
+        protected override void LoadConfig() {
+            config = Config.ReadObject<ISAConfig>();
+            config.Version = GetConfig("Version", ConfigVersion);
+            config.Debug = GetConfig("Debug", false);
 
-                Config.WriteObject(config, true);
-                SaveConfig();
-                return config;
-            }
-            return new ISAConfig {
-                Version = ConfigVersion,
-                Debug = false,
+            config.ShowProtectedMsg = GetConfig("ShowProtectedMsg", true);
+            config.AutoBanOn = GetConfig("AutoBanOn", true);
+            config.BroadcastPlayerBanReport = GetConfig("BroadcastPlayerBanReport", true);
+            config.BroadcastNewBans = GetConfig("BroadcastNewBans", true);
+            config.ServerAdminShareDetails = GetConfig("ServerAdminShareDetails", true);
 
-                ShowProtectedMsg = true,
-                AutoBanOn = true,
-                BroadcastPlayerBanReport = true,
-                BroadcastNewBans = true,
-                ServerAdminShareDetails = true,
+            config.BetterChatDirtyPlayerTag = GetConfig("BetterChatDirtyPlayerTag", "*");
+            config.AutoBanGroup = GetConfig("AutoBanGroup", "serverarmour.bans");
+            config.WatchlistGroup = GetConfig("AutoBanGroup", "serverarmour.watchlist");
 
-                BetterChatDirtyPlayerTag = "DIRTY",
-                AutoBanGroup = "serverarmour.bans",
-                WatchlistGroup = "serverarmour.watchlist",
-                AutoBanReasonKeywords = new string[] { "*aimbot*", "*esp*", "*hack*", "*script*" },
+            config.AutoBanFamilyShare = GetConfig("AutoBanFamilyShare", false);
+            config.AutoBanFamilyShareIfDirty = GetConfig("AutoBanFamilyShareIfDirty", false);
 
-                AutoBanFamilyShare = false,
-                AutoBanFamilyShareIfDirty = false,
+            config.AutoBanCeiling = GetConfig("AutoBanCeiling", 5);
+            config.AutoVacBanCeiling = GetConfig("AutoVacBanCeiling", 2);
+            config.WatchlistCeiling = GetConfig("AutoVacBanCeiling", 1);
 
-                AutoBanCeiling = 5,
-                AutoVacBanCeiling = 2,
-                WatchlistCeiling = 1,
-
-                ServerName = server.Name,
-                ServerPort = server.Port,
-                ServerVersion = server.Version,
-                ServerAdminName = string.Empty,
-                ServerAdminEmail = string.Empty,
-                ServerApiKey = "FREE",
-                DiscordWebhookURL = "https://support.discordapp.com/hc/en-us/articles/228383668-Intro-to-Webhooks",
-                DiscordOnlySendDirtyReports = true
-            };
+            config.ServerName = server.Name;
+            config.ServerPort = server.Port;
+            config.ServerVersion = server.Version;
+            config.ServerAdminName = GetConfig("ServerAdminName", string.Empty);
+            config.ServerAdminEmail = GetConfig("ServerAdminEmail", string.Empty);
+            config.ServerApiKey = GetConfig("ServerApiKey", "FREE");
+            config.DiscordWebhookURL = GetConfig("DiscordWebhookURL", "https://support.discordapp.com/hc/en-us/articles/228383668-Intro-to-Webhooks");
+            config.DiscordOnlySendDirtyReports = GetConfig("DiscordOnlySendDirtyReports", true);
         }
 
         private void LogDebug(string txt) {
@@ -756,7 +739,8 @@ namespace Oxide.Plugins {
                 ["Reason: Bad IP"] = "Bad IP Detected, either due to a VPN/Proxy",
                 ["Player Not Found"] = "Player wasn't found",
                 ["Multiple Players Found"] = "Multiple players found with that name ({players}), please try something more unique like a steamid",
-                ["Ban Syntax"] = "ban <playerNameOrID> \"<reason>\" [duration days: default 3650]",
+                ["Ban Syntax"] = "sa.ban <playerNameOrID> \"<reason>\" [duration days: default 3650]",
+                ["UnBan Syntax"] = "sa.unban <playerNameOrID>",
                 ["No Response From API"] = "Couldn't get an answer from ServerArmour.com! Error: {code} {response}"
             }, this);
         }
