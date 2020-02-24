@@ -14,7 +14,7 @@ using Time = Oxide.Core.Libraries.Time;
 
 
 namespace Oxide.Plugins {
-    [Info("ServerArmour", "Pho3niX90", "0.0.93")]
+    [Info("ServerArmour", "Pho3niX90", "0.0.94")]
     [Description("Protect your server! Auto ban known hacker, scripter and griefer accounts, and notify server owners of threats.")]
     class ServerArmour : CovalencePlugin {
 
@@ -265,7 +265,11 @@ namespace Oxide.Plugins {
 
         ISABan IsBanned(string steamid) {
             if (!IsPlayerCached(steamid)) return null;
-            return GetPlayerCache(steamid)?.serverBanData.First(x => x.serverIp.Equals(thisServerIp));
+            try {
+                return GetPlayerCache(steamid)?.serverBanData.First(x => x.serverIp.Equals(thisServerIp));
+            } catch (InvalidOperationException ioe) {
+                return null;
+            }
         }
 
         string GetBanReason(ISAPlayer isaPlayer) {
