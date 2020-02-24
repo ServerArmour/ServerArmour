@@ -14,7 +14,7 @@ using Time = Oxide.Core.Libraries.Time;
 
 
 namespace Oxide.Plugins {
-    [Info("ServerArmour", "Pho3niX90", "0.0.91")]
+    [Info("ServerArmour", "Pho3niX90", "0.0.93")]
     [Description("Protect your server! Auto ban known hacker, scripter and griefer accounts, and notify server owners of threats.")]
     class ServerArmour : CovalencePlugin {
 
@@ -124,8 +124,14 @@ namespace Oxide.Plugins {
 
         void OnUserConnected(IPlayer player) {
             Puts($"{player.Name} ({player.Id}) connected from {player.Address}");
+            string lenderId = GetPlayerCache(player.Id)?.lendersteamid;
             GetPlayerBans(player, true);
+            if (!lenderId.Equals("0")) GetPlayerBans(lenderId, true);
+
             ISABan ban = IsBanned(player.Id);
+            ISABan lenderBan;
+            if (!lenderId.Equals("0")) lenderBan = IsBanned(lenderId);
+
             if (ban != null) {
                 player.Kick(ban.reason);
             }
@@ -168,6 +174,11 @@ namespace Oxide.Plugins {
         #endregion
 
         #region WebRequests
+        void GetPlayerBans(string playerid, bool reCache = false) {
+            IPlayer player = players.FindPlayer(playerid);
+            GetPlayerBans(player, reCache);
+        }
+
         void GetPlayerBans(IPlayer player, bool reCache = false) {
             bool isCached = IsPlayerCached(player.Id);
             uint currentTimestamp = _time.GetUnixTimestamp();
@@ -555,7 +566,7 @@ namespace Oxide.Plugins {
 
             if (IsPlayerDirty(isaPlayer.steamid) || isCommand) {
                 string report = GetMsg("User Dirty MSG", data);
-                if (config.BroadcastPlayerBanReport && isConnected && !isCommand) {
+                if (config.BroadcastPlayerBanReport && isConnected && !isCommand && config.BroadcastPlayerBanReportVacDays > isaPlayer.steamData.DaysSinceLastBan) {
                     server.Broadcast(report.Replace(isaPlayer.steamid + ":", string.Empty).Replace(isaPlayer.steamid, string.Empty));
                 }
                 if (isCommand) {
@@ -578,6 +589,7 @@ namespace Oxide.Plugins {
             config.ShowProtectedMsg = GetConfig("ShowProtectedMsg", true);
             config.AutoBanOn = GetConfig("AutoBanOn", true);
             config.BroadcastPlayerBanReport = GetConfig("BroadcastPlayerBanReport", true);
+            config.BroadcastPlayerBanReportVacDays = GetConfig("BroadcastPlayerBanReportVacDays", 120);
             config.BroadcastNewBans = GetConfig("BroadcastNewBans", true);
             config.ServerAdminShareDetails = GetConfig("ServerAdminShareDetails", true);
 
@@ -590,7 +602,8 @@ namespace Oxide.Plugins {
 
             config.AutoBanCeiling = GetConfig("AutoBanCeiling", 5);
             config.AutoVacBanCeiling = GetConfig("AutoVacBanCeiling", 2);
-            config.WatchlistCeiling = GetConfig("AutoVacBanCeiling", 1);
+            config.DissallowVacBanDays = GetConfig("DissallowVacBanDays", 90);
+            config.WatchlistCeiling = GetConfig("WatchlistCeiling", 1);
 
             config.ServerName = server.Name;
             config.ServerPort = server.Port;
@@ -843,6 +856,7 @@ namespace Oxide.Plugins {
             public bool AutoBanOn; // turn auto banning on or off. 
             public int AutoBanCeiling; // Auto ban players with X amount of previous bans.
             public int AutoVacBanCeiling; //  Auto ban players with X amount of vac bans.
+            public int DissallowVacBanDays; // users who have been vac banned in this amount of days will not be allowed to connect. 
             public string[] AutoBanReasonKeywords; // auto ban users that have these keywords in previous ban reasons.
 
             public bool AutoBanFamilyShare;
@@ -853,6 +867,7 @@ namespace Oxide.Plugins {
 
             public string BetterChatDirtyPlayerTag; // tag for players that are dirty.
             public bool BroadcastPlayerBanReport; // tag for players that are dirty.
+            public int BroadcastPlayerBanReportVacDays; // if a user has a vac ban older than this, then ignore
 
             public bool BroadcastNewBans; // Broadcast to the entire server when true
 
