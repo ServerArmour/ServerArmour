@@ -26,7 +26,7 @@ namespace Oxide.Plugins {
         private ISAConfig config;
         string thisServerIp;
         int ConfigVersion = 4;
-        string specifier = "G";
+        string specifier = "G"; 
         int secondsBetweenWebRequests;
         CultureInfo culture = CultureInfo.CreateSpecificCulture("en-US");
         StringComparison defaultCompare = StringComparison.InvariantCultureIgnoreCase;
