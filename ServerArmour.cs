@@ -14,7 +14,7 @@ using Time = Oxide.Core.Libraries.Time;
 
 
 namespace Oxide.Plugins {
-    [Info("ServerArmour", "Pho3niX90", "0.0.94")]
+    [Info("ServerArmour", "Pho3niX90", "0.0.95")]
     [Description("Protect your server! Auto ban known hacker, scripter and griefer accounts, and notify server owners of threats.")]
     class ServerArmour : CovalencePlugin {
 
@@ -26,7 +26,7 @@ namespace Oxide.Plugins {
         private ISAConfig config;
         string thisServerIp;
         int ConfigVersion = 4;
-        string specifier = "G"; 
+        string specifier = "G";
         int secondsBetweenWebRequests;
         CultureInfo culture = CultureInfo.CreateSpecificCulture("en-US");
         StringComparison defaultCompare = StringComparison.InvariantCultureIgnoreCase;
@@ -79,9 +79,15 @@ namespace Oxide.Plugins {
 
         #region Hooks
         void Init() {
+            config = Config.ReadObject<ISAConfig>();
+
+            if(config.DiscordWebhookURL == null || config.Version == 0) {
+                config = GetDefaultConfig();
+            }
+
             LoadData();
-            LoadConfig();
             Puts("Server Armour is being initialized.");
+            SaveConfig();
 
             thisServerIp = server.Address.ToString();
 
@@ -89,14 +95,10 @@ namespace Oxide.Plugins {
             config.ServerPort = server.Port;
             config.ServerVersion = server.Version;
 
-            SaveConfig();
 
             LoadDefaultMessages();
             CheckGroups();
             permission.RegisterPermission(PermissionToBan, this);
-        }
-
-        void OnServerInitialized() {
             RegisterTag();
         }
 
@@ -583,40 +585,55 @@ namespace Oxide.Plugins {
                 DiscordSend(isaPlayer, GetMsg("User Dirty DISCORD MSG", data));
         }
 
-        T GetConfig<T>(string name, T defaultValue) => Config[name] == null ? defaultValue : (T)Convert.ChangeType(Config[name], typeof(T));
 
-        protected override void LoadConfig() {
-            config = Config.ReadObject<ISAConfig>();
-            config.Version = GetConfig("Version", ConfigVersion);
-            config.Debug = GetConfig("Debug", false);
+        private void SaveConfig() {
+            Config.WriteObject(config, true);
+        }
+        protected override void LoadDefaultConfig() {
+            Config.WriteObject(GetDefaultConfig(), true);
+        }
+        private ISAConfig GetDefaultConfig() {
+            return new ISAConfig {
 
-            config.ShowProtectedMsg = GetConfig("ShowProtectedMsg", true);
-            config.AutoBanOn = GetConfig("AutoBanOn", true);
-            config.BroadcastPlayerBanReport = GetConfig("BroadcastPlayerBanReport", true);
-            config.BroadcastPlayerBanReportVacDays = GetConfig("BroadcastPlayerBanReportVacDays", 120);
-            config.BroadcastNewBans = GetConfig("BroadcastNewBans", true);
-            config.ServerAdminShareDetails = GetConfig("ServerAdminShareDetails", true);
+                Version = ConfigVersion,
+                Debug = false,
 
-            config.BetterChatDirtyPlayerTag = GetConfig("BetterChatDirtyPlayerTag", "*");
-            config.AutoBanGroup = GetConfig("AutoBanGroup", "serverarmour.bans");
-            config.WatchlistGroup = GetConfig("AutoBanGroup", "serverarmour.watchlist");
+                ShowProtectedMsg = true,
+                AutoBanGroup = "serverarmour.bans",
+                AutoBanOn = true,
+                AutoBanCeiling = 5,
+                AutoVacBanCeiling = 2,
+                DissallowVacBanDays = 90, // 
+                AutoBanFamilyShare = false,
+                AutoBanFamilyShareIfDirty = false,
+                WatchlistGroup = "serverarmour.watchlist",
+                WatchlistCeiling = 1,
+                BetterChatDirtyPlayerTag = "",
+                BroadcastPlayerBanReport = true,
+                BroadcastPlayerBanReportVacDays = 120, //
+                BroadcastNewBans = true,
+                ServerName = server.Name,
+                ServerPort = server.Port,
+                ServerVersion = server.Version,
+                ServerAdminShareDetails = true,
+                ServerAdminName = string.Empty,
+                ServerAdminEmail = string.Empty,
+                ServerApiKey = "FREE",
 
-            config.AutoBanFamilyShare = GetConfig("AutoBanFamilyShare", false);
-            config.AutoBanFamilyShareIfDirty = GetConfig("AutoBanFamilyShareIfDirty", false);
+                AutoBan_Reason_Keyword_Aimbot = false,
+                AutoBan_Reason_Keyword_Hack = false,
+                AutoBan_Reason_Keyword_EspHack = false,
+                AutoBan_Reason_Keyword_Script = false,
+                AutoBan_Reason_Keyword_Cheat = false,
+                AutoBan_Reason_Keyword_Toxic = false,
+                AutoBan_Reason_Keyword_Insult = false,
+                AutoBan_Reason_Keyword_Ping = false,
+                AutoBan_Reason_Keyword_Racism = false,
+                AutoKick_BadIp = false,
 
-            config.AutoBanCeiling = GetConfig("AutoBanCeiling", 5);
-            config.AutoVacBanCeiling = GetConfig("AutoVacBanCeiling", 2);
-            config.DissallowVacBanDays = GetConfig("DissallowVacBanDays", 90);
-            config.WatchlistCeiling = GetConfig("WatchlistCeiling", 1);
-
-            config.ServerName = server.Name;
-            config.ServerPort = server.Port;
-            config.ServerVersion = server.Version;
-            config.ServerAdminName = GetConfig("ServerAdminName", string.Empty);
-            config.ServerAdminEmail = GetConfig("ServerAdminEmail", string.Empty);
-            config.ServerApiKey = GetConfig("ServerApiKey", "FREE");
-            config.DiscordWebhookURL = GetConfig("DiscordWebhookURL", "https://support.discordapp.com/hc/en-us/articles/228383668-Intro-to-Webhooks");
-            config.DiscordOnlySendDirtyReports = GetConfig("DiscordOnlySendDirtyReports", true);
+                DiscordWebhookURL = "https://support.discordapp.com/hc/en-us/articles/228383668-Intro-to-Webhooks",
+                DiscordOnlySendDirtyReports = true
+            };
         }
 
         private void LogDebug(string txt) {
@@ -655,8 +672,8 @@ namespace Oxide.Plugins {
 
             Puts("Checking if config groups exists.");
 
-            string autobanGroup = GetConfig("AutoBanGroup", "serverarmour.bans");
-            string watchlistGroup = GetConfig("WatchlistGroup", "serverarmour.watchlists");
+            string autobanGroup = config.AutoBanGroup;
+            string watchlistGroup = config.WatchlistGroup;
 
             if (!permission.GroupExists(autobanGroup)) {
                 permission.CreateGroup(autobanGroup, "Server Armour Autobans", 0);
@@ -852,7 +869,7 @@ namespace Oxide.Plugins {
             public string BansLastCheckUTC { get; set; }
         }
 
-        private class ISAConfig {
+        public class ISAConfig {
             public int Version;
             public bool Debug; //should always be false, unless explicitly asked to turn on, will cause performance issue when on.
             public bool ShowProtectedMsg; // Show the protected by ServerArmour msg?
@@ -861,7 +878,6 @@ namespace Oxide.Plugins {
             public int AutoBanCeiling; // Auto ban players with X amount of previous bans.
             public int AutoVacBanCeiling; //  Auto ban players with X amount of vac bans.
             public int DissallowVacBanDays; // users who have been vac banned in this amount of days will not be allowed to connect. 
-            public string[] AutoBanReasonKeywords; // auto ban users that have these keywords in previous ban reasons.
 
             public bool AutoBanFamilyShare;
             public bool AutoBanFamilyShareIfDirty;
