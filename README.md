@@ -17,7 +17,7 @@ Please note, this is a BETA plugin, so not all features are available yet. Autob
 <optional>
 
 	/sa.cp username <force:boolean> - This will show you the ServerArmour report for a specific user, when the force true is added, it will skip checking local cache and update it from the server.
-	/sa.ban "username/id" "reason" <days:int>- This will ban a player, please keep reason english for now (this helps with sentiment analysis.)
+  /sa.ban "username/id" "reason" <days:int>- This will ban a player, please keep reason english for now (this helps with sentiment analysis.)
   /sa.unban - unbans a user
 ```
 
