@@ -81,7 +81,7 @@ namespace Oxide.Plugins {
         void Init() {
             config = Config.ReadObject<ISAConfig>();
 
-            if(config.DiscordWebhookURL == null || config.Version == 0) {
+            if (config.DiscordWebhookURL == null || config.Version == 0) {
                 config = GetDefaultConfig();
             }
 
@@ -126,17 +126,21 @@ namespace Oxide.Plugins {
 
         void OnUserConnected(IPlayer player) {
             Puts($"{player.Name} ({player.Id}) connected from {player.Address}");
+            ISABan lenderBan = null;
+            ISABan ban = null;
+
             string lenderId = GetPlayerCache(player.Id)?.lendersteamid;
-            GetPlayerBans(player, true);
-            if (!lenderId.Equals("0")) GetPlayerBans(lenderId, true);
-
-            ISABan ban = IsBanned(player.Id);
-            ISABan lenderBan;
-            if (!lenderId.Equals("0")) lenderBan = IsBanned(lenderId);
-
-            if (ban != null) {
-                player.Kick(ban.reason);
+            if (lenderId != null && !lenderId.Equals("0")) {
+                GetPlayerBans(lenderId, true);
+                lenderBan = IsBanned(lenderId);
             }
+
+            GetPlayerBans(player, true);
+            ban = IsBanned(player.Id);
+
+            if (ban != null || lenderBan != null)
+                player.Kick(ban.reason);
+
             if (config.ShowProtectedMsg)
                 player.Reply(GetMsg("Protected MSG"));
         }
