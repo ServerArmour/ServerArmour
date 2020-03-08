@@ -14,7 +14,7 @@ using Time = Oxide.Core.Libraries.Time;
 
 
 namespace Oxide.Plugins {
-    [Info("ServerArmour", "Pho3niX90", "0.0.95")]
+    [Info("ServerArmour", "Pho3niX90", "0.0.97")]
     [Description("Protect your server! Auto ban known hacker, scripter and griefer accounts, and notify server owners of threats.")]
     class ServerArmour : CovalencePlugin {
 
@@ -91,11 +91,6 @@ namespace Oxide.Plugins {
 
             thisServerIp = server.Address.ToString();
 
-            config.ServerName = server.Name;
-            config.ServerPort = server.Port;
-            config.ServerVersion = server.Version;
-
-
             LoadDefaultMessages();
             CheckGroups();
             permission.RegisterPermission(PermissionToBan, this);
@@ -113,6 +108,10 @@ namespace Oxide.Plugins {
             CheckOnlineUsers();
             CheckLocalBans();
 #endif
+            config.ServerName = server.Name;
+            config.ServerPort = server.Port;
+            config.ServerVersion = server.Version;
+
             Puts("Server Armour finished initializing.");
             RegisterTag();
         }
@@ -125,6 +124,10 @@ namespace Oxide.Plugins {
         }
 
         void OnUserConnected(IPlayer player) {
+            if (player == null) {
+                Puts("The player that just logged in has returned a null object. This might be an error.");
+                return;
+            }
             Puts($"{player.Name} ({player.Id}) connected from {player.Address}");
             ISABan lenderBan = null;
             ISABan ban = null;
@@ -292,7 +295,7 @@ namespace Oxide.Plugins {
 
         [Command("unban", "playerunban", "sa.unban")]
         void SCmdUnban(IPlayer player, string command, string[] args) {
-
+            Puts("Will now unban");
             if (!HasPermission(player, PermissionToBan)) {
                 player.Reply(GetMsg("NoPermission"));
                 return;
@@ -792,7 +795,7 @@ namespace Oxide.Plugins {
         #region Plugins methods
         string GetChatTag() => "<color=#008080ff>[Server Armour]: </color>";
         void RegisterTag() {
-            if (BetterChat != null && config.BetterChatDirtyPlayerTag.Length > 0)
+            if (BetterChat != null && config.BetterChatDirtyPlayerTag != null && config.BetterChatDirtyPlayerTag.Length > 0)
                 BetterChat?.Call("API_RegisterThirdPartyTitle", new object[] { this, new Func<IPlayer, string>(GetTag) });
         }
 
