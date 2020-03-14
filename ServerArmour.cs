@@ -128,7 +128,7 @@ namespace Oxide.Plugins {
                 Puts("The player that just logged in has returned a null object. This might be an error.");
                 return;
             }
-            Puts($"{player.Name} ({player.Id}) connected from {player.Address}");
+            
             ISABan lenderBan = null;
             ISABan ban = null;
 
@@ -148,10 +148,6 @@ namespace Oxide.Plugins {
                 player.Reply(GetMsg("Protected MSG"));
         }
 
-        void OnUserDisconnected(IPlayer player) {
-            Puts($"{player.Name} ({player.Id}) disconnected");
-        }
-
         object CanUserLogin(string name, string id, string ip) {
             bool canLogin = !AssignGroupsAndBan(players.FindPlayer(name));
             ISABan ban = IsBanned(id);
@@ -163,17 +159,10 @@ namespace Oxide.Plugins {
             return canLogin;
         }
 
-        void OnUserKicked(IPlayer player, string reason) {
-            Puts($"Player {player.Name} ({player.Id}) was kicked, reason: {reason}");
-        }
-
-        void OnUserApproved(string name, string id, string ip) {
-            Puts($"{name} ({id}) at {ip} has been approved to connect");
-        }
-
         void OnPluginLoaded(Plugin plugin) {
             if (plugin.Title == "BetterChat") RegisterTag();
         }
+
         void OnUserUnbanned(string name, string id, string ipAddress) {
             Puts($"Player {name} ({id}) at {ipAddress} was unbanned");
             IPlayer iPlayer = players.FindPlayer(id);
@@ -295,7 +284,7 @@ namespace Oxide.Plugins {
 
         [Command("unban", "playerunban", "sa.unban")]
         void SCmdUnban(IPlayer player, string command, string[] args) {
-            Puts("Will now unban");
+            LogDebug("Will now unban");
             if (!HasPermission(player, PermissionToBan)) {
                 player.Reply(GetMsg("NoPermission"));
                 return;
@@ -454,9 +443,9 @@ namespace Oxide.Plugins {
         System.Collections.IEnumerator CheckOnlineUsers() {
             var waitTime = 0.2f;
             IEnumerable<IPlayer> allPlayers = players.Connected;
-            Puts("Will now inspect all online users, time etimation: " + (allPlayers.Count() * waitTime) + " seconds");
+            LogDebug("Will now inspect all online users, time etimation: " + (allPlayers.Count() * waitTime) + " seconds");
             for (var i = 0; i < allPlayers.Count()-1; i++) {
-                Puts($"Inpecting online user {i + 1} of {allPlayers.Count()} for infractions");
+                LogDebug($"Inpecting online user {i + 1} of {allPlayers.Count()} for infractions");
                 IPlayer player = allPlayers.ElementAt(i);
                 if (player != null) {
                     GetPlayerBans(player, true);
@@ -464,20 +453,20 @@ namespace Oxide.Plugins {
                 yield return new WaitForSecondsRealtime(waitTime);
 
             }
-            Puts("Inspection completed.");
+            LogDebug("Inspection completed.");
         }
 #else
 
         void CheckOnlineUsers() {
             IEnumerable<IPlayer> allPlayers = players.Connected;
             for (var i = 0; i < allPlayers.Count() - 1; i++) {
-                Puts($"Inpecting online user {i + 1} of {allPlayers.Count()} for infractions");
+                LogDebug($"Inpecting online user {i + 1} of {allPlayers.Count()} for infractions");
                 IPlayer player = allPlayers.ElementAt(i);
                 if (player != null) {
                     GetPlayerBans(player, true);
                 }
             }
-            Puts("Checking completed.");
+            LogDebug("Checking completed.");
         }
 #endif
 
@@ -488,7 +477,7 @@ namespace Oxide.Plugins {
             for (var i = 0; i < bannedUsers.Count(); i++) {
                 ServerUsers.User usr = bannedUsers.ElementAt(i);
 
-                Puts($"Checking local user ban {i + 1} of {bannedUsers.Count()}");
+                LogDebug($"Checking local user ban {i + 1} of {bannedUsers.Count()}");
                 
                 if (IsBanned(usr.steamid.ToString(specifier, culture)) ==null ) {
                     IPlayer player = covalence.Players.FindPlayer(usr.steamid.ToString(specifier, culture));
@@ -673,11 +662,11 @@ namespace Oxide.Plugins {
         }
 
         void CheckGroups() {
-            Puts("Registering groups");
+            LogDebug("Registering groups");
 
             string[] groups = permission.GetGroups();
 
-            Puts("Checking if config groups exists.");
+            LogDebug("Checking if config groups exists.");
 
             string autobanGroup = config.AutoBanGroup;
             string watchlistGroup = config.WatchlistGroup;
@@ -769,14 +758,14 @@ namespace Oxide.Plugins {
 
         protected override void LoadDefaultMessages() {
             lang.RegisterMessages(new Dictionary<string, string> {
-                ["Protected MSG"] = "Server protected by <color=#008080ff>ServerArmour</color>",
-                ["User Dirty MSG"] = "<color=#008080ff>Server Armour Report:\n {steamid}:{username}</color> is {status}.\n <color=#ff0000ff>Server Bans:</color> {serverBanCount}\n <color=#ff0000ff>Game Bans:</color> {NumberOfGameBans}\n <color=#ff0000ff>Vac Bans:</color> {NumberOfVACBans}\n <color=#ff0000ff>Economy Banned:</color> {EconomyBan}\n <color=#ff0000ff>Family Share:</color> {FamShare}",
+                ["Protected MSG"] = "Server protected by <#008080ff>ServerArmour</#>",
+                ["User Dirty MSG"] = "<#008080ff>Server Armour Report:\n {steamid}:{username}</#> is {status}.\n <#ff0000ff>Server Bans:</#> {serverBanCount}\n <#ff0000ff>Game Bans:</#> {NumberOfGameBans}\n <#ff0000ff>Vac Bans:</#> {NumberOfVACBans}\n <#ff0000ff>Economy Banned:</#> {EconomyBan}\n <#ff0000ff>Family Share:</#> {FamShare}",
                 ["User Dirty DISCORD MSG"] = "**Server Bans:** {serverBanCount}\n **Game Bans:** {NumberOfGameBans}\n **Vac Bans:** {NumberOfVACBans}\n **Economy Banned:** {EconomyBan}\n **Family Share:** {FamShare}",
                 ["Command sa.cp Error"] = "Wrong format, example: /sa.cp usernameORsteamid trueORfalse",
-                ["Arkan No Recoil Violation"] = "<color=#ff0000>{player}</color> received an Arkan no recoil violation.\n<color=#ff0000>Violation</color> #{violationNr}, <color=#ff0000>Weapon:</color> {weapon}, <color=#ff0000>Ammo:</color> {ammo}, <color=#ff0000>Shots count:</color> {shots}\n Admins will investigate ASAP, please have handcams ready.\n This might be a false-positive, but all violations need to be investigated.",
-                ["Arkan Aimbot Violation"] = "<color=#ff0000>{player}</color> received an Arkan aimbot violation.\n<color=#ff0000>Violation</color>  #{violationNr}, <color=#ff0000>Weapon:</color> {weapon}, <color=#ff0000>Ammo:</color> {ammo}\n Admins will investigate ASAP, please have handcams ready.\n This might be a false-positive, but all violations need to be investigated.",
-                ["Arkan In Rock Violation"] = "<color=#ff0000>{player}</color> received an Arkan in rock violation.\n<color=#ff0000>Violation</color>  #{violationNr}, <color=#ff0000>Weapon:</color> {weapon}, <color=#ff0000>Ammo:</color> {ammo}\n Admins will investigate ASAP, please have handcams ready.\n This might be a false-positive, but all violations need to be investigated.",
-                ["Player Now Banned"] = "<color=#ff0000>{player}</color> has been banned\n<color=#ff0000>Reason: </color> {reason}",
+                ["Arkan No Recoil Violation"] = "<#ff0000>{player}</#> received an Arkan no recoil violation.\n<#ff0000>Violation</#> #{violationNr}, <#ff0000>Weapon:</#> {weapon}, <#ff0000>Ammo:</#> {ammo}, <#ff0000>Shots count:</#> {shots}\n Admins will investigate ASAP, please have handcams ready.\n This might be a false-positive, but all violations need to be investigated.",
+                ["Arkan Aimbot Violation"] = "<#ff0000>{player}</#> received an Arkan aimbot violation.\n<#ff0000>Violation</#>  #{violationNr}, <#ff0000>Weapon:</#> {weapon}, <#ff0000>Ammo:</#> {ammo}\n Admins will investigate ASAP, please have handcams ready.\n This might be a false-positive, but all violations need to be investigated.",
+                ["Arkan In Rock Violation"] = "<#ff0000>{player}</#> received an Arkan in rock violation.\n<#ff0000>Violation</#>  #{violationNr}, <#ff0000>Weapon:</#> {weapon}, <#ff0000>Ammo:</#> {ammo}\n Admins will investigate ASAP, please have handcams ready.\n This might be a false-positive, but all violations need to be investigated.",
+                ["Player Now Banned"] = "<#ff0000>{player}</#> has been banned\n<#ff0000>Reason: </#> {reason}",
                 ["Reason: Bad IP"] = "Bad IP Detected, either due to a VPN/Proxy",
                 ["Player Not Found"] = "Player wasn't found",
                 ["Multiple Players Found"] = "Multiple players found with that name ({players}), please try something more unique like a steamid",
@@ -793,7 +782,7 @@ namespace Oxide.Plugins {
         #endregion
 
         #region Plugins methods
-        string GetChatTag() => "<color=#008080ff>[Server Armour]: </color>";
+        string GetChatTag() => "<#008080ff>[Server Armour]: </#>";
         void RegisterTag() {
             if (BetterChat != null && config.BetterChatDirtyPlayerTag != null && config.BetterChatDirtyPlayerTag.Length > 0)
                 BetterChat?.Call("API_RegisterThirdPartyTitle", new object[] { this, new Func<IPlayer, string>(GetTag) });
