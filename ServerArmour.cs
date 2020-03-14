@@ -443,7 +443,7 @@ namespace Oxide.Plugins {
         }
 
         void CheckLocalBans() {
-
+#if RUST
             IEnumerable<ServerUsers.User> bannedUsers = ServerUsers.GetAll(ServerUsers.UserGroup.Banned);
             int BannedUsersCount = bannedUsers.Count();
             int BannedUsersCounter = 0;
@@ -465,6 +465,7 @@ namespace Oxide.Plugins {
 
                 BannedUsersCounter++;
             });
+#endif
         }
         #endregion
 
