@@ -89,15 +89,11 @@ namespace Oxide.Plugins {
             Puts("Server Armour is being initialized.");
             SaveConfig();
 
-            thisServerIp = server.Address.ToString();
-
-            LoadDefaultMessages();
             CheckGroups();
             permission.RegisterPermission(PermissionToBan, this);
-            RegisterTag();
         }
 
-        void Loaded() {
+        void OnServerInitialized() {
 
 #if RUST
             timer.Once((ServerMgr.Instance != null) ? 10 : 300, () => {
@@ -108,6 +104,7 @@ namespace Oxide.Plugins {
             CheckOnlineUsers();
             CheckLocalBans();
 #endif
+            thisServerIp = server.Address.ToString();
             config.ServerName = server.Name;
             config.ServerPort = server.Port;
             config.ServerVersion = server.Version;
@@ -128,7 +125,7 @@ namespace Oxide.Plugins {
                 Puts("The player that just logged in has returned a null object. This might be an error.");
                 return;
             }
-            
+
             ISABan lenderBan = null;
             ISABan ban = null;
 
