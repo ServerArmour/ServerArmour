@@ -226,10 +226,10 @@ namespace Oxide.Plugins {
                 if (code != 200 || response == null) { Puts(GetMsg("No Response From API", new Dictionary<string, string> { ["code"] = code.ToString(), ["response"] = response })); return; }
                 // ISABan thisBan = new ISABan { serverName = server.Name, date = dateTime, reason = banreason, serverIp = thisServerIp, banUntil = dateBanUntil };
                 if (IsPlayerCached(player.Id)) {
-                    Puts($"{player.Name} has ban cached, now updating.");
+                    LogDebug($"{player.Name} has ban cached, now updating.");
                     AddPlayerBanData(player, thisBan);
                 } else {
-                    Puts($"{player.Name} had no ban data cached, now creating.");
+                    LogDebug($"{player.Name} had no ban data cached, now creating.");
                     AddPlayerCached(player,
                         new ISAPlayer {
                             steamid = player.Id,
@@ -287,7 +287,7 @@ namespace Oxide.Plugins {
             if (iPlayer == null) { GetMsg("Player Not Found", new Dictionary<string, string> { ["player"] = args[0] }); return; }
 
             if (!IsPlayerCached(iPlayer.Id) || !ContainsMyBan(iPlayer.Id)) {
-                player.Reply("Player isn't banned.");
+                player.Reply(GetMsg("Player Not Banned"));
                 return;
             }
             Unban(iPlayer);
@@ -438,7 +438,7 @@ namespace Oxide.Plugins {
                 LogDebug($"Inpecting online user {allPlayersCounter + 1} of {allPlayersCount} for infractions");
                 IPlayer player = allPlayers.ElementAt(allPlayersCounter);
                 if (player != null) GetPlayerBans(player, true);
-                if(allPlayersCounter < allPlayersCount) LogDebug("Inspection completed.");
+                if (allPlayersCounter < allPlayersCount) LogDebug("Inspection completed.");
             });
         }
 
@@ -449,8 +449,7 @@ namespace Oxide.Plugins {
             int BannedUsersCounter = 0;
             float waitTime = 1f;
 
-            timer.Repeat(waitTime, BannedUsersCount, () =>
-            {
+            timer.Repeat(waitTime, BannedUsersCount, () => {
                 ServerUsers.User usr = bannedUsers.ElementAt(BannedUsersCounter);
                 LogDebug($"Checking local user ban {BannedUsersCounter + 1} of {BannedUsersCounter}");
                 if (IsBanned(usr.steamid.ToString(specifier, culture)) == null) {
@@ -671,7 +670,12 @@ namespace Oxide.Plugins {
                 bool isBanned = ban != null;
                 if (isBanned) {
                     player.Kick(ban.reason);
-                    server.Broadcast($"{GetChatTag()} {isaPlayer.username} wasn't allowed to connect\nReason: {GetBanReason(isaPlayer)}");
+                    Dictionary<string, string> data =
+                       new Dictionary<string, string> {
+                           ["username"] = isaPlayer.username,
+                           ["reason"] = GetBanReason(isaPlayer)
+                       };
+                    server.Broadcast(GetMsg("Broadcast Player Banned", data));
                     return true;
                 }
             } catch (NullReferenceException nre) {
@@ -743,7 +747,9 @@ namespace Oxide.Plugins {
                 ["Multiple Players Found"] = "Multiple players found with that name ({players}), please try something more unique like a steamid",
                 ["Ban Syntax"] = "sa.ban <playerNameOrID> \"<reason>\" [duration days: default 3650]",
                 ["UnBan Syntax"] = "sa.unban <playerNameOrID>",
-                ["No Response From API"] = "Couldn't get an answer from ServerArmour.com! Error: {code} {response}"
+                ["No Response From API"] = "Couldn't get an answer from ServerArmour.com! Error: {code} {response}",
+                ["Player Not Banned"] = "Player not banned",
+                ["Broadcast Player Banned"] = "{tag} {username} wasn't allowed to connect\nReason: {reason}"
             }, this);
         }
 
