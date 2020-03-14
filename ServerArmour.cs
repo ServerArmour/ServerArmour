@@ -7,14 +7,11 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
-#if RUST || HURTWORLD || SEVENDAYSTODIE || REIGNOFKINGS || THEFOREST
-using UnityEngine;
-#endif
 using Time = Oxide.Core.Libraries.Time;
 
 
 namespace Oxide.Plugins {
-    [Info("ServerArmour", "Pho3niX90", "0.0.97")]
+    [Info("ServerArmour", "Pho3niX90", "0.0.98")]
     [Description("Protect your server! Auto ban known hacker, scripter and griefer accounts, and notify server owners of threats.")]
     class ServerArmour : CovalencePlugin {
 
@@ -95,19 +92,13 @@ namespace Oxide.Plugins {
 
         void OnServerInitialized() {
 
-#if RUST
-            timer.Once((ServerMgr.Instance != null) ? 10 : 300, () => {
-                ServerMgr.Instance.StartCoroutine(CheckOnlineUsers());
-                ServerMgr.Instance.StartCoroutine(CheckLocalBans());
-            });
-#else
-            CheckOnlineUsers();
-            CheckLocalBans();
-#endif
             thisServerIp = server.Address.ToString();
             config.ServerName = server.Name;
             config.ServerPort = server.Port;
             config.ServerVersion = server.Version;
+
+            CheckOnlineUsers();
+            CheckLocalBans();
 
             Puts("Server Armour finished initializing.");
             RegisterTag();
@@ -436,47 +427,33 @@ namespace Oxide.Plugins {
 
         #region IEnumerators
 
-#if RUST || HURTWORLD || SEVENDAYSTODIE || THEFOREST
-        System.Collections.IEnumerator CheckOnlineUsers() {
-            var waitTime = 0.2f;
-            IEnumerable<IPlayer> allPlayers = players.Connected;
-            LogDebug("Will now inspect all online users, time etimation: " + (allPlayers.Count() * waitTime) + " seconds");
-            for (var i = 0; i < allPlayers.Count()-1; i++) {
-                LogDebug($"Inpecting online user {i + 1} of {allPlayers.Count()} for infractions");
-                IPlayer player = allPlayers.ElementAt(i);
-                if (player != null) {
-                    GetPlayerBans(player, true);
-                }
-                yield return new WaitForSecondsRealtime(waitTime);
-
-            }
-            LogDebug("Inspection completed.");
-        }
-#else
-
         void CheckOnlineUsers() {
             IEnumerable<IPlayer> allPlayers = players.Connected;
-            for (var i = 0; i < allPlayers.Count() - 1; i++) {
-                LogDebug($"Inpecting online user {i + 1} of {allPlayers.Count()} for infractions");
-                IPlayer player = allPlayers.ElementAt(i);
-                if (player != null) {
-                    GetPlayerBans(player, true);
-                }
-            }
-            LogDebug("Checking completed.");
+            int allPlayersCount = allPlayers.Count();
+            int allPlayersCounter = 0;
+            float waitTime = 0.2f;
+
+            timer.Repeat(waitTime, allPlayersCount, () => {
+                LogDebug("Will now inspect all online users, time etimation: " + (allPlayersCount * waitTime) + " seconds");
+                LogDebug($"Inpecting online user {allPlayersCounter + 1} of {allPlayersCount} for infractions");
+                IPlayer player = allPlayers.ElementAt(allPlayersCounter);
+                if (player != null) GetPlayerBans(player, true);
+                if(allPlayersCounter < allPlayersCount) LogDebug("Inspection completed.");
+            });
         }
-#endif
 
-        private System.Collections.IEnumerator CheckLocalBans() {
-#if RUST
+        void CheckLocalBans() {
+
             IEnumerable<ServerUsers.User> bannedUsers = ServerUsers.GetAll(ServerUsers.UserGroup.Banned);
+            int BannedUsersCount = bannedUsers.Count();
+            int BannedUsersCounter = 0;
+            float waitTime = 1f;
 
-            for (var i = 0; i < bannedUsers.Count(); i++) {
-                ServerUsers.User usr = bannedUsers.ElementAt(i);
-
-                LogDebug($"Checking local user ban {i + 1} of {bannedUsers.Count()}");
-                
-                if (IsBanned(usr.steamid.ToString(specifier, culture)) ==null ) {
+            timer.Repeat(waitTime, BannedUsersCount, () =>
+            {
+                ServerUsers.User usr = bannedUsers.ElementAt(BannedUsersCounter);
+                LogDebug($"Checking local user ban {BannedUsersCounter + 1} of {BannedUsersCounter}");
+                if (IsBanned(usr.steamid.ToString(specifier, culture)) == null) {
                     IPlayer player = covalence.Players.FindPlayer(usr.steamid.ToString(specifier, culture));
                     AddBan(player, new ISABan {
                         serverName = server.Name,
@@ -486,11 +463,9 @@ namespace Oxide.Plugins {
                         banUntil = (uint)usr.expiry
                     });
                 }
-                yield return new WaitForSecondsRealtime(1f);
-            }
-#else
-            return null;
-#endif
+
+                BannedUsersCounter++;
+            });
         }
         #endregion
 
