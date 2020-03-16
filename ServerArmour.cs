@@ -917,10 +917,10 @@ namespace Oxide.Plugins {
         }
         #endregion
 
-        #region Plugin Classes & Hooks Rust
+#region Plugin Classes & Hooks Rust
 
-        #region Arkan
-
+#region Arkan
+#if RUST
         private void API_ArkanOnNoRecoilViolation(BasePlayer player, int NRViolationsNum, string jString) {
             if (jString != null) {
                 Puts("Arkan: " + jString);
@@ -936,6 +936,7 @@ namespace Oxide.Plugins {
                 _webAddArkan("NR", player.UserIDString, violationProbability, shotsCnt, ammoShortName, weaponShortName, attachments, suspiciousNoRecoilShots);
             }
         }
+#endif
         /*
         private void API_ArkanOnAimbotViolation(BasePlayer player, int AIMViolationsNum, string json) {
             if (json != null) {
@@ -949,7 +950,7 @@ namespace Oxide.Plugins {
             }
         }
         */
-        #endregion
-        #endregion
+#endregion
+#endregion
     }
 }
