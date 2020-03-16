@@ -12,7 +12,7 @@ using Time = Oxide.Core.Libraries.Time;
 
 
 namespace Oxide.Plugins {
-    [Info("ServerArmour", "Pho3niX90", "0.1.1")]
+    [Info("ServerArmour", "Pho3niX90", "0.1.0")]
     [Description("Protect your server! Auto ban known hacker, scripter and griefer accounts, and notify server owners of threats.")]
     class ServerArmour : CovalencePlugin {
 
@@ -111,6 +111,7 @@ namespace Oxide.Plugins {
 
             string lenderId = GetPlayerCache(player.Id)?.lendersteamid;
             if (lenderId != null && !lenderId.Equals("0")) {
+                GetPlayerCache(lenderId);
                 GetPlayerBans(lenderId, true);
                 lenderBan = IsBanned(lenderId);
             }
@@ -118,11 +119,9 @@ namespace Oxide.Plugins {
             GetPlayerBans(player, true);
             ban = IsBanned(player.Id);
 
-            if (ban != null || lenderBan != null)
-                player.Kick(ban.reason);
+            if (ban != null || lenderBan != null) player.Kick(ban.reason);
 
-            if (config.ShowProtectedMsg)
-                player.Reply(GetMsg("Protected MSG"));
+            if (config.ShowProtectedMsg) player.Reply(GetMsg("Protected MSG"));
         }
 
         object CanUserLogin(string name, string id, string ip) {
@@ -150,8 +149,9 @@ namespace Oxide.Plugins {
 
         #region WebRequests
 
+        bool reportSent = false;
         void GetPlayerBans(IPlayer player, bool reCache = false) {
-            bool isCached = IsPlayerCached(player.Id);
+            bool isCached = player != null ? IsPlayerCached(player.Id) : false;
             uint currentTimestamp = _time.GetUnixTimestamp();
 
             if (isCached) {
@@ -171,9 +171,34 @@ namespace Oxide.Plugins {
                 LogDebug($"Player {player.Name} not cached");
             }
 
+            _webCheckPlayer(player.Name, player.Id, player.Address, player.IsConnected);
+        }
+        void GetPlayerBans(string playerId, bool reCache = false) {
+            bool isCached = IsPlayerCached(playerId);
+            uint currentTimestamp = _time.GetUnixTimestamp();
 
-            string playerName = Uri.EscapeDataString(player.Name);
-            string url = $"https://io.serverarmour.com/checkUser?steamid={player.Id}&username={playerName}&ip={player.Address}" + ServerGetString();
+            if (isCached) {
+                IPlayer player = players.FindPlayerById(playerId);
+                double minutesOld = Math.Round((currentTimestamp - GetPlayerCache(playerId).cacheTimestamp) / 60.0);
+                bool oldCache = minutesOld >= cacheLifetime;
+                LogDebug($"Player {player.Name}'s cache is {minutesOld} minutes old. " + ((oldCache) ? "Cache is old" : "Cache is fresh"));
+                if (oldCache || reCache) {
+                    DeletePlayerCache(player.Id);
+                    LogDebug($"Will now update local cache for player {player.Name}");
+                    isCached = false;
+                } else {
+                    reportSent = true;
+                    GetPlayerReport(player, player.IsConnected);
+                    return; //user already cached, therefore do not check again before cache time laps.
+                }
+            }
+
+            _webCheckPlayer("LENDER:UKNOWN", playerId, "", false);
+        }
+
+        void _webCheckPlayer(string name, string id, string address, Boolean connected) {
+            string playerName = Uri.EscapeDataString(name);
+            string url = $"https://io.serverarmour.com/checkUser?steamid={id}&username={playerName}&ip={address}" + ServerGetString();
             webrequest.Enqueue(url, null, (code, response) => {
                 if (code != 200 || response == null) {
                     Puts(GetMsg("No Response From API", new Dictionary<string, string> { ["code"] = code.ToString(), ["response"] = response }));
@@ -183,8 +208,8 @@ namespace Oxide.Plugins {
                 isaPlayer.cacheTimestamp = _time.GetUnixTimestamp();
                 isaPlayer.lastConnected = _time.GetUnixTimestamp();
 
-                if (config.AutoKick_BadIp && isaPlayer.ipRating > 0.98) {
-                    player.Kick(GetMsg("Reason: Bad IP"));
+                if (config.AutoKick_BadIp && isaPlayer.ipRating > 0.98 && connected) {
+                    players.FindPlayerById(id)?.Kick(GetMsg("Reason: Bad IP"));
                 }
 
                 if (!IsPlayerCached(isaPlayer.steamid)) {
@@ -194,12 +219,23 @@ namespace Oxide.Plugins {
                 }
 
                 if (!reportSent) {
-                    GetPlayerReport(isaPlayer, player.IsConnected);
+                    GetPlayerReport(isaPlayer, connected);
                     reportSent = true;
                 }
 
 
             }, this, RequestMethod.GET);
+        }
+
+        void _webAddArkan(string type, string userid, string violationProbability, string shotsCnt, string ammoShortName, string weaponShortName, string attachments, string suspiciousNoRecoilShots) {
+            string url = "https://io.serverarmour.com/addArkan";
+            Dictionary<string, string> parameters = new Dictionary<string, string>();
+            webrequest.Enqueue(url + ServerGetString("?"), $"uid={userid}&type={type}&vp={violationProbability}&sc={shotsCnt}&ammo={ammoShortName}&weapon={weaponShortName}&attach={attachments}&snrs={suspiciousNoRecoilShots}", (code, response) => {
+                if (code != 200 || response == null) {
+                    Puts(GetMsg("No Response From API", new Dictionary<string, string> { ["code"] = code.ToString(), ["response"] = response }));
+                    return;
+                }
+            }, this, RequestMethod.POST);
         }
 
         void AddBan(IPlayer player, ISABan thisBan) {
@@ -416,14 +452,14 @@ namespace Oxide.Plugins {
             int allPlayersCount = allPlayers.Count();
             int allPlayersCounter = 0;
             float waitTime = 0.2f;
-
-            timer.Repeat(waitTime, allPlayersCount, () => {
-                LogDebug("Will now inspect all online users, time etimation: " + (allPlayersCount * waitTime) + " seconds");
-                LogDebug($"Inpecting online user {allPlayersCounter + 1} of {allPlayersCount} for infractions");
-                IPlayer player = allPlayers.ElementAt(allPlayersCounter);
-                if (player != null) GetPlayerBans(player, true);
-                if (allPlayersCounter < allPlayersCount) LogDebug("Inspection completed.");
-            });
+            if (allPlayersCount > 0)
+                timer.Repeat(waitTime, allPlayersCount, () => {
+                    LogDebug("Will now inspect all online users, time etimation: " + (allPlayersCount * waitTime) + " seconds");
+                    LogDebug($"Inpecting online user {allPlayersCounter + 1} of {allPlayersCount} for infractions");
+                    IPlayer player = allPlayers.ElementAt(allPlayersCounter);
+                    if (player != null) GetPlayerBans(player, true);
+                    if (allPlayersCounter < allPlayersCount) LogDebug("Inspection completed.");
+                });
         }
 
         void CheckLocalBans() {
@@ -433,22 +469,23 @@ namespace Oxide.Plugins {
             int BannedUsersCounter = 0;
             float waitTime = 1f;
 
-            timer.Repeat(waitTime, BannedUsersCount, () => {
-                ServerUsers.User usr = bannedUsers.ElementAt(BannedUsersCounter);
-                LogDebug($"Checking local user ban {BannedUsersCounter + 1} of {BannedUsersCounter}");
-                if (IsBanned(usr.steamid.ToString(specifier, culture)) == null) {
-                    IPlayer player = covalence.Players.FindPlayer(usr.steamid.ToString(specifier, culture));
-                    AddBan(player, new ISABan {
-                        serverName = server.Name,
-                        serverIp = thisServerIp,
-                        reason = usr.notes,
-                        date = DateTime.Now.ToString(DATE_FORMAT),
-                        banUntil = (uint)usr.expiry
-                    });
-                }
+            if (BannedUsersCount > 0)
+                timer.Repeat(waitTime, BannedUsersCount, () => {
+                    ServerUsers.User usr = bannedUsers.ElementAt(BannedUsersCounter);
+                    LogDebug($"Checking local user ban {BannedUsersCounter + 1} of {BannedUsersCounter}");
+                    if (IsBanned(usr.steamid.ToString(specifier, culture)) == null) {
+                        IPlayer player = covalence.Players.FindPlayer(usr.steamid.ToString(specifier, culture));
+                        AddBan(player, new ISABan {
+                            serverName = server.Name,
+                            serverIp = thisServerIp,
+                            reason = usr.notes,
+                            date = DateTime.Now.ToString(DATE_FORMAT),
+                            banUntil = (uint)usr.expiry
+                        });
+                    }
 
-                BannedUsersCounter++;
-            });
+                    BannedUsersCounter++;
+                });
 #endif
         }
         #endregion
@@ -584,7 +621,8 @@ namespace Oxide.Plugins {
                 AutoKick_BadIp = false,
 
                 DiscordWebhookURL = "https://support.discordapp.com/hc/en-us/articles/228383668-Intro-to-Webhooks",
-                DiscordOnlySendDirtyReports = true
+                DiscordOnlySendDirtyReports = true,
+                SubmitArkanData = true
             };
         }
 
@@ -637,7 +675,10 @@ namespace Oxide.Plugins {
         }
 
         string ServerGetString() {
-            return $"&sn={config.ServerName}&sp={config.ServerPort}&an={config.ServerAdminName}&ae={config.ServerAdminEmail}&gameId={covalence.ClientAppId}&gameName={covalence.Game}";
+            return ServerGetString("&");
+        }
+        string ServerGetString(string start) {
+            return start + $"sip={thisServerIp}&sn={config.ServerName}&sp={config.ServerPort}&an={config.ServerAdminName}&ae={config.ServerAdminEmail}&gameId={covalence.ClientAppId}&gameName={covalence.Game}";
         }
 
         bool AssignGroupsAndBan(IPlayer player) {
@@ -872,68 +913,42 @@ namespace Oxide.Plugins {
 
             public string DiscordWebhookURL;
             public bool DiscordOnlySendDirtyReports;
+            public bool SubmitArkanData;
         }
+        #endregion
 
         #region Plugin Classes & Hooks Rust
-#if RUST
+
         #region Arkan
 
-        private void API_ArkanOnNoRecoilViolation(BasePlayer player, int NRViolationsNum, string json) {
-            if (json != null) {
-                Puts("Arkan: " + json);
-                /*NoRecoilViolationData nrvd = JsonConvert.DeserializeObject<NoRecoilViolationData>(json);
-                if (nrvd != null) {
-                    server.Broadcast(GetMsg("Arkan No Recoil Violation", new Dictionary<string, string> {
-                        ["player"] = player.displayName,
-                        ["violationNr"] = NRViolationsNum.ToString(specifier, culture),
-                        ["ammo"] = nrvd.ammoShortName,
-                        ["shots"] = nrvd.ShotsCnt.ToString(specifier, culture),
-                        ["weapon"] = nrvd.weaponShortName
-                    }));
-                    ISAPlayer isaPlayer = GetPlayerCache(player.UserIDString);
-                    _playerData[player.UserIDString].AddArkanData(nrvd);
-                }*/
+        private void API_ArkanOnNoRecoilViolation(BasePlayer player, int NRViolationsNum, string jString) {
+            if (jString != null) {
+                Puts("Arkan: " + jString);
+                JObject aObject = JObject.Parse(jString);
+
+                string shotsCnt = aObject.GetValue("ShotsCnt").ToString();
+                string violationProbability = aObject.GetValue("violationProbability").ToString();
+                string ammoShortName = aObject.GetValue("ammoShortName").ToString();
+                string weaponShortName = aObject.GetValue("weaponShortName").ToString();
+                string attachments = String.Join(", ", aObject.GetValue("attachments").Select(jv => (string)jv).ToArray());
+                string suspiciousNoRecoilShots = aObject.GetValue("suspiciousNoRecoilShots").ToString();
+
+                _webAddArkan("NR", player.UserIDString, violationProbability, shotsCnt, ammoShortName, weaponShortName, attachments, suspiciousNoRecoilShots);
             }
         }
-
+        /*
         private void API_ArkanOnAimbotViolation(BasePlayer player, int AIMViolationsNum, string json) {
             if (json != null) {
                 Puts("Arkan: " + json);
-                /*AIMViolationData aimvd = JsonConvert.DeserializeObject<AIMViolationData>(json);
-                if (aimvd != null) {
-                    server.Broadcast(GetMsg("Arkan Aimbot Violation", new Dictionary<string, string> {
-                        ["player"] = player.displayName,
-                        ["violationNr"] = AIMViolationsNum.ToString(specifier, culture),
-                        ["ammo"] = aimvd.ammoShortName,
-                        ["weapon"] = aimvd.weaponShortName
-                    }));
-                    ISAPlayer isaPlayer = GetPlayerCache(player.UserIDString);
-                    _playerData[player.UserIDString].AddArkanData(aimvd);
-                }*/
             }
         }
 
         private void API_ArkanOnInRockViolation(BasePlayer player, int IRViolationsNum, string json) {
             if (json != null) {
                 Puts("Arkan: " + json);
-                /*InRockViolationsData irvd = JsonConvert.DeserializeObject<InRockViolationsData>(json);
-                if (irvd != null) {
-                    Puts("Arkan: " + json);
-                    server.Broadcast(GetMsg("Arkan In Rock Violation", new Dictionary<string, string> {
-                        ["player"] = player.displayName,
-                        ["violationNr"] = IRViolationsNum.ToString(specifier, culture),
-                        ["ammo"] = irvd.inRockViolationsData[1].firedProjectile.ammoShortName,
-                        ["weapon"] = irvd.inRockViolationsData[1].firedProjectile.weaponShortName,
-                        ["PlayerNotFound"] = $"{player} not found, if the usernmae contains a space or special character, then please use quotes around it."
-                    }));
-                    ISAPlayer isaPlayer = GetPlayerCache(player.UserIDString);
-                    _playerData[player.UserIDString].AddArkanData(irvd);
-                }*/
             }
         }
-
-        #endregion
-#endif
+        */
         #endregion
         #endregion
     }
