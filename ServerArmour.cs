@@ -12,7 +12,7 @@ using Time = Oxide.Core.Libraries.Time;
 
 
 namespace Oxide.Plugins {
-    [Info("ServerArmour", "Pho3niX90", "0.1.1")]
+    [Info("ServerArmour", "Pho3niX90", "0.1.2")]
     [Description("Protect your server! Auto ban known hacker, scripter and griefer accounts, and notify server owners of threats.")]
     class ServerArmour : CovalencePlugin {
 
@@ -105,7 +105,6 @@ namespace Oxide.Plugins {
                 Puts("The player that just logged in has returned a null object. This might be an error.");
                 return;
             }
-
             ISABan lenderBan = null;
             ISABan ban = null;
 
@@ -124,10 +123,19 @@ namespace Oxide.Plugins {
             if (config.ShowProtectedMsg) player.Reply(GetMsg("Protected MSG"));
         }
 
+        bool HasRecentVac(string playerid) {
+            if (!IsPlayerCached(playerid)) return false;
+            ISASteamData cache = GetPlayerCache(playerid).steamData;
+            return (cache.VACBanned > 0 || cache.NumberOfVACBans > 0) ? cache.DaysSinceLastBan < config.DissallowVacBanDays : false;
+        }
+
         object CanUserLogin(string name, string id, string ip) {
             bool canLogin = !AssignGroupsAndBan(players.FindPlayer(name));
             ISABan ban = IsBanned(id);
             canLogin = ban != null ? false : canLogin;
+            if (HasRecentVac(id)) {
+                return false;
+            }
             if (!canLogin) {
                 Puts($"{ip}:{id}:{name} tried to connect. But the connection was rejected due to him being banned, Reason: " + ban.reason);
                 return ban.reason;
@@ -210,6 +218,15 @@ namespace Oxide.Plugins {
 
                 if (config.AutoKick_BadIp && isaPlayer.ipRating > 0.98 && connected) {
                     players.FindPlayerById(id)?.Kick(GetMsg("Reason: Bad IP"));
+                }
+
+                if (HasRecentVac(id)) {
+                    //"VAC ban received {daysago}, wait another {daysto}"
+                    int vacLast = GetPlayerCache(id).steamData.DaysSinceLastBan;
+                    int until = config.DissallowVacBanDays - vacLast;
+                    string msg = GetMsg("Reason: VAC Ban Too Fresh", new Dictionary<string, string> { ["daysago"] = vacLast.ToString(), ["daysto"] = until.ToString() });
+                    players.FindPlayerById(id)?.Kick(msg);
+                    Puts(msg);
                 }
 
                 if (!IsPlayerCached(isaPlayer.steamid)) {
@@ -775,7 +792,8 @@ namespace Oxide.Plugins {
                 ["UnBan Syntax"] = "sa.unban <playerNameOrID>",
                 ["No Response From API"] = "Couldn't get an answer from ServerArmour.com! Error: {code} {response}",
                 ["Player Not Banned"] = "Player not banned",
-                ["Broadcast Player Banned"] = "{tag} {username} wasn't allowed to connect\nReason: {reason}"
+                ["Broadcast Player Banned"] = "{tag} {username} wasn't allowed to connect\nReason: {reason}",
+                ["Reason: VAC Ban Too Fresh"] = "VAC ban received {daysago}, wait another {daysto}"
             }, this);
         }
 
@@ -917,9 +935,9 @@ namespace Oxide.Plugins {
         }
         #endregion
 
-#region Plugin Classes & Hooks Rust
+        #region Plugin Classes & Hooks Rust
 
-#region Arkan
+        #region Arkan
 #if RUST
         private void API_ArkanOnNoRecoilViolation(BasePlayer player, int NRViolationsNum, string jString) {
             if (jString != null) {
@@ -950,7 +968,7 @@ namespace Oxide.Plugins {
             }
         }
         */
-#endregion
-#endregion
+        #endregion
+        #endregion
     }
 }
