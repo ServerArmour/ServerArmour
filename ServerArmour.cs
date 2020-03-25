@@ -1,5 +1,7 @@
 using Newtonsoft.Json;
+#if RUST
 using Newtonsoft.Json.Linq;
+#endif
 using Oxide.Core;
 using Oxide.Core.Libraries;
 using Oxide.Core.Libraries.Covalence;
@@ -12,7 +14,7 @@ using Time = Oxide.Core.Libraries.Time;
 
 
 namespace Oxide.Plugins {
-    [Info("ServerArmour", "Pho3niX90", "0.1.2")]
+    [Info("Server Armour", "Pho3niX90", "0.1.3")]
     [Description("Protect your server! Auto ban known hacker, scripter and griefer accounts, and notify server owners of threats.")]
     class ServerArmour : CovalencePlugin {
 
@@ -83,6 +85,7 @@ namespace Oxide.Plugins {
         void OnServerInitialized() {
 
             thisServerIp = server.Address.ToString();
+            Puts("Server IP " + thisServerIp + " local " + server.LocalAddress);
             config.ServerName = server.Name;
             config.ServerPort = server.Port;
             config.ServerVersion = server.Version;
@@ -110,17 +113,20 @@ namespace Oxide.Plugins {
 
             string lenderId = GetPlayerCache(player.Id)?.lendersteamid;
             if (lenderId != null && !lenderId.Equals("0")) {
-                GetPlayerCache(lenderId);
                 GetPlayerBans(lenderId, true);
                 lenderBan = IsBanned(lenderId);
             }
 
-            GetPlayerBans(player, true);
+            GetPlayerBans(player, true, "C");
             ban = IsBanned(player.Id);
 
             if (ban != null || lenderBan != null) player.Kick(ban.reason);
 
             if (config.ShowProtectedMsg) player.Reply(GetMsg("Protected MSG"));
+        }
+
+        void OnUserDisconnected(IPlayer player) {
+            GetPlayerBans(player, true, "D");
         }
 
         bool HasRecentVac(string playerid) {
@@ -158,15 +164,15 @@ namespace Oxide.Plugins {
         #region WebRequests
 
         bool reportSent = false;
-        void GetPlayerBans(IPlayer player, bool reCache = false) {
-            bool isCached = player != null ? IsPlayerCached(player.Id) : false;
-            uint currentTimestamp = _time.GetUnixTimestamp();
+        void GetPlayerBans(IPlayer player, string type = "C") {
+            GetPlayerBans(player, false, type);
+        }
+
+        void GetPlayerBans(IPlayer player, bool reCache = false, string type = "C") {
+            bool isCached = player != null ? _playerData.ContainsKey(player.Id) : false;
 
             if (isCached) {
-                double minutesOld = Math.Round((currentTimestamp - GetPlayerCache(player.Id).cacheTimestamp) / 60.0);
-                bool oldCache = minutesOld >= cacheLifetime;
-                LogDebug($"Player {player.Name}'s cache is {minutesOld} minutes old. " + ((oldCache) ? "Cache is old" : "Cache is fresh"));
-                if (oldCache || reCache) {
+                if (!IsCacheValid(player.Id) || reCache) {
                     DeletePlayerCache(player.Id);
                     LogDebug($"Will now update local cache for player {player.Name}");
                     isCached = false;
@@ -178,10 +184,10 @@ namespace Oxide.Plugins {
             } else {
                 LogDebug($"Player {player.Name} not cached");
             }
-
-            _webCheckPlayer(player.Name, player.Id, player.Address, player.IsConnected);
+            _webCheckPlayer(player.Name, player.Id, player.Address, player.IsConnected, type);
         }
-        void GetPlayerBans(string playerId, bool reCache = false) {
+
+        void GetPlayerBans(string playerId, bool reCache = false, string type = "C") {
             bool isCached = IsPlayerCached(playerId);
             uint currentTimestamp = _time.GetUnixTimestamp();
 
@@ -201,12 +207,13 @@ namespace Oxide.Plugins {
                 }
             }
 
-            _webCheckPlayer("LENDER:UKNOWN", playerId, "", false);
+            _webCheckPlayer("LENDER:UKNOWN", playerId, "", false, type);
         }
 
-        void _webCheckPlayer(string name, string id, string address, Boolean connected) {
+        void _webCheckPlayer(string name, string id, string address, Boolean connected, string type) {
             string playerName = Uri.EscapeDataString(name);
-            string url = $"https://io.serverarmour.com/checkUser?steamid={id}&username={playerName}&ip={address}" + ServerGetString();
+            string url = $"https://io.serverarmour.com/checkUser?steamid={id}&username={playerName}&ip={address}&t={type}" + ServerGetString();
+            Puts(url);
             webrequest.Enqueue(url, null, (code, response) => {
                 if (code != 200 || response == null) {
                     Puts(GetMsg("No Response From API", new Dictionary<string, string> { ["code"] = code.ToString(), ["response"] = response }));
@@ -226,7 +233,7 @@ namespace Oxide.Plugins {
                     int until = config.DissallowVacBanDays - vacLast;
                     string msg = GetMsg("Reason: VAC Ban Too Fresh", new Dictionary<string, string> { ["daysago"] = vacLast.ToString(), ["daysto"] = until.ToString() });
                     players.FindPlayerById(id)?.Kick(msg);
-                    Puts(msg);
+                    Puts(id + " - " + msg);
                 }
 
                 if (!IsPlayerCached(isaPlayer.steamid)) {
@@ -476,6 +483,7 @@ namespace Oxide.Plugins {
                     IPlayer player = allPlayers.ElementAt(allPlayersCounter);
                     if (player != null) GetPlayerBans(player, true);
                     if (allPlayersCounter < allPlayersCount) LogDebug("Inspection completed.");
+                    allPlayersCounter++;
                 });
         }
 
@@ -545,6 +553,15 @@ namespace Oxide.Plugins {
         void SetPlayerBanData(ISAPlayer isaplayer) => _playerData[isaplayer.steamid].serverBanData = isaplayer.serverBanData;
         void AddPlayerBanData(IPlayer iplayer, ISABan isaban) => _playerData[iplayer.Id].serverBanData.Add(isaban);
         IPlayer FindIPlayer(string identifier) => players.FindPlayer(identifier);
+
+        bool IsCacheValid(string id) {
+            if (!_playerData.ContainsKey(id)) return false;
+
+            uint currentTimestamp = _time.GetUnixTimestamp();
+            double minutesOld = Math.Round((currentTimestamp - _playerData[id].cacheTimestamp) / 60.0);
+
+            return minutesOld < cacheLifetime;
+        }
 
         void GetPlayerReport(IPlayer player) {
             ISAPlayer isaPlayer = GetPlayerCache(player.Id);
@@ -694,6 +711,7 @@ namespace Oxide.Plugins {
         string ServerGetString() {
             return ServerGetString("&");
         }
+
         string ServerGetString(string start) {
             return start + $"sip={thisServerIp}&sn={config.ServerName}&sp={config.ServerPort}&an={config.ServerAdminName}&ae={config.ServerAdminEmail}&gameId={covalence.ClientAppId}&gameName={covalence.Game}";
         }
@@ -742,7 +760,7 @@ namespace Oxide.Plugins {
                     if (config.AutoBan_Reason_Keyword_Racism && ban.isRacism) keywordBan = true;
                     if (config.AutoBan_Reason_Keyword_Script && ban.isScript) keywordBan = true;
                     if (config.AutoBan_Reason_Keyword_Toxic && ban.isToxic) keywordBan = true;
-
+                    if (keywordBan) break;
                 }
             }
 
@@ -777,14 +795,14 @@ namespace Oxide.Plugins {
 
         protected override void LoadDefaultMessages() {
             lang.RegisterMessages(new Dictionary<string, string> {
-                ["Protected MSG"] = "Server protected by <#008080ff>ServerArmour</#>",
-                ["User Dirty MSG"] = "<#008080ff>Server Armour Report:\n {steamid}:{username}</#> is {status}.\n <#ff0000ff>Server Bans:</#> {serverBanCount}\n <#ff0000ff>Game Bans:</#> {NumberOfGameBans}\n <#ff0000ff>Vac Bans:</#> {NumberOfVACBans}\n <#ff0000ff>Economy Banned:</#> {EconomyBan}\n <#ff0000ff>Family Share:</#> {FamShare}",
+                ["Protected MSG"] = "Server protected by [#008080ff]ServerArmour[/#]",
+                ["User Dirty MSG"] = "[#008080ff]Server Armour Report:\n {steamid}:{username}[/#] is {status}.\n [#ff0000ff]Server Bans:[/#] {serverBanCount}\n [#ff0000ff]Game Bans:[/#] {NumberOfGameBans}\n [#ff0000ff]Vac Bans:[/#] {NumberOfVACBans}\n [#ff0000ff]Economy Banned:[/#] {EconomyBan}\n [#ff0000ff]Family Share:[/#] {FamShare}",
                 ["User Dirty DISCORD MSG"] = "**Server Bans:** {serverBanCount}\n **Game Bans:** {NumberOfGameBans}\n **Vac Bans:** {NumberOfVACBans}\n **Economy Banned:** {EconomyBan}\n **Family Share:** {FamShare}",
                 ["Command sa.cp Error"] = "Wrong format, example: /sa.cp usernameORsteamid trueORfalse",
-                ["Arkan No Recoil Violation"] = "<#ff0000>{player}</#> received an Arkan no recoil violation.\n<#ff0000>Violation</#> #{violationNr}, <#ff0000>Weapon:</#> {weapon}, <#ff0000>Ammo:</#> {ammo}, <#ff0000>Shots count:</#> {shots}\n Admins will investigate ASAP, please have handcams ready.\n This might be a false-positive, but all violations need to be investigated.",
-                ["Arkan Aimbot Violation"] = "<#ff0000>{player}</#> received an Arkan aimbot violation.\n<#ff0000>Violation</#>  #{violationNr}, <#ff0000>Weapon:</#> {weapon}, <#ff0000>Ammo:</#> {ammo}\n Admins will investigate ASAP, please have handcams ready.\n This might be a false-positive, but all violations need to be investigated.",
-                ["Arkan In Rock Violation"] = "<#ff0000>{player}</#> received an Arkan in rock violation.\n<#ff0000>Violation</#>  #{violationNr}, <#ff0000>Weapon:</#> {weapon}, <#ff0000>Ammo:</#> {ammo}\n Admins will investigate ASAP, please have handcams ready.\n This might be a false-positive, but all violations need to be investigated.",
-                ["Player Now Banned"] = "<#ff0000>{player}</#> has been banned\n<#ff0000>Reason: </#> {reason}",
+                ["Arkan No Recoil Violation"] = "[#ff0000]{player}[/#] received an Arkan no recoil violation.\n[#ff0000]Violation[/#] #{violationNr}, [#ff0000]Weapon:[/#] {weapon}, [#ff0000]Ammo:[/#] {ammo}, [#ff0000]Shots count:[/#] {shots}\n Admins will investigate ASAP, please have handcams ready.\n This might be a false-positive, but all violations need to be investigated.",
+                ["Arkan Aimbot Violation"] = "[#ff0000]{player}[/#] received an Arkan aimbot violation.\n[#ff0000]Violation[/#]  #{violationNr}, [#ff0000]Weapon:[/#] {weapon}, [#ff0000]Ammo:[/#] {ammo}\n Admins will investigate ASAP, please have handcams ready.\n This might be a false-positive, but all violations need to be investigated.",
+                ["Arkan In Rock Violation"] = "[#ff0000]{player}[/#] received an Arkan in rock violation.\n[#ff0000]Violation[/#]  #{violationNr}, [#ff0000]Weapon:[/#] {weapon}, [#ff0000]Ammo:[/#] {ammo}\n Admins will investigate ASAP, please have handcams ready.\n This might be a false-positive, but all violations need to be investigated.",
+                ["Player Now Banned"] = "[#ff0000]{player}[/#] has been banned\n[#ff0000]Reason: [/#] {reason}",
                 ["Reason: Bad IP"] = "Bad IP Detected, either due to a VPN/Proxy",
                 ["Player Not Found"] = "Player wasn't found",
                 ["Multiple Players Found"] = "Multiple players found with that name ({players}), please try something more unique like a steamid",
@@ -804,7 +822,7 @@ namespace Oxide.Plugins {
         #endregion
 
         #region Plugins methods
-        string GetChatTag() => "<#008080ff>[Server Armour]: </#>";
+        string GetChatTag() => "[<#008080ff][Server Armour]: [/#]";
         void RegisterTag() {
             if (BetterChat != null && config.BetterChatDirtyPlayerTag != null && config.BetterChatDirtyPlayerTag.Length > 0)
                 BetterChat?.Call("API_RegisterThirdPartyTitle", new object[] { this, new Func<IPlayer, string>(GetTag) });
@@ -941,7 +959,6 @@ namespace Oxide.Plugins {
 #if RUST
         private void API_ArkanOnNoRecoilViolation(BasePlayer player, int NRViolationsNum, string jString) {
             if (jString != null) {
-                Puts("Arkan: " + jString);
                 JObject aObject = JObject.Parse(jString);
 
                 string shotsCnt = aObject.GetValue("ShotsCnt").ToString();
@@ -954,20 +971,20 @@ namespace Oxide.Plugins {
                 _webAddArkan("NR", player.UserIDString, violationProbability, shotsCnt, ammoShortName, weaponShortName, attachments, suspiciousNoRecoilShots);
             }
         }
-#endif
-        /*
+        
         private void API_ArkanOnAimbotViolation(BasePlayer player, int AIMViolationsNum, string json) {
             if (json != null) {
-                Puts("Arkan: " + json);
+                // Puts("Arkan: " + json);
             }
         }
 
         private void API_ArkanOnInRockViolation(BasePlayer player, int IRViolationsNum, string json) {
             if (json != null) {
-                Puts("Arkan: " + json);
+                // Puts("Arkan: " + json);
             }
         }
-        */
+#endif
+
         #endregion
         #endregion
     }
