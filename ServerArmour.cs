@@ -14,7 +14,7 @@ using Time = Oxide.Core.Libraries.Time;
 
 
 namespace Oxide.Plugins {
-    [Info("Server Armour", "Pho3niX90", "0.1.3")]
+    [Info("Server Armour", "Pho3niX90", "0.1.4")]
     [Description("Protect your server! Auto ban known hacker, scripter and griefer accounts, and notify server owners of threats.")]
     class ServerArmour : CovalencePlugin {
 
@@ -656,7 +656,9 @@ namespace Oxide.Plugins {
 
                 DiscordWebhookURL = "https://support.discordapp.com/hc/en-us/articles/228383668-Intro-to-Webhooks",
                 DiscordOnlySendDirtyReports = true,
-                SubmitArkanData = true
+                SubmitArkanData = true,
+
+                OwnerSteamId = ""
             };
         }
 
@@ -713,7 +715,7 @@ namespace Oxide.Plugins {
         }
 
         string ServerGetString(string start) {
-            return start + $"sip={thisServerIp}&sn={config.ServerName}&sp={config.ServerPort}&an={config.ServerAdminName}&ae={config.ServerAdminEmail}&gameId={covalence.ClientAppId}&gameName={covalence.Game}";
+            return start + $"sip={thisServerIp}&sn={config.ServerName}&sp={config.ServerPort}&an={config.ServerAdminName}&ae={config.ServerAdminEmail}&auid={config.OwnerSteamId}&gameId={covalence.ClientAppId}&gameName={covalence.Game}";
         }
 
         bool AssignGroupsAndBan(IPlayer player) {
@@ -950,6 +952,8 @@ namespace Oxide.Plugins {
             public string DiscordWebhookURL;
             public bool DiscordOnlySendDirtyReports;
             public bool SubmitArkanData;
+
+            public string OwnerSteamId;
         }
         #endregion
 
