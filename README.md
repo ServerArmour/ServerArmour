@@ -30,12 +30,10 @@ Please note, this is a BETA plugin, so not all features are available yet. Autob
   "AutoBanCeiling": 1,// Auto ban players with X amount of previous bans.
   "AutoBanGroup": "serverarmour.bans", // the group name that banned users should be added in
   "AutoBanOn": true, // turn auto banning on or off. 
-  "AutoBanReasonKeywords": [
-    "aimbot",
-    "esp"
-  ], // auto ban users that have these keywords in previous ban reasons.
   "AutoBanFamilyShare": false, // Auto ban players that are lending (Family sharing) the game.
   "AutoBanFamilyShareIfDirty": false, // Auto ban players that are lending (Family sharing) the game, and the owner of the game is dirty.
+  "AutoVacBanCeiling": 2,
+  "DissallowVacBanDays": 90, //auto kicks users that have received a vac within these days
   "Debug": false, // never turn on, unless asked to do so by the developer, otherwise your logs will contain tons of messages.
   "ServerAdminEmail": "", // please fill in your main admins email. This is to add a better trust level to your server.
   "ServerAdminName": "", // please fill in your main admins real name. This is to add a better trust level to your server.
@@ -57,7 +55,10 @@ Please note, this is a BETA plugin, so not all features are available yet. Autob
   "AutoBan_Reason_Keyword_Ping": false,
   "AutoBan_Reason_Keyword_Racism": false,
 
-  "AutoKick_BadIp": false // WIll automatically kick a player if they are either using a proxy, vpn or is a bad IP;
+  "AutoKick_BadIp": false // WIll automatically kick a player if they are either using a proxy, vpn or is a bad IP,
+  "DiscordWebhookURL": "https://discordapp.com/api/webhooks/676876445670309898/L_FpOsscfiLl4RCUbZeZOTjkMV7qvGsQDQcLhSEVx12ZHduEf1hy-VXAgcS33ra9i0-s",
+  "DiscordOnlySendDirtyReports": true, // only send payers that have a dirty report to discord
+  "SubmitArkanData": true // submits to server, helps identifying players behaviours, will be usefull when website is online
 }
 ```
 #### Bad IP: 
