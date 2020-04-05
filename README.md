@@ -7,6 +7,10 @@ You can also auto kick users that are on VPN, PROXY or a BAD IP (See more at the
 This tool is a combination of wealth of information regarding players, from their vac ban counts, economy bans, game bans and server bans. It also gives you the family share information, if they are lending, and whom they are lending from, as well if the lender is either vac banned or community banned. 
 
 Please note, this is a BETA plugin, so not all features are available yet. Autobanning is still being tested to make sure all is well, and should be available within a week.
+
+## NOTE!! Version 0.2.0
+You will need to delete you configuration file, as it will be recreated with default values. Keep your old config as a backup if you have custom settings to repopulate new config.
+
 ## Permissions
 ```
 /sa.ban - requires permission serverarmour.ban
@@ -17,8 +21,13 @@ Please note, this is a BETA plugin, so not all features are available yet. Autob
 <optional>
 
 /sa.cp username <force:boolean> - This will show you the ServerArmour report for a specific user, when the force true is added, it will skip checking local cache and update it from the server.
-/sa.ban "username/id" "reason" <days:int> - This will ban a player, please keep reason english for now (this helps with sentiment analysis.)
 /sa.unban "username/id" - unbans a user
+
+/sa.ban "username/id" "reason" - This will ban a player for 1 hour, please keep reason english for now (this helps with sentiment analysis.)
+/sa.ban "username/id" "reason" 1h - This will ban a player for 1 hour, please keep reason english for now (this helps with sentiment analysis.)
+/sa.ban "username/id" "reason" 1d - This will ban a player for 1 day, please keep reason english for now (this helps with sentiment analysis.)
+/sa.ban "username/id" "reason" 1m - This will ban a player for 1 month, please keep reason english for now (this helps with sentiment analysis.)
+/sa.ban "username/id" "reason" 1y - This will ban a player for 1 year, please keep reason english for now (this helps with sentiment analysis.)
 ```
 
 ## Configuration
@@ -26,39 +35,40 @@ Please note, this is a BETA plugin, so not all features are available yet. Autob
 ### Default Configuration
 
 ```json
+
 {
-  "AutoBanCeiling": 1,// Auto ban players with X amount of previous bans.
-  "AutoBanGroup": "serverarmour.bans", // the group name that banned users should be added in
-  "AutoBanOn": true, // turn auto banning on or off. 
-  "AutoBanFamilyShare": false, // Auto ban players that are lending (Family sharing) the game.
-  "AutoBanFamilyShareIfDirty": false, // Auto ban players that are lending (Family sharing) the game, and the owner of the game is dirty.
-  "AutoVacBanCeiling": 2,
-  "DissallowVacBanDays": 90, //auto kicks users that have received a vac within these days
-  "Debug": false, // never turn on, unless asked to do so by the developer, otherwise your logs will contain tons of messages.
-  "ServerAdminEmail": "", // please fill in your main admins email. This is to add a better trust level to your server.
-  "ServerAdminName": "", // please fill in your main admins real name. This is to add a better trust level to your server.
-  "ServerApiKey": "TEST", //leave as is
-  "ServerName": "", // You can change this manually if you like, but will autopopulate each startup
-  "ServerPort": "",  // You can change this manually if you like, but will autopopulate each startup
-  "ServerVersion": "", // You can change this manually if you like, but will autopopulate each startup
-  "WatchlistCeiling": 1, // Auto add players with X amount of previous bans to a watchlist.
-  "WatchlistGroup": "serverarmour.watchlist", // the group name that watched users should be added in
-
+  "API: Admin Email": "", // please fill in your main admins email. This is to add a better trust level to your server.
+  "API: Admin Real Name": "", // please fill in your main admins real name. This is to add a better trust level to your server.
+  "API: Owner Steam64 ID": "",
+  "API: Server Key": "FREE", //leave as is
+  "API: Share details with other server owners": true,
+  "API: Submit Arkan Data": true, // submits to server, helps identifying players behaviours, will be usefull when website is online
+  "Auto Kick": true, // turn auto kicking on or off. 
+  "Auto Kick / Ban Group": "serverarmour.bans", // the group name that banned users should be added in
   // The below options are to ban based on sentiment analysis on previous bans within the reason. Currently ONLY english is supported. please note that autoban above should also be true for this to work. 
-  "AutoBan_Reason_Keyword_Aimbot": false,
-  "AutoBan_Reason_Keyword_Hack": false,
-  "AutoBan_Reason_Keyword_EspHack": false,
-  "AutoBan_Reason_Keyword_Script": false,
-  "AutoBan_Reason_Keyword_Cheat": false,
-  "AutoBan_Reason_Keyword_Toxic": false,
-  "AutoBan_Reason_Keyword_Insult": false,
-  "AutoBan_Reason_Keyword_Ping": false,
-  "AutoBan_Reason_Keyword_Racism": false,
-
-  "AutoKick_BadIp": false // WIll automatically kick a player if they are either using a proxy, vpn or is a bad IP,
-  "DiscordWebhookURL": "https://discordapp.com/api/webhooks/676876445670309898/L_FpOsscfiLl4RCUbZeZOTjkMV7qvGsQDQcLhSEVx12ZHduEf1hy-VXAgcS33ra9i0-s",
-  "DiscordOnlySendDirtyReports": true, // only send payers that have a dirty report to discord
-  "SubmitArkanData": true // submits to server, helps identifying players behaviours, will be usefull when website is online
+  "Auto Kick: Ban: Contains previous Aimbot ban": false,
+  "Auto Kick: Ban: Contains previous Cheat ban": false,
+  "Auto Kick: Ban: Contains previous ESP ban": false,
+  "Auto Kick: Ban: Contains previous Hack ban": false,
+  "Auto Kick: Ban: Contains previous Insult ban": false,
+  "Auto Kick: Ban: Contains previous Ping ban": false,
+  "Auto Kick: Ban: Contains previous Racism ban": false,
+  "Auto Kick: Ban: Contains previous Script ban": false,
+  "Auto Kick: Ban: Contains previous Toxic ban": false,
+  "Auto Kick: Family share accounts": false, // Auto kick players that are lending (Family sharing) the game.
+  "Auto Kick: Family share accounts that are dirty": false, // Auto kick players that are lending (Family sharing) the game, and the owner of the game is dirty.
+  "Auto Kick: Max allowed previous bans": 5,
+  "Auto Kick: Max allowed VAC bans": 2, // Auto kick players with X amount of previous bans.
+  "Auto Kick: Min age of VAC ban allowed": 90, //auto kicks users that have received a vac within these days
+  "Auto Kick: VPN and Proxy": true, // WIll automatically kick a player if they are either using a proxy, vpn or is a bad IP,
+  "Better Chat: Tag for dirty users": "",
+  "Broadcast: New bans": true,
+  "Broadcast: Player Reports": true,
+  "Broadcast: When VAC is younger than": 120,
+  "Debug: Show additional debug console logs": false, // never turn on, unless asked to do so by the developer, otherwise your logs will contain tons of messages.
+  "Discord: Send Player Reports": true,  // only send payers that have a dirty report to discord
+  "Discord: Webhook URL": "https://discordapp.com/api/webhooks/676876445670309898/L_FpOsscfiLl4RCUbZeZOTjkMV7qvGsQDQcLhSEVx12ZHduEf1hy-VXAgcS33ra9i0-s",
+  "Show Protected MSG": true
 }
 ```
 #### Bad IP: 

@@ -132,7 +132,6 @@ namespace Oxide.Plugins {
         void _webCheckPlayer(string name, string id, string address, Boolean connected, string type) {
             string playerName = Uri.EscapeDataString(name);
             string url = $"https://io.serverarmour.com/checkUser?steamid={id}&username={playerName}&ip={address}&t={type}" + ServerGetString();
-
             webrequest.Enqueue(url, null, (code, response) => {
                 if (code != 200 || response == null) {
                     Puts(GetMsg("No Response From API", new Dictionary<string, string> { ["code"] = code.ToString(), ["response"] = response }));
@@ -143,7 +142,15 @@ namespace Oxide.Plugins {
                 isaPlayer.cacheTimestamp = _time.GetUnixTimestamp();
                 isaPlayer.lastConnected = _time.GetUnixTimestamp();
 
+                // add cache for player
+                if (!IsPlayerCached(isaPlayer.steamid)) {
+                    AddPlayerCached(isaPlayer);
+                } else {
+                    UpdatePlayerData(isaPlayer);
+                }
+
                 bool Whitelisted = permission.UserHasGroup(isaPlayer.steamid, config.WhitelistGroup);
+
                 if (!Whitelisted) {
 
                     // lets check bans first
@@ -168,13 +175,6 @@ namespace Oxide.Plugins {
                     }
                 }
 
-                // add cache for player
-                if (!IsPlayerCached(isaPlayer.steamid)) {
-                    AddPlayerCached(isaPlayer);
-                } else {
-                    UpdatePlayerData(isaPlayer);
-                }
-
                 if (!reportSent) {
                     GetPlayerReport(isaPlayer, connected);
                     reportSent = true;
@@ -193,16 +193,6 @@ namespace Oxide.Plugins {
             if (lenderBan != null) KickPlayer(isaPlayer?.steamid, GetMsg("Lender Banned"));
         }
 
-        void _webAddArkan(string type, string userid, string violationProbability, string shotsCnt, string ammoShortName, string weaponShortName, string attachments, string suspiciousNoRecoilShots) {
-            string url = "https://io.serverarmour.com/addArkan";
-            Dictionary<string, string> parameters = new Dictionary<string, string>();
-            webrequest.Enqueue(url + ServerGetString("?"), $"uid={userid}&type={type}&vp={violationProbability}&sc={shotsCnt}&ammo={ammoShortName}&weapon={weaponShortName}&attach={attachments}&snrs={suspiciousNoRecoilShots}", (code, response) => {
-                if (code != 200 || response == null) {
-                    Puts(GetMsg("No Response From API", new Dictionary<string, string> { ["code"] = code.ToString(), ["response"] = response }));
-                    return;
-                }
-            }, this, RequestMethod.POST);
-        }
 
         void AddBan(IPlayer player, ISABan thisBan) {
             DateTime now = DateTime.Now;
@@ -351,7 +341,7 @@ namespace Oxide.Plugins {
                 player.Reply(GetMsg("Player Not Found", new Dictionary<string, string> { ["player"] = playerArg }));
                 return;
             }
-            
+
             GetPlayerReport(playerToCheck, player);
         }
         #endregion
@@ -381,7 +371,7 @@ namespace Oxide.Plugins {
                     dateBanUntil = now.AddDays(digit);
                     break;
                 case "M":
-                    dateBanUntil = now.AddMinutes(digit);
+                    dateBanUntil = now.AddMonths(digit);
                     break;
                 case "Y":
                     dateBanUntil = now.AddYears(digit);
@@ -445,10 +435,10 @@ namespace Oxide.Plugins {
                         IPlayer player = covalence.Players.FindPlayer(usr.steamid.ToString(specifier, culture));
                         AddBan(player, new ISABan {
                             serverName = server.Name,
-                            serverIp = thisServerIp,
+                            serverIp = server.Address.ToString(),
                             reason = usr.notes,
                             date = DateTime.Now.ToString(DATE_FORMAT),
-                            banUntil = (uint)usr.expiry
+                            banUntil = usr.expiry.ToString()
                         });
                     }
 
@@ -599,10 +589,6 @@ namespace Oxide.Plugins {
                 permission.CreateGroup(config.AutoKickGroup, "Server Armour AutoKicks", 0);
             }
 
-            if (!permission.GroupExists(config.WatchlistGroup)) {
-                permission.CreateGroup(config.WatchlistGroup, "Server Armour Watchlist", 0);
-            }
-
             if (!permission.GroupExists(config.WhitelistGroup)) {
                 permission.CreateGroup(config.WhitelistGroup, "Server Armour Whitelist", 0);
             }
@@ -615,35 +601,6 @@ namespace Oxide.Plugins {
         string ServerGetString(string start) {
             return start + $"sip={server.Address}&sn={server.Name}&sp={server.Port}&an={config.ServerAdminName}&ae={config.ServerAdminEmail}&auid={config.OwnerSteamId}&gameId={covalence.ClientAppId}&gameName={covalence.Game}";
         }
-        /*
-                bool AssignGroupsAndBan(IPlayer player) {
-                    try {
-                        ISAPlayer isaPlayer = IsPlayerCached(player.Id) ? GetPlayerCache(player.Id) : null;
-                        if (isaPlayer == null) return false;
-
-                        if (config.AutoKickOn && ShouldBan(isaPlayer)) return ShouldBan(isaPlayer);
-
-
-                        if (config.WatchlistCeiling <= isaPlayer.serverBanCount) {
-
-                        }
-                        ISABan ban = IsBanned(isaPlayer.steamid);
-                        bool isBanned = ban != null;
-                        if (isBanned) {
-                            player.Kick(ban.reason);
-                            Dictionary<string, string> data =
-                               new Dictionary<string, string> {
-                                   ["username"] = isaPlayer.username,
-                                   ["reason"] = GetBanReason(isaPlayer)
-                               };
-                            server.Broadcast(GetMsg("Broadcast Player Banned", data));
-                            return true;
-                        }
-                    } catch (NullReferenceException nre) {
-                        return false;
-                    }
-                    return false;
-                }*/
         #endregion
 
         #region Kicking 
@@ -665,7 +622,8 @@ namespace Oxide.Plugins {
             if (steamid == null || steamid.Equals("0")) return null;
             if (!IsPlayerCached(steamid)) return null;
             try {
-                return GetPlayerCache(steamid)?.serverBanData.First(x => x.serverIp.Equals(server.Address));
+                ISAPlayer isaPlayer = GetPlayerCache(steamid);
+                return isaPlayer?.serverBanData.Count() > 0 ? isaPlayer?.serverBanData?.First(x => x.serverIp.Equals(server.Address.ToString())) : null;
             } catch (InvalidOperationException ioe) {
                 return null;
             }
@@ -683,7 +641,7 @@ namespace Oxide.Plugins {
         }
 
         bool HasReachedVacCeiling(ISAPlayer isaPlayer) {
-            return config.AutoKickOn && (config.AutoVacBanCeiling <= isaPlayer.steamData.NumberOfVACBans || config.AutoKickCeiling < isaPlayer.serverBanCount);
+            return config.AutoKickOn && (config.AutoVacBanCeiling < isaPlayer.steamData.NumberOfVACBans || config.AutoKickCeiling < isaPlayer.serverBanCount);
         }
 
         bool IsFamilyShare(string steamid) {
@@ -856,54 +814,6 @@ namespace Oxide.Plugins {
             public string BansLastCheckUTC { get; set; }
         }
 
-        public class ISAConfig {
-            public int Version;
-            public bool Debug; //should always be false, unless explicitly asked to turn on, will cause performance issue when on.
-            public bool ShowProtectedMsg; // Show the protected by ServerArmour msg?
-            public string AutoKickGroup; // the group name that banned users should be added in
-            public bool AutoKickOn; // turn auto banning on or off. 
-            public int AutoKickCeiling; // Auto ban players with X amount of previous bans.
-            public int AutoVacBanCeiling; //  Auto ban players with X amount of vac bans.
-            public int DissallowVacBanDays; // users who have been vac banned in this amount of days will not be allowed to connect. 
-
-            public bool AutoKickFamilyShare;
-            public bool AutoKickFamilyShareIfDirty;
-
-            public string WatchlistGroup; // the group name that watched users should be added in
-            public int WatchlistCeiling; // Auto add players with X amount of previous bans to a watchlist.
-
-            public string BetterChatDirtyPlayerTag; // tag for players that are dirty.
-            public bool BroadcastPlayerBanReport; // tag for players that are dirty.
-            public int BroadcastPlayerBanReportVacDays; // if a user has a vac ban older than this, then ignore
-
-            public bool BroadcastNewBans; // Broadcast to the entire server when true
-
-            public string ServerName; // never change this, auto fetched
-            public int ServerPort; // never change this, auto fetched
-            public string ServerVersion; // never change this, auto fetched
-            public bool ServerAdminShareDetails; // Default: false - indicates if you want your contact info to be visible to other server admins, and to users that have been auto banned. 
-            public string ServerAdminName; // please fill in your main admins real name. This is to add a better trust level to your server.
-            public string ServerAdminEmail; // please fill in your main admins email. This is to add a better trust level to your server.
-            public string ServerApiKey; // for future reference, leave as is. 
-
-            public bool AutoKick_Reason_Keyword_Aimbot;
-            public bool AutoKick_Reason_Keyword_Hack;
-            public bool AutoKick_Reason_Keyword_EspHack;
-            public bool AutoKick_Reason_Keyword_Script;
-            public bool AutoKick_Reason_Keyword_Cheat;
-            public bool AutoKick_Reason_Keyword_Toxic;
-            public bool AutoKick_Reason_Keyword_Insult;
-            public bool AutoKick_Reason_Keyword_Ping;
-            public bool AutoKick_Reason_Keyword_Racism;
-
-            public bool AutoKick_BadIp;
-
-            public string DiscordWebhookURL;
-            public bool DiscordOnlySendDirtyReports;
-            public bool SubmitArkanData;
-
-            public string OwnerSteamId;
-        }
         #endregion
 
         #region Plugin Classes & Hooks Rust
@@ -921,29 +831,41 @@ namespace Oxide.Plugins {
                 string attachments = String.Join(", ", aObject.GetValue("attachments").Select(jv => (string)jv).ToArray());
                 string suspiciousNoRecoilShots = aObject.GetValue("suspiciousNoRecoilShots").ToString();
 
-                _webAddArkan("NR", player.UserIDString, violationProbability, shotsCnt, ammoShortName, weaponShortName, attachments, suspiciousNoRecoilShots);
-            }
-        }
-        
-        private void API_ArkanOnAimbotViolation(BasePlayer player, int AIMViolationsNum, string json) {
-            if (json != null) {
-                // Puts("Arkan: " + json);
+                Dictionary<string, string> parameters = new Dictionary<string, string>();
+                webrequest.Enqueue("https://io.serverarmour.com/addArkan" + ServerGetString("?"), $"uid={player.UserIDString}&vp={violationProbability}&sc={shotsCnt}&ammo={ammoShortName}&weapon={weaponShortName}&attach={attachments}&snrs={suspiciousNoRecoilShots}", (code, response) => {
+                    if (code != 200 || response == null) {
+                        Puts(GetMsg("No Response From API", new Dictionary<string, string> { ["code"] = code.ToString(), ["response"] = response }));
+                        return;
+                    }
+                }, this, RequestMethod.POST);
             }
         }
 
-        private void API_ArkanOnInRockViolation(BasePlayer player, int IRViolationsNum, string json) {
-            if (json != null) {
-                // Puts("Arkan: " + json);
+        private void API_ArkanOnAimbotViolation(BasePlayer player, int AIMViolationsNum, string jString) {
+            if (jString != null) {
+                JObject aObject = JObject.Parse(jString);
+                string attachments = String.Join(", ", aObject.GetValue("attachments").Select(jv => (string)jv).ToArray());
+                string ammoShortName = aObject.GetValue("ammoShortName").ToString();
+                string weaponShortName = aObject.GetValue("weaponShortName").ToString();
+                string damage = aObject.GetValue("hitsData").ToString();
+                string bodypart = aObject.GetValue("bodyPart").ToString();
+                string hitsData = aObject.GetValue("hitsData").ToString();
+                string hitInfoProjectileDistance = aObject.GetValue("hitInfoProjectileDistance").ToString();
+
+                Dictionary<string, string> parameters = new Dictionary<string, string>();
+                webrequest.Enqueue("https://io.serverarmour.com/addArkan_Aim" + ServerGetString("?"), $"uid={player.UserIDString}&attach={attachments}&ammo={ammoShortName}&weapon={weaponShortName}&dmg={damage}&bp={bodypart}&distance={hitInfoProjectileDistance}&hits={hitsData}", (code, response) => {
+                    if (code != 200 || response == null) {
+                        Puts(GetMsg("No Response From API", new Dictionary<string, string> { ["code"] = code.ToString(), ["response"] = response }));
+                        return;
+                    }
+                }, this, RequestMethod.POST);
+
             }
         }
 #endif
 
         #endregion
         #endregion
-
-
-
-
 
         #region Configuration
 
@@ -954,18 +876,16 @@ namespace Oxide.Plugins {
 
             public string AutoKickGroup = "serverarmour.bans";
             public string WhitelistGroup = "serverarmour.whitelist";
-            public string WatchlistGroup = "serverarmour.watchlist";
 
             public bool AutoKickOn = true;
 
-            public int AutoKickCeiling = 5;
-            public int AutoVacBanCeiling = 2;
+            public int AutoKickCeiling = 3;
+            public int AutoVacBanCeiling = 1;
             public int DissallowVacBanDays = 90;
             public int BroadcastPlayerBanReportVacDays = 120;
 
             public bool AutoKickFamilyShare = false;
             public bool AutoKickFamilyShareIfDirty = false;
-            public int WatchlistCeiling = 1;
             public string BetterChatDirtyPlayerTag = string.Empty;
             public bool BroadcastPlayerBanReport = true;
             public bool BroadcastNewBans = true;
@@ -983,7 +903,7 @@ namespace Oxide.Plugins {
             public bool AutoKick_Reason_Keyword_Insult = false;
             public bool AutoKick_Reason_Keyword_Ping = false;
             public bool AutoKick_Reason_Keyword_Racism = false;
-            public bool AutoKick_BadIp = false;
+            public bool AutoKick_BadIp = true;
 
             public string DiscordWebhookURL = "https://support.discordapp.com/hc/en-us/articles/228383668-Intro-to-Webhooks";
             public bool DiscordOnlySendDirtyReports = true;
@@ -998,39 +918,41 @@ namespace Oxide.Plugins {
                 /**
                  * Load all saved config values
                  * */
-                GetConfig(ref Debug, "");
-                GetConfig(ref ShowProtectedMsg, "");
-                GetConfig(ref AutoKickGroup, "");
-                GetConfig(ref AutoKickOn, "");
-                GetConfig(ref AutoKickCeiling, "");
-                GetConfig(ref AutoVacBanCeiling, "");
-                GetConfig(ref DissallowVacBanDays, "");
-                GetConfig(ref AutoKickFamilyShare, "");
-                GetConfig(ref AutoKickFamilyShareIfDirty, "");
-                GetConfig(ref WatchlistGroup, "");
-                GetConfig(ref WatchlistCeiling, "");
-                GetConfig(ref BetterChatDirtyPlayerTag, "");
-                GetConfig(ref BroadcastPlayerBanReport, "");
-                GetConfig(ref BroadcastPlayerBanReportVacDays, "");
-                GetConfig(ref BroadcastNewBans, "");
-                GetConfig(ref ServerAdminShareDetails, "");
-                GetConfig(ref ServerAdminName, "");
-                GetConfig(ref ServerAdminEmail, "");
-                GetConfig(ref ServerApiKey, "");
-                GetConfig(ref AutoKick_Reason_Keyword_Aimbot, "");
-                GetConfig(ref AutoKick_Reason_Keyword_Hack, "");
-                GetConfig(ref AutoKick_Reason_Keyword_EspHack, "");
-                GetConfig(ref AutoKick_Reason_Keyword_Script, "");
-                GetConfig(ref AutoKick_Reason_Keyword_Cheat, "");
-                GetConfig(ref AutoKick_Reason_Keyword_Toxic, "");
-                GetConfig(ref AutoKick_Reason_Keyword_Insult, "");
-                GetConfig(ref AutoKick_Reason_Keyword_Ping, "");
-                GetConfig(ref AutoKick_Reason_Keyword_Racism, "");
-                GetConfig(ref AutoKick_BadIp, "");
-                GetConfig(ref DiscordWebhookURL, "");
-                GetConfig(ref DiscordOnlySendDirtyReports, "");
-                GetConfig(ref SubmitArkanData, "");
-                GetConfig(ref OwnerSteamId, "");
+                GetConfig(ref Debug, "Debug: Show additional debug console logs");
+
+                GetConfig(ref ShowProtectedMsg, "Show Protected MSG");
+                GetConfig(ref BetterChatDirtyPlayerTag, "Better Chat: Tag for dirty users");
+                GetConfig(ref BroadcastPlayerBanReport, "Broadcast: Player Reports");
+                GetConfig(ref BroadcastPlayerBanReportVacDays, "Broadcast: When VAC is younger than");
+                GetConfig(ref BroadcastNewBans, "Broadcast: New bans");
+
+                GetConfig(ref ServerAdminShareDetails, "API: Share details with other server owners");
+                GetConfig(ref ServerAdminName, "API: Admin Real Name");
+                GetConfig(ref ServerAdminEmail, "API: Admin Email");
+                GetConfig(ref ServerApiKey, "API: Server Key");
+                GetConfig(ref SubmitArkanData, "API: Submit Arkan Data");
+                GetConfig(ref OwnerSteamId, "API: Owner Steam64 ID");
+
+                GetConfig(ref AutoKickGroup, "Auto Kick / Ban Group");
+                GetConfig(ref AutoKickOn, "Auto Kick");
+                GetConfig(ref AutoKickCeiling, "Auto Kick: Max allowed previous bans");
+                GetConfig(ref AutoVacBanCeiling, "Auto Kick: Max allowed VAC bans");
+                GetConfig(ref DissallowVacBanDays, "Auto Kick: Min age of VAC ban allowed");
+                GetConfig(ref AutoKickFamilyShare, "Auto Kick: Family share accounts");
+                GetConfig(ref AutoKickFamilyShareIfDirty, "Auto Kick: Family share accounts that are dirty");
+                GetConfig(ref AutoKick_Reason_Keyword_Aimbot, "Auto Kick: Ban: Contains previous Aimbot ban");
+                GetConfig(ref AutoKick_Reason_Keyword_Hack, "Auto Kick: Ban: Contains previous Hack ban");
+                GetConfig(ref AutoKick_Reason_Keyword_EspHack, "Auto Kick: Ban: Contains previous ESP ban");
+                GetConfig(ref AutoKick_Reason_Keyword_Script, "Auto Kick: Ban: Contains previous Script ban");
+                GetConfig(ref AutoKick_Reason_Keyword_Cheat, "Auto Kick: Ban: Contains previous Cheat ban");
+                GetConfig(ref AutoKick_Reason_Keyword_Toxic, "Auto Kick: Ban: Contains previous Toxic ban");
+                GetConfig(ref AutoKick_Reason_Keyword_Insult, "Auto Kick: Ban: Contains previous Insult ban");
+                GetConfig(ref AutoKick_Reason_Keyword_Ping, "Auto Kick: Ban: Contains previous Ping ban");
+                GetConfig(ref AutoKick_Reason_Keyword_Racism, "Auto Kick: Ban: Contains previous Racism ban");
+                GetConfig(ref AutoKick_BadIp, "Auto Kick: VPN and Proxy");
+
+                GetConfig(ref DiscordWebhookURL, "Discord: Webhook URL");
+                GetConfig(ref DiscordOnlySendDirtyReports, "Discord: Send Player Reports");
 
                 plugin.SaveConfig();
             }
