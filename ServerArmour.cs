@@ -14,7 +14,7 @@ using Time = Oxide.Core.Libraries.Time;
 
 
 namespace Oxide.Plugins {
-    [Info("Server Armour", "Pho3niX90", "0.2.1")]
+    [Info("Server Armour", "Pho3niX90", "0.2.2")]
     [Description("Protect your server! Auto ban known hacker, scripter and griefer accounts, and notify server owners of threats.")]
     class ServerArmour : CovalencePlugin {
 
@@ -312,7 +312,7 @@ namespace Oxide.Plugins {
 
             DateTime now = DateTime.Now;
             string dateTime = now.ToString(DATE_FORMAT);
-            string dateBanUntil = _BanUntil(args[2]).ToString(DATE_FORMAT);
+            string dateBanUntil = _BanUntil(lengthOfBan).ToString(DATE_FORMAT);
 
             if (BanPlayer(iPlayer,
                 new ISABan {
