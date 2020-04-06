@@ -14,6 +14,7 @@ You will need to delete you configuration file, as it will be recreated with def
 ## Permissions
 ```
 /sa.ban - requires permission serverarmour.ban
+/sa.unban - requires permission serverarmour.unban
 ```
 
 ## Commands
