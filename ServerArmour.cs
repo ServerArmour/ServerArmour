@@ -14,7 +14,7 @@ using Time = Oxide.Core.Libraries.Time;
 
 
 namespace Oxide.Plugins {
-    [Info("Server Armour", "Pho3niX90", "0.2.0")]
+    [Info("Server Armour", "Pho3niX90", "0.2.1")]
     [Description("Protect your server! Auto ban known hacker, scripter and griefer accounts, and notify server owners of threats.")]
     class ServerArmour : CovalencePlugin {
 
@@ -125,7 +125,7 @@ namespace Oxide.Plugins {
         bool reportSent = false;
 
         void GetPlayerBans(IPlayer player, bool reCache = false, string type = "C") {
-            KickIfBanned(GetPlayerCache(player.Id));
+            if (type == "C") KickIfBanned(GetPlayerCache(player.Id));
             _webCheckPlayer(player.Name, player.Id, player.Address, player.IsConnected, type);
         }
 
