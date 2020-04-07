@@ -69,7 +69,7 @@ You will need to delete you configuration file, as it will be recreated with def
   "Broadcast: When VAC is younger than": 120,
   "Debug: Show additional debug console logs": false, // never turn on, unless asked to do so by the developer, otherwise your logs will contain tons of messages.
   "Discord: Send Player Reports": true,  // only send payers that have a dirty report to discord
-  "Discord: Webhook URL": "https://discordapp.com/api/webhooks/676876445670309898/L_FpOsscfiLl4RCUbZeZOTjkMV7qvGsQDQcLhSEVx12ZHduEf1hy-VXAgcS33ra9i0-s",
+  "Discord: Webhook URL": "https://support.discordapp.com/hc/en-us/articles/228383668-Intro-to-Webhooks",
   "Show Protected MSG": true
 }
 ```
