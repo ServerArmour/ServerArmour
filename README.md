@@ -62,6 +62,7 @@ You will need to delete you configuration file, as it will be recreated with def
   "Auto Kick: Max allowed VAC bans": 2, // Auto kick players with X amount of previous bans.
   "Auto Kick: Min age of VAC ban allowed": 90, //auto kicks users that have received a vac within these days
   "Auto Kick: VPN and Proxy": true, // WIll automatically kick a player if they are either using a proxy, vpn or is a bad IP,
+  "Auto Kick: VPN and Proxy: Sensitivity": 1.0, //How sensitive it should be, max 1. Value of 1.0 will only kick known vpns and proxies, a value of 0.98 will kick all suspected vpns, proxies, and spamming ips
   "Better Chat: Tag for dirty users": "",
   "Broadcast: New bans": true,
   "Broadcast: Player Reports": true,
