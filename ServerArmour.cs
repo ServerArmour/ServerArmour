@@ -615,7 +615,7 @@ namespace Oxide.Plugins {
         }
 
         bool IsVpn(ISAPlayer isaPlayer) {
-            return (config.AutoKick_BadIp && isaPlayer.ipRating > 0.98);
+            return (config.AutoKick_BadIp && isaPlayer.ipRating >= config.AutoKick_BadIp_Sensitivity);
         }
 
         ISABan IsBanned(string steamid) {
@@ -904,6 +904,7 @@ namespace Oxide.Plugins {
             public bool AutoKick_Reason_Keyword_Ping = false;
             public bool AutoKick_Reason_Keyword_Racism = false;
             public bool AutoKick_BadIp = true;
+            public double AutoKick_BadIp_Sensitivity = 1.0;
 
             public string DiscordWebhookURL = "https://support.discordapp.com/hc/en-us/articles/228383668-Intro-to-Webhooks";
             public bool DiscordOnlySendDirtyReports = true;
@@ -950,6 +951,7 @@ namespace Oxide.Plugins {
                 GetConfig(ref AutoKick_Reason_Keyword_Ping, "Auto Kick: Ban: Contains previous Ping ban");
                 GetConfig(ref AutoKick_Reason_Keyword_Racism, "Auto Kick: Ban: Contains previous Racism ban");
                 GetConfig(ref AutoKick_BadIp, "Auto Kick: VPN and Proxy");
+                GetConfig(ref AutoKick_BadIp_Sensitivity, "Auto Kick: VPN and Proxy: Sensitivity");
 
                 GetConfig(ref DiscordWebhookURL, "Discord: Webhook URL");
                 GetConfig(ref DiscordOnlySendDirtyReports, "Discord: Send Player Reports");
