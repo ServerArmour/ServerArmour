@@ -44,8 +44,8 @@ namespace Oxide.Plugins {
         [PluginReference] Plugin BetterChat;
         [PluginReference] Plugin DiscordMessages;
         [PluginReference] Plugin Arkan;
-        [PluginReference] Plugin Ember; //TODO add support
-        [PluginReference] Plugin EnhancedBanSystem; //TODO add support
+        // [PluginReference] Plugin Ember; //TODO add support
+        // [PluginReference] Plugin EnhancedBanSystem; //TODO add support
 
         void DiscordSend(ISAPlayer iPlayer, string report) {
             DiscordSend(players.FindPlayer(iPlayer.steamid), new EmbedFieldList() {
@@ -62,14 +62,14 @@ namespace Oxide.Plugins {
             if (config.DiscordQuickConnect) {
                 fields.Add(new EmbedFieldList() {
                     name = server.Name,
-                    value = $"[{server.Address}:{server.Port}](steam://connect/{server.Address}:{server.Port})",
+                    value = $"[steam://connect/{server.Address}:{server.Port}](steam://connect/{server.Address}:{server.Port})",
                     inline = true
                 });
             }
             fields.Add(new EmbedFieldList() {
                 name = "Player ",
                 value = $"[{iPlayer.Name}\n{iPlayer.Id}](https://steamcommunity.com/profiles/{iPlayer.Id})",
-                inline = true
+                inline = !config.DiscordQuickConnect
             });
 
             fields.Add(report);
