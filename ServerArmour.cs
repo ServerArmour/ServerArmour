@@ -14,7 +14,7 @@ using Time = Oxide.Core.Libraries.Time;
 
 
 namespace Oxide.Plugins {
-    [Info("Server Armour", "Pho3niX90", "0.2.2")]
+    [Info("Server Armour", "Pho3niX90", "0.2.3")]
     [Description("Protect your server! Auto ban known hacker, scripter and griefer accounts, and notify server owners of threats.")]
     class ServerArmour : CovalencePlugin {
 
@@ -32,6 +32,11 @@ namespace Oxide.Plugins {
         #region Permissions
         const string PermissionToBan = "serverarmour.ban";
         const string PermissionToUnBan = "serverarmour.unban";
+        const string PermissionWhitelistRecentVacKick = "serverarmour.whitelist.recentvac";
+        const string PermissionWhitelistBadIPKick = "serverarmour.whitelist.badip";
+        const string PermissionWhitelistKeywordKick = "serverarmour.whitelist.keyword";
+        const string PermissionWhitelistVacCeilingKick = "serverarmour.whitelist.vacceiling";
+        const string PermissionWhitelistServerCeilingKick = "serverarmour.whitelist.banceiling";
         #endregion
         #endregion
 
@@ -42,31 +47,36 @@ namespace Oxide.Plugins {
         [PluginReference] Plugin Ember; //TODO add support
         [PluginReference] Plugin EnhancedBanSystem; //TODO add support
 
-        void DiscordSend(ISAPlayer iPlayer, string report, int type = 1) {
-            DiscordSend(players.FindPlayer(iPlayer.steamid), type, report);
+        void DiscordSend(ISAPlayer iPlayer, string report) {
+            DiscordSend(players.FindPlayer(iPlayer.steamid), new EmbedFieldList() {
+                name = "Report",
+                value = report,
+                inline = true
+            });
         }
 
-        void DiscordSend(IPlayer iPlayer, int type = 1, string report = null) {
+        void DiscordSend(IPlayer iPlayer, EmbedFieldList report, int color = 39423) {
             if (config.DiscordWebhookURL.Length == 0 && !config.DiscordWebhookURL.Equals("https://support.discordapp.com/hc/en-us/articles/228383668-Intro-to-Webhooks")) { Puts("Discord webhook not setup."); return; }
-            if (type == 1) {
-                List<EmbedFieldList> fields = new List<EmbedFieldList>();
 
-                string playerReport = $"[{iPlayer.Name}\n{iPlayer.Id}](https://steamcommunity.com/profiles/{iPlayer.Id})";
+            List<EmbedFieldList> fields = new List<EmbedFieldList>();
+            if (config.DiscordQuickConnect) {
                 fields.Add(new EmbedFieldList() {
-                    name = "Player ",
-                    value = playerReport,
+                    name = server.Name,
+                    value = $"[{server.Address}:{server.Port}](steam://connect/{server.Address}:{server.Port})",
                     inline = true
                 });
-                if (report != null)
-                    fields.Add(new EmbedFieldList() {
-                        name = "Report ",
-                        value = report,
-                        inline = true
-                    });
-                var fieldsObject = fields.Cast<object>().ToArray();
-                string json = JsonConvert.SerializeObject(fieldsObject);
-                DiscordMessages?.Call("API_SendFancyMessage", config.DiscordWebhookURL, "Server Armour Report: ", 39423, json);
             }
+            fields.Add(new EmbedFieldList() {
+                name = "Player ",
+                value = $"[{iPlayer.Name}\n{iPlayer.Id}](https://steamcommunity.com/profiles/{iPlayer.Id})",
+                inline = true
+            });
+
+            fields.Add(report);
+            var fieldsObject = fields.Cast<object>().ToArray();
+            string json = JsonConvert.SerializeObject(fieldsObject);
+            DiscordMessages?.Call("API_SendFancyMessage", config.DiscordWebhookURL, "Server Armour Report: ", color, json);
+
         }
 
         #endregion
@@ -82,6 +92,12 @@ namespace Oxide.Plugins {
             CheckGroups();
             permission.RegisterPermission(PermissionToBan, this);
             permission.RegisterPermission(PermissionToUnBan, this);
+
+            permission.RegisterPermission(PermissionWhitelistBadIPKick, this);
+            permission.RegisterPermission(PermissionWhitelistKeywordKick, this);
+            permission.RegisterPermission(PermissionWhitelistRecentVacKick, this);
+            permission.RegisterPermission(PermissionWhitelistServerCeilingKick, this);
+            permission.RegisterPermission(PermissionWhitelistVacCeilingKick, this);
         }
 
         void OnServerInitialized() {
@@ -132,12 +148,13 @@ namespace Oxide.Plugins {
         void _webCheckPlayer(string name, string id, string address, Boolean connected, string type) {
             string playerName = Uri.EscapeDataString(name);
             string url = $"https://io.serverarmour.com/checkUser?steamid={id}&username={playerName}&ip={address}&t={type}" + ServerGetString();
+            //Puts(url);
             webrequest.Enqueue(url, null, (code, response) => {
                 if (code != 200 || response == null) {
                     Puts(GetMsg("No Response From API", new Dictionary<string, string> { ["code"] = code.ToString(), ["response"] = response }));
                     return;
                 }
-
+                //Puts(response.ToString());
                 ISAPlayer isaPlayer = JsonConvert.DeserializeObject<ISAPlayer>(response);
                 isaPlayer.cacheTimestamp = _time.GetUnixTimestamp();
                 isaPlayer.lastConnected = _time.GetUnixTimestamp();
@@ -148,39 +165,38 @@ namespace Oxide.Plugins {
                 } else {
                     UpdatePlayerData(isaPlayer);
                 }
+                // lets check bans first
+                KickIfBanned(isaPlayer);
 
-                bool Whitelisted = permission.UserHasGroup(isaPlayer.steamid, config.WhitelistGroup);
-
-                if (!Whitelisted) {
-
-                    // lets check bans first
-                    KickIfBanned(isaPlayer);
-
-                    // now lets check for a recent vac
-                    if (config.AutoKickOn && HasRecentVac(isaPlayer?.steamid)) {
-                        int vacLast = GetPlayerCache(isaPlayer?.steamid).steamData.DaysSinceLastBan;
-                        int until = config.DissallowVacBanDays - vacLast;
-                        string msg = GetMsg("Reason: VAC Ban Too Fresh", new Dictionary<string, string> { ["daysago"] = vacLast.ToString(), ["daysto"] = until.ToString() });
-                        KickPlayer(isaPlayer?.steamid, msg);
-                    }
-
-                    // lets check if this user is using VPN
-                    if (config.AutoKickOn && config.AutoKick_BadIp && IsVpn(isaPlayer)) {
-                        KickPlayer(isaPlayer?.steamid, GetMsg("Reason: Bad IP"));
-                    }
-
-                    // does the user contain a keyword ban
-                    if (HasKeywordBan(isaPlayer)) {
-                        KickPlayer(isaPlayer?.steamid, GetMsg("Keyword Kick"));
-                    }
+                // now lets check for a recent vac
+                if (config.AutoKickOn && !HasPermission(isaPlayer.steamid, PermissionWhitelistRecentVacKick) && HasRecentVac(isaPlayer?.steamid)) {
+                    int vacLast = GetPlayerCache(isaPlayer?.steamid).steamData.DaysSinceLastBan;
+                    int until = config.DissallowVacBanDays - vacLast;
+                    string msg = GetMsg("Reason: VAC Ban Too Fresh", new Dictionary<string, string> { ["daysago"] = vacLast.ToString(), ["daysto"] = until.ToString() });
+                    KickPlayer(isaPlayer?.steamid, msg);
                 }
 
-                if (!reportSent) {
-                    GetPlayerReport(isaPlayer, connected);
-                    reportSent = true;
+                // lets check if this user is using VPN
+                if (config.AutoKickOn && !HasPermission(isaPlayer.steamid, PermissionWhitelistBadIPKick) && config.AutoKick_BadIp && IsVpn(isaPlayer)) {
+                    KickPlayer(isaPlayer?.steamid, GetMsg("Reason: Bad IP"));
                 }
 
+                // does the user contain a keyword ban
+                if (!HasPermission(isaPlayer.steamid, PermissionWhitelistKeywordKick) && HasKeywordBan(isaPlayer)) {
+                    KickPlayer(isaPlayer?.steamid, GetMsg("Keyword Kick"));
+                }
 
+                // Kick players with too many VACs
+                if (!HasPermission(isaPlayer.steamid, PermissionWhitelistVacCeilingKick) && HasReachedVacCeiling(isaPlayer)) {
+                    KickPlayer(isaPlayer?.steamid, GetMsg("VAC Ceiling Kick"));
+                }
+
+                // Kick players with too many bans
+                if (!HasPermission(isaPlayer.steamid, PermissionWhitelistServerCeilingKick) && HasReachedServerCeiling(isaPlayer)) {
+                    KickPlayer(isaPlayer?.steamid, GetMsg("Too Many Previous Bans"));
+                }
+
+                GetPlayerReport(isaPlayer, connected);
             }, this, RequestMethod.GET);
         }
 
@@ -198,6 +214,7 @@ namespace Oxide.Plugins {
             DateTime now = DateTime.Now;
 
             string url = $"https://io.serverarmour.com/addBan?steamid={player.Id}&username={player.Name}&ip={player.Address}&reason={thisBan.reason}&dateTime={thisBan.date}&dateUntil={thisBan.banUntil}" + ServerGetString();
+
             webrequest.Enqueue(url, null, (code, response) => {
                 if (code != 200 || response == null) { Puts(GetMsg("No Response From API", new Dictionary<string, string> { ["code"] = code.ToString(), ["response"] = response })); return; }
                 // ISABan thisBan = new ISABan { serverName = server.Name, date = dateTime, reason = banreason, serverIp = thisServerIp, banUntil = dateBanUntil };
@@ -235,7 +252,7 @@ namespace Oxide.Plugins {
         [Command("unban", "playerunban", "sa.unban")]
         void SCmdUnban(IPlayer player, string command, string[] args) {
             LogDebug("Will now unban");
-            if (!HasPermission(player, PermissionToUnBan)) {
+            if (!HasPermission(player.Id, PermissionToUnBan)) {
                 player.Reply(GetMsg("NoPermission"));
                 return;
             }
@@ -258,7 +275,7 @@ namespace Oxide.Plugins {
         [Command("ban", "playerban", "sa.ban")]
         void SCmdBan(IPlayer player, string command, string[] args) {
 
-            if (!HasPermission(player, PermissionToBan)) {
+            if (!HasPermission(player.Id, PermissionToBan)) {
                 player.Reply(GetMsg("NoPermission"));
                 return;
             }
@@ -322,8 +339,20 @@ namespace Oxide.Plugins {
                     date = dateTime,
                     banUntil = dateBanUntil
                 })) {
+                string msg;
 
-                string msg = GetMsg("Player Now Banned", new Dictionary<string, string> { ["player"] = iPlayer.Name, ["reason"] = args[1] });
+                //msg = GetMsg("Player Now Banned", new Dictionary<string, string> { ["player"] = iPlayer.Name, ["reason"] = args[1] });
+
+                msg = GetMsg("Player Now Banned Perma", new Dictionary<string, string> { ["player"] = iPlayer.Name, ["reason"] = args[1], ["length"] = BanFor(lengthOfBan) });
+
+                if (config.DiscordBanReport) {
+                    DiscordSend(iPlayer, new EmbedFieldList() {
+                        name = "Player Banned",
+                        value = msg,
+                        inline = true
+                    }, 13459797);
+                }
+
                 if (config.BroadcastNewBans) {
                     server.Broadcast(msg);
                 } else {
@@ -378,6 +407,37 @@ namespace Oxide.Plugins {
                     break;
                 default:
                     dateBanUntil = now.AddDays(digit);
+                    break;
+            }
+            return dateBanUntil;
+        }
+        string BanFor(string banLength) {
+            int digit = int.Parse(new string(banLength.Where(char.IsDigit).ToArray()));
+            string del = new string(banLength.Where(char.IsLetter).ToArray());
+
+
+            DateTime now = DateTime.Now;
+            string dateTime = now.ToString(DATE_FORMAT);
+            string dateBanUntil;
+
+            switch (del.ToUpper()) {
+                case "MI":
+                    dateBanUntil = digit + " Minutes";
+                    break;
+                case "H":
+                    dateBanUntil = digit + " Hours";
+                    break;
+                case "D":
+                    dateBanUntil = digit + " Days";
+                    break;
+                case "M":
+                    dateBanUntil = digit + " Months";
+                    break;
+                case "Y":
+                    dateBanUntil = digit + " Years";
+                    break;
+                default:
+                    dateBanUntil = digit + " Days";
                     break;
             }
             return dateBanUntil;
@@ -522,7 +582,6 @@ namespace Oxide.Plugins {
                 if (isCommand) {
                     cmdPlayer.Reply(report.Replace(isaPlayer.steamid + ":", string.Empty).Replace(isaPlayer.steamid, string.Empty));
                 }
-                //Puts(report);
             }
 
             if ((config.DiscordOnlySendDirtyReports && IsPlayerDirty(isaPlayer.steamid)) || !config.DiscordOnlySendDirtyReports)
@@ -588,10 +647,6 @@ namespace Oxide.Plugins {
             if (!permission.GroupExists(config.AutoKickGroup)) {
                 permission.CreateGroup(config.AutoKickGroup, "Server Armour AutoKicks", 0);
             }
-
-            if (!permission.GroupExists(config.WhitelistGroup)) {
-                permission.CreateGroup(config.WhitelistGroup, "Server Armour Whitelist", 0);
-            }
         }
 
         string ServerGetString() {
@@ -607,6 +662,13 @@ namespace Oxide.Plugins {
 
         void KickPlayer(string steamid, string reason) {
             IPlayer player = players.FindPlayerById(steamid);
+            if (config.DiscordKickReport) { 
+                DiscordSend(player, new EmbedFieldList() {
+                    name = "Player Kicked",
+                    value = reason,
+                    inline = true
+                }, 13459797);
+            }
             if (player.IsConnected) player?.Kick(reason);
         }
 
@@ -641,7 +703,11 @@ namespace Oxide.Plugins {
         }
 
         bool HasReachedVacCeiling(ISAPlayer isaPlayer) {
-            return config.AutoKickOn && (config.AutoVacBanCeiling < isaPlayer.steamData.NumberOfVACBans || config.AutoKickCeiling < isaPlayer.serverBanCount);
+            return config.AutoKickOn && config.AutoVacBanCeiling < isaPlayer.steamData.NumberOfVACBans;
+        }
+
+        bool HasReachedServerCeiling(ISAPlayer isaPlayer) {
+            return config.AutoKickOn && config.AutoKickCeiling < isaPlayer.serverBanCount;
         }
 
         bool IsFamilyShare(string steamid) {
@@ -701,6 +767,7 @@ namespace Oxide.Plugins {
                 ["Arkan Aimbot Violation"] = "[#ff0000]{player}[/#] received an Arkan aimbot violation.\n[#ff0000]Violation[/#]  #{violationNr}, [#ff0000]Weapon:[/#] {weapon}, [#ff0000]Ammo:[/#] {ammo}\n Admins will investigate ASAP, please have handcams ready.\n This might be a false-positive, but all violations need to be investigated.",
                 ["Arkan In Rock Violation"] = "[#ff0000]{player}[/#] received an Arkan in rock violation.\n[#ff0000]Violation[/#]  #{violationNr}, [#ff0000]Weapon:[/#] {weapon}, [#ff0000]Ammo:[/#] {ammo}\n Admins will investigate ASAP, please have handcams ready.\n This might be a false-positive, but all violations need to be investigated.",
                 ["Player Now Banned"] = "[#ff0000]{player}[/#] has been banned\n[#ff0000]Reason: [/#] {reason}",
+                ["Player Now Banned Perma"] = "[#ff0000]{player}[/#] has been banned\n[#ff0000]Reason:[/#] {reason}\n[#ff0000]Length:[/#] {length}",
                 ["Reason: Bad IP"] = "Bad IP Detected, either due to a VPN/Proxy",
                 ["Player Not Found"] = "Player wasn't found",
                 ["Multiple Players Found"] = "Multiple players found with that name ({players}), please try something more unique like a steamid",
@@ -711,13 +778,14 @@ namespace Oxide.Plugins {
                 ["Broadcast Player Banned"] = "{tag} {username} wasn't allowed to connect\nReason: {reason}",
                 ["Reason: VAC Ban Too Fresh"] = "VAC ban received {daysago}, wait another {daysto}",
                 ["Lender Banned"] = "The lender account contained a ban",
-                ["Keyword Kick"] = "Due to your past behaviour on other servers, you aren't allowed in."
-            }, this);
+                ["Keyword Kick"] = "Due to your past behaviour on other servers, you aren't allowed in.",
+                ["Too Many Previous Bans"] = "You have too many previous bans (other servers included).",
+                ["VAC Ceiling Kick"] = "You have too many VAC bans."
+            }, this, "en");
         }
 
-        bool HasPermission(IPlayer player, string permissionName) {
-            if (player.IsAdmin) return true;
-            return permission.UserHasPermission(player.Id, permissionName);
+        bool HasPermission(string steamid, string permissionName) {
+            return permission.UserHasPermission(steamid, permissionName);
         }
         #endregion
 
@@ -742,10 +810,12 @@ namespace Oxide.Plugins {
         private static uint ConvertToTimestamp(string value) {
             return ConvertToTimestamp(ConverToDateTime(value));
         }
+
         private static uint ConvertToTimestamp(DateTime value) {
             TimeSpan elapsedTime = value - Epoch;
             return (uint)elapsedTime.TotalSeconds;
         }
+
         private static DateTime ConverToDateTime(string stringDate) {
             return DateTime.ParseExact(stringDate, DATE_FORMAT, null);
         }
@@ -875,7 +945,6 @@ namespace Oxide.Plugins {
             public bool ShowProtectedMsg = true;
 
             public string AutoKickGroup = "serverarmour.bans";
-            public string WhitelistGroup = "serverarmour.whitelist";
 
             public bool AutoKickOn = true;
 
@@ -907,7 +976,10 @@ namespace Oxide.Plugins {
             public double AutoKick_BadIp_Sensitivity = 1.0;
 
             public string DiscordWebhookURL = "https://support.discordapp.com/hc/en-us/articles/228383668-Intro-to-Webhooks";
+            public bool DiscordQuickConnect = true;
             public bool DiscordOnlySendDirtyReports = true;
+            public bool DiscordKickReport = true;
+            public bool DiscordBanReport = true;
             public bool SubmitArkanData = true;
 
             public string OwnerSteamId = "";
@@ -954,7 +1026,10 @@ namespace Oxide.Plugins {
                 GetConfig(ref AutoKick_BadIp_Sensitivity, "Auto Kick: VPN and Proxy: Sensitivity");
 
                 GetConfig(ref DiscordWebhookURL, "Discord: Webhook URL");
+                GetConfig(ref DiscordQuickConnect, "Discord: Show Quick Connect On report");
                 GetConfig(ref DiscordOnlySendDirtyReports, "Discord: Send Player Reports");
+                GetConfig(ref DiscordKickReport, "Discord: Send Kick Report");
+                GetConfig(ref DiscordBanReport, "Discord: Send Ban Report");
 
                 plugin.SaveConfig();
             }
