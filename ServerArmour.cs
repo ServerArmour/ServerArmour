@@ -14,7 +14,7 @@ using Time = Oxide.Core.Libraries.Time;
 
 
 namespace Oxide.Plugins {
-    [Info("Server Armour", "Pho3niX90", "0.2.3")]
+    [Info("Server Armour", "Pho3niX90", "0.2.4")]
     [Description("Protect your server! Auto ban known hacker, scripter and griefer accounts, and notify server owners of threats.")]
     class ServerArmour : CovalencePlugin {
 
@@ -205,8 +205,8 @@ namespace Oxide.Plugins {
 
             ISABan lenderBan = IsBanned(isaPlayer?.lendersteamid);
             ISABan ban = IsBanned(isaPlayer?.steamid);
-            if (ban != null) KickPlayer(isaPlayer?.steamid, ban.reason);
-            if (lenderBan != null) KickPlayer(isaPlayer?.steamid, GetMsg("Lender Banned"));
+            if (ban != null) KickPlayer(isaPlayer?.steamid, ban.reason, "C");
+            if (lenderBan != null) KickPlayer(isaPlayer?.steamid, GetMsg("Lender Banned"), "C");
         }
 
 
@@ -457,7 +457,7 @@ namespace Oxide.Plugins {
 
         bool BanPlayer(IPlayer iPlayer, ISABan ban) {
             AddBan(iPlayer, ban);
-            KickPlayer(iPlayer.Id, ban.reason);
+            KickPlayer(iPlayer.Id, ban.reason, "U");
             return true;
         }
         #endregion
