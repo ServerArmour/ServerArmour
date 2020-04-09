@@ -670,6 +670,9 @@ namespace Oxide.Plugins {
                 }, 13459797);
             }
             if (player.IsConnected) player?.Kick(reason);
+            if (config.BroadcastNewBans) {
+                server.Broadcast(GetMsg("Player Kicked", new Dictionary<string, string> { ["player"] = player.Name, ["reason"] = reason }));
+            }
         }
 
         bool ContainsMyBan(string steamid) {
@@ -776,11 +779,12 @@ namespace Oxide.Plugins {
                 ["No Response From API"] = "Couldn't get an answer from ServerArmour.com! Error: {code} {response}",
                 ["Player Not Banned"] = "Player not banned",
                 ["Broadcast Player Banned"] = "{tag} {username} wasn't allowed to connect\nReason: {reason}",
-                ["Reason: VAC Ban Too Fresh"] = "VAC ban received {daysago}, wait another {daysto}",
+                ["Reason: VAC Ban Too Fresh"] = "VAC ban received {daysago} days ago, wait another {daysto} days",
                 ["Lender Banned"] = "The lender account contained a ban",
                 ["Keyword Kick"] = "Due to your past behaviour on other servers, you aren't allowed in.",
                 ["Too Many Previous Bans"] = "You have too many previous bans (other servers included).",
-                ["VAC Ceiling Kick"] = "You have too many VAC bans."
+                ["VAC Ceiling Kick"] = "You have too many VAC bans.",
+                ["Player Kicked"] = "[#ff0000]{player} Kicked[/#] - Reason\n{reason}"
             }, this, "en");
         }
 
