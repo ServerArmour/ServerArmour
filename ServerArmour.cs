@@ -173,27 +173,27 @@ namespace Oxide.Plugins {
                     int vacLast = GetPlayerCache(isaPlayer?.steamid).steamData.DaysSinceLastBan;
                     int until = config.DissallowVacBanDays - vacLast;
                     string msg = GetMsg("Reason: VAC Ban Too Fresh", new Dictionary<string, string> { ["daysago"] = vacLast.ToString(), ["daysto"] = until.ToString() });
-                    KickPlayer(isaPlayer?.steamid, msg);
+                    KickPlayer(isaPlayer?.steamid, msg, type);
                 }
 
                 // lets check if this user is using VPN
                 if (config.AutoKickOn && !HasPermission(isaPlayer.steamid, PermissionWhitelistBadIPKick) && config.AutoKick_BadIp && IsVpn(isaPlayer)) {
-                    KickPlayer(isaPlayer?.steamid, GetMsg("Reason: Bad IP"));
+                    KickPlayer(isaPlayer?.steamid, GetMsg("Reason: Bad IP"), type);
                 }
 
                 // does the user contain a keyword ban
                 if (!HasPermission(isaPlayer.steamid, PermissionWhitelistKeywordKick) && HasKeywordBan(isaPlayer)) {
-                    KickPlayer(isaPlayer?.steamid, GetMsg("Keyword Kick"));
+                    KickPlayer(isaPlayer?.steamid, GetMsg("Keyword Kick"), type);
                 }
 
                 // Kick players with too many VACs
                 if (!HasPermission(isaPlayer.steamid, PermissionWhitelistVacCeilingKick) && HasReachedVacCeiling(isaPlayer)) {
-                    KickPlayer(isaPlayer?.steamid, GetMsg("VAC Ceiling Kick"));
+                    KickPlayer(isaPlayer?.steamid, GetMsg("VAC Ceiling Kick"), type);
                 }
 
                 // Kick players with too many bans
                 if (!HasPermission(isaPlayer.steamid, PermissionWhitelistServerCeilingKick) && HasReachedServerCeiling(isaPlayer)) {
-                    KickPlayer(isaPlayer?.steamid, GetMsg("Too Many Previous Bans"));
+                    KickPlayer(isaPlayer?.steamid, GetMsg("Too Many Previous Bans"), type);
                 }
 
                 GetPlayerReport(isaPlayer, connected);
@@ -660,9 +660,9 @@ namespace Oxide.Plugins {
 
         #region Kicking 
 
-        void KickPlayer(string steamid, string reason) {
+        void KickPlayer(string steamid, string reason, string type) {
             IPlayer player = players.FindPlayerById(steamid);
-            if (config.DiscordKickReport) { 
+            if (config.DiscordKickReport && type == "C") {
                 DiscordSend(player, new EmbedFieldList() {
                     name = "Player Kicked",
                     value = reason,
@@ -670,7 +670,7 @@ namespace Oxide.Plugins {
                 }, 13459797);
             }
             if (player.IsConnected) player?.Kick(reason);
-            if (config.BroadcastNewBans) {
+            if (config.BroadcastNewBans && type == "C") {
                 server.Broadcast(GetMsg("Player Kicked", new Dictionary<string, string> { ["player"] = player.Name, ["reason"] = reason }));
             }
         }
