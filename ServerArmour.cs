@@ -14,7 +14,7 @@ using Time = Oxide.Core.Libraries.Time;
 
 
 namespace Oxide.Plugins {
-    [Info("Server Armour", "Pho3niX90", "0.2.4")]
+    [Info("Server Armour", "Pho3niX90", "0.2.5")]
     [Description("Protect your server! Auto ban known hacker, scripter and griefer accounts, and notify server owners of threats.")]
     class ServerArmour : CovalencePlugin {
 
@@ -66,6 +66,7 @@ namespace Oxide.Plugins {
                     inline = true
                 });
             }
+
             fields.Add(new EmbedFieldList() {
                 name = "Player ",
                 value = $"[{iPlayer.Name}\n{iPlayer.Id}](https://steamcommunity.com/profiles/{iPlayer.Id})",
@@ -76,7 +77,6 @@ namespace Oxide.Plugins {
             var fieldsObject = fields.Cast<object>().ToArray();
             string json = JsonConvert.SerializeObject(fieldsObject);
             DiscordMessages?.Call("API_SendFancyMessage", config.DiscordWebhookURL, "Server Armour Report: ", color, json);
-
         }
 
         #endregion
@@ -111,6 +111,7 @@ namespace Oxide.Plugins {
         void Unload() {
             Puts("Server Armour unloading, will now save all data.");
             SaveData();
+            _playerData.Clear();
             Puts("Server Armour finished unloaded.");
         }
 
@@ -123,6 +124,7 @@ namespace Oxide.Plugins {
 
         void OnUserDisconnected(IPlayer player) {
             GetPlayerBans(player, true, "D");
+            SaveThenPurge(player.Id);
         }
 
         void OnPluginLoaded(Plugin plugin) {
@@ -141,7 +143,7 @@ namespace Oxide.Plugins {
         bool reportSent = false;
 
         void GetPlayerBans(IPlayer player, bool reCache = false, string type = "C") {
-            if (type == "C") KickIfBanned(GetPlayerCache(player.Id));
+            if (type == "C") KickIfBanned(GetPlayerCache(player?.Id));
             _webCheckPlayer(player.Name, player.Id, player.Address, player.IsConnected, type);
         }
 
@@ -151,13 +153,20 @@ namespace Oxide.Plugins {
             //Puts(url);
             webrequest.Enqueue(url, null, (code, response) => {
                 if (code != 200 || response == null) {
+                    Puts(url);
                     Puts(GetMsg("No Response From API", new Dictionary<string, string> { ["code"] = code.ToString(), ["response"] = response }));
                     return;
                 }
-                //Puts(response.ToString());
                 ISAPlayer isaPlayer = JsonConvert.DeserializeObject<ISAPlayer>(response);
                 isaPlayer.cacheTimestamp = _time.GetUnixTimestamp();
                 isaPlayer.lastConnected = _time.GetUnixTimestamp();
+
+                if (isaPlayer == null || string.IsNullOrEmpty(isaPlayer.steamid)) {
+                    Puts("Something went wrong, please inform the developer (PM Pho3niX90 on https://umod.org). Info to follow:");
+                    Puts(response.ToString());
+                    Puts(url);
+                    return;
+                }
 
                 // add cache for player
                 if (!IsPlayerCached(isaPlayer.steamid)) {
@@ -189,6 +198,10 @@ namespace Oxide.Plugins {
                 // Kick players with too many VACs
                 if (!HasPermission(isaPlayer.steamid, PermissionWhitelistVacCeilingKick) && HasReachedVacCeiling(isaPlayer)) {
                     KickPlayer(isaPlayer?.steamid, GetMsg("VAC Ceiling Kick"), type);
+                }
+                // Kick players with too many game bans
+                if (!HasPermission(isaPlayer.steamid, PermissionWhitelistVacCeilingKick) && HasReachedGameBanCeiling(isaPlayer)) {
+                    KickPlayer(isaPlayer?.steamid, GetMsg("Too Many Previous Game Bans"), type);
                 }
 
                 // Kick players with too many bans
@@ -514,7 +527,7 @@ namespace Oxide.Plugins {
         }
 
         bool IsPlayerDirty(ISAPlayer isaPlayer) {
-            return (isaPlayer.serverBanCount > 0 || isaPlayer.steamData.CommunityBanned > 0 || isaPlayer.steamData.NumberOfGameBans > 0 || isaPlayer.steamData.VACBanned > 0);
+            return isaPlayer != null && (isaPlayer.serverBanCount > 0 || isaPlayer.steamData.CommunityBanned > 0 || isaPlayer.steamData.NumberOfGameBans > 0 || isaPlayer.steamData.VACBanned > 0);
         }
 
         bool IsPlayerDirty(string steamid) {
@@ -618,7 +631,7 @@ namespace Oxide.Plugins {
         }
 
         void LoadPlayerData(string id) {
-            if (!_playerData.ContainsKey(id)) {
+            if (!string.IsNullOrEmpty(id) && !_playerData.ContainsKey(id)) {
                 ISAPlayer playerData = Interface.Oxide.DataFileSystem.ReadObject<ISAPlayer>($"ServerArmour/{id}");
                 if (playerData != null) {
                     _playerData.Add(id, playerData);
@@ -632,7 +645,7 @@ namespace Oxide.Plugins {
         }
 
         void SavePlayerData(string id) {
-            if (_playerData.ContainsKey(id)) {
+            if (!string.IsNullOrEmpty(id) && _playerData.ContainsKey(id)) {
                 Interface.Oxide.DataFileSystem.WriteObject($"ServerArmour/{id}", _playerData[id], true);
             }
         }
@@ -709,6 +722,10 @@ namespace Oxide.Plugins {
             return config.AutoKickOn && config.AutoVacBanCeiling < isaPlayer.steamData.NumberOfVACBans;
         }
 
+        bool HasReachedGameBanCeiling(ISAPlayer isaPlayer) {
+            return config.AutoKickOn && config.AutoGameBanCeiling < isaPlayer.steamData.NumberOfGameBans;
+        }
+
         bool HasReachedServerCeiling(ISAPlayer isaPlayer) {
             return config.AutoKickOn && config.AutoKickCeiling < isaPlayer.serverBanCount;
         }
@@ -783,6 +800,7 @@ namespace Oxide.Plugins {
                 ["Lender Banned"] = "The lender account contained a ban",
                 ["Keyword Kick"] = "Due to your past behaviour on other servers, you aren't allowed in.",
                 ["Too Many Previous Bans"] = "You have too many previous bans (other servers included).",
+                ["Too Many Previous Game Bans"] = "You have too many previous game bans. Appeal in discord",
                 ["VAC Ceiling Kick"] = "You have too many VAC bans.",
                 ["Player Kicked"] = "[#ff0000]{player} Kicked[/#] - Reason\n{reason}"
             }, this, "en");
@@ -954,6 +972,7 @@ namespace Oxide.Plugins {
 
             public int AutoKickCeiling = 3;
             public int AutoVacBanCeiling = 1;
+            public int AutoGameBanCeiling = 2;
             public int DissallowVacBanDays = 90;
             public int BroadcastPlayerBanReportVacDays = 120;
 
@@ -1014,6 +1033,7 @@ namespace Oxide.Plugins {
                 GetConfig(ref AutoKickOn, "Auto Kick");
                 GetConfig(ref AutoKickCeiling, "Auto Kick: Max allowed previous bans");
                 GetConfig(ref AutoVacBanCeiling, "Auto Kick: Max allowed VAC bans");
+                GetConfig(ref AutoGameBanCeiling, "Auto Kick: Max allowed Game bans");
                 GetConfig(ref DissallowVacBanDays, "Auto Kick: Min age of VAC ban allowed");
                 GetConfig(ref AutoKickFamilyShare, "Auto Kick: Family share accounts");
                 GetConfig(ref AutoKickFamilyShareIfDirty, "Auto Kick: Family share accounts that are dirty");
