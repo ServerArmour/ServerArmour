@@ -37,6 +37,7 @@ namespace Oxide.Plugins {
         const string PermissionWhitelistKeywordKick = "serverarmour.whitelist.keyword";
         const string PermissionWhitelistVacCeilingKick = "serverarmour.whitelist.vacceiling";
         const string PermissionWhitelistServerCeilingKick = "serverarmour.whitelist.banceiling";
+        const string PermissionWhitelistGameBanCeilingKick = "serverarmour.whitelist.gamebanceiling";
         #endregion
         #endregion
 
@@ -98,6 +99,7 @@ namespace Oxide.Plugins {
             permission.RegisterPermission(PermissionWhitelistRecentVacKick, this);
             permission.RegisterPermission(PermissionWhitelistServerCeilingKick, this);
             permission.RegisterPermission(PermissionWhitelistVacCeilingKick, this);
+            permission.RegisterPermission(PermissionWhitelistGameBanCeilingKick, this);
         }
 
         void OnServerInitialized() {
@@ -199,8 +201,9 @@ namespace Oxide.Plugins {
                 if (!HasPermission(isaPlayer.steamid, PermissionWhitelistVacCeilingKick) && HasReachedVacCeiling(isaPlayer)) {
                     KickPlayer(isaPlayer?.steamid, GetMsg("VAC Ceiling Kick"), type);
                 }
+
                 // Kick players with too many game bans
-                if (!HasPermission(isaPlayer.steamid, PermissionWhitelistVacCeilingKick) && HasReachedGameBanCeiling(isaPlayer)) {
+                if (!HasPermission(isaPlayer.steamid, PermissionWhitelistGameBanCeilingKick) && HasReachedGameBanCeiling(isaPlayer)) {
                     KickPlayer(isaPlayer?.steamid, GetMsg("Too Many Previous Game Bans"), type);
                 }
 

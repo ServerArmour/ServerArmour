@@ -17,6 +17,16 @@ You will need to delete you configuration file, as it will be recreated with def
 /sa.unban - requires permission serverarmour.unban
 ```
 
+## Whitelist Permissions
+```
+serverarmour.whitelist.recentvac
+serverarmour.whitelist.badip
+serverarmour.whitelist.keyword
+serverarmour.whitelist.vacceiling
+serverarmour.whitelist.banceiling
+serverarmour.whitelist.gamebanceiling
+```
+
 ## Commands
 ```
 <optional>
@@ -58,6 +68,7 @@ You will need to delete you configuration file, as it will be recreated with def
   "Auto Kick: Ban: Contains previous Toxic ban": false,
   "Auto Kick: Family share accounts": false, // Auto kick players that are lending (Family sharing) the game.
   "Auto Kick: Family share accounts that are dirty": false, // Auto kick players that are lending (Family sharing) the game, and the owner of the game is dirty.
+  "Auto Kick: Max allowed Game bans": 2,
   "Auto Kick: Max allowed previous bans": 5,
   "Auto Kick: Max allowed VAC bans": 2, // Auto kick players with X amount of previous bans.
   "Auto Kick: Min age of VAC ban allowed": 90, //auto kicks users that have received a vac within these days
@@ -75,6 +86,23 @@ You will need to delete you configuration file, as it will be recreated with def
 ```
 #### Bad IP: 
 It refers any combination of crawlers / comment & email spammers / brute force attacks. IPs that are behaving "badly" in an automated manner. Networks that are infected with malware / trojans / botnet / etc are also considered "bad". It may be possible that the user is not aware that their systems are infected or they have received an IP by their ISP that was recently infected with malicious code. If you wish to skip this, see variations of implementation.
+
+**Setting: **  
+```json
+"Auto Kick: VPN and Proxy": true
+```
+WIll automatically kick a player if they are either using a proxy, vpn or is a bad IP,
+ 
+```json
+"Auto Kick: VPN and Proxy: Sensitivity": 1.0
+``` 
+How sensitive it should be, max 1. Value of 1.0 will only kick known vpns and proxies, a value of 0.98 will kick all suspected vpns, proxies, and spamming ips
+
+**More info regarding sensitivity from  https://getipintel.net**
+If a value of 0.50 is returned, then it is as good as flipping a 2 sided fair coin, which implies it's not very accurate. From my personal experience, values > 0.95 should be looked at and values > 0.99 are most likely proxies. Anything below the value of 0.90 is considered as "low risk". Since a real value is returned, different levels of protection can be implemented. It is best for a system admin to test some sample datasets with this system and adjust implementation accordingly. 
+
+I only recommend automated action on high values ( > 0.99 or even > 0.995 )
+
 #### Service used: 
 https://getipintel.net
 
