@@ -38,6 +38,7 @@ namespace Oxide.Plugins {
         const string PermissionWhitelistVacCeilingKick = "serverarmour.whitelist.vacceiling";
         const string PermissionWhitelistServerCeilingKick = "serverarmour.whitelist.banceiling";
         const string PermissionWhitelistGameBanCeilingKick = "serverarmour.whitelist.gamebanceiling";
+        const string PermissionWhitelistHardwareOwnsBloody = "serverarmour.whitelist.hardware.ownsbloody";
 
         const string PermissionHardwareOwnsBloody = "serverarmour.hardware.ownsbloody";
         #endregion
@@ -225,7 +226,7 @@ namespace Oxide.Plugins {
                 }
 
                 // Kick bloody/a4 owners
-                if (!HasPermission(isaPlayer.steamid, PermissionHardwareOwnsBloody) && OwnsBloody(isaPlayer)) {
+                if (!HasPermission(isaPlayer.steamid, PermissionWhitelistHardwareOwnsBloody) && (OwnsBloody(isaPlayer) || HasPermission(isaPlayer.steamid, PermissionHardwareOwnsBloody))) {
                     KickPlayer(isaPlayer?.steamid, GetMsg("Kick Bloody"), type);
                 }
 

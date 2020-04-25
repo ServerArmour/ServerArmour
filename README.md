@@ -25,6 +25,7 @@ serverarmour.whitelist.keyword
 serverarmour.whitelist.vacceiling
 serverarmour.whitelist.banceiling
 serverarmour.whitelist.gamebanceiling
+serverarmour.whitelist.hardware.ownsbloody
 ```
 
 ## Commands
@@ -57,6 +58,7 @@ serverarmour.whitelist.gamebanceiling
   "Auto Kick": true, // turn auto kicking on or off. 
   "Auto Kick / Ban Group": "serverarmour.bans", // the group name that banned users should be added in
   // The below options are to ban based on sentiment analysis on previous bans within the reason. Currently ONLY english is supported. please note that autoban above should also be true for this to work. 
+  "Auto Kick: Kick if user owns a bloody device (now and past)": true,
   "Auto Kick: Ban: Contains previous Aimbot ban": false,
   "Auto Kick: Ban: Contains previous Cheat ban": false,
   "Auto Kick: Ban: Contains previous ESP ban": false,
