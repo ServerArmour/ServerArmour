@@ -14,7 +14,7 @@ using Time = Oxide.Core.Libraries.Time;
 
 
 namespace Oxide.Plugins {
-    [Info("Server Armour", "Pho3niX90", "0.2.5")]
+    [Info("Server Armour", "Pho3niX90", "0.2.6")]
     [Description("Protect your server! Auto ban known hacker, scripter and griefer accounts, and notify server owners of threats.")]
     class ServerArmour : CovalencePlugin {
 
@@ -38,6 +38,8 @@ namespace Oxide.Plugins {
         const string PermissionWhitelistVacCeilingKick = "serverarmour.whitelist.vacceiling";
         const string PermissionWhitelistServerCeilingKick = "serverarmour.whitelist.banceiling";
         const string PermissionWhitelistGameBanCeilingKick = "serverarmour.whitelist.gamebanceiling";
+
+        const string PermissionHardwareOwnsBloody = "serverarmour.hardware.ownsbloody";
         #endregion
         #endregion
 
@@ -100,6 +102,8 @@ namespace Oxide.Plugins {
             permission.RegisterPermission(PermissionWhitelistServerCeilingKick, this);
             permission.RegisterPermission(PermissionWhitelistVacCeilingKick, this);
             permission.RegisterPermission(PermissionWhitelistGameBanCeilingKick, this);
+
+            permission.RegisterPermission(PermissionHardwareOwnsBloody, this);
         }
 
         void OnServerInitialized() {
@@ -137,6 +141,19 @@ namespace Oxide.Plugins {
             Puts($"Player {name} ({id}) at {ipAddress} was unbanned");
             IPlayer iPlayer = players.FindPlayer(id);
             Unban(iPlayer);
+        }
+
+        void OnUserKicked(IPlayer player, string reason) {
+            Puts($"Player {player.Name} ({player.Id}) was kicked, {reason}");
+            if (reason.ToLower().Contains("bloody") || reason.ToLower().Contains("a4") || reason.ToLower().Contains("blacklisted")) {
+                permission.GrantUserPermission(player.Id, PermissionHardwareOwnsBloody, this);
+                webrequest.Enqueue("https://io.serverarmour.com/addBloodyKicks" + ServerGetString("?"), $"steamid={player.Id}&reason={reason}", (code, response) => {
+                    if (code != 200 || response == null) {
+                        Puts(GetMsg("No Response From API", new Dictionary<string, string> { ["code"] = code.ToString(), ["response"] = response }));
+                        return;
+                    }
+                }, this, RequestMethod.POST);
+            }
         }
         #endregion
 
@@ -205,6 +222,11 @@ namespace Oxide.Plugins {
                 // Kick players with too many game bans
                 if (!HasPermission(isaPlayer.steamid, PermissionWhitelistGameBanCeilingKick) && HasReachedGameBanCeiling(isaPlayer)) {
                     KickPlayer(isaPlayer?.steamid, GetMsg("Too Many Previous Game Bans"), type);
+                }
+
+                // Kick bloody/a4 owners
+                if (!HasPermission(isaPlayer.steamid, PermissionHardwareOwnsBloody) && OwnsBloody(isaPlayer)) {
+                    KickPlayer(isaPlayer?.steamid, GetMsg("Kick Bloody"), type);
                 }
 
                 // Kick players with too many bans
@@ -729,6 +751,10 @@ namespace Oxide.Plugins {
             return config.AutoKickOn && config.AutoGameBanCeiling < isaPlayer.steamData.NumberOfGameBans;
         }
 
+        bool OwnsBloody(ISAPlayer isaPlayer) {
+            return config.AutoKickOn && config.AutoKick_Hardware_Bloody && isaPlayer.bloodyScriptsCount > 0;
+        }
+
         bool HasReachedServerCeiling(ISAPlayer isaPlayer) {
             return config.AutoKickOn && config.AutoKickCeiling < isaPlayer.serverBanCount;
         }
@@ -802,9 +828,10 @@ namespace Oxide.Plugins {
                 ["Reason: VAC Ban Too Fresh"] = "VAC ban received {daysago} days ago, wait another {daysto} days",
                 ["Lender Banned"] = "The lender account contained a ban",
                 ["Keyword Kick"] = "Due to your past behaviour on other servers, you aren't allowed in.",
-                ["Too Many Previous Bans"] = "You have too many previous bans (other servers included).",
+                ["Too Many Previous Bans"] = "You have too many previous bans (other servers included). Appeal in discord",
                 ["Too Many Previous Game Bans"] = "You have too many previous game bans. Appeal in discord",
-                ["VAC Ceiling Kick"] = "You have too many VAC bans.",
+                ["Kick Bloody"] = "You own a bloody/a4 tech device. Appeal in discord",
+                ["VAC Ceiling Kick"] = "You have too many VAC bans. Appeal in discord",
                 ["Player Kicked"] = "[#ff0000]{player} Kicked[/#] - Reason\n{reason}"
             }, this, "en");
         }
@@ -856,6 +883,7 @@ namespace Oxide.Plugins {
 
         public class ISAPlayer {
             public string steamid { get; set; }
+            public int bloodyScriptsCount { get; set; }
             public string lendersteamid { get; set; }
             public ISASteamData lenderSteamData { get; set; }
             public string username { get; set; }
@@ -869,6 +897,7 @@ namespace Oxide.Plugins {
 
             public ISAPlayer CreatePlayer(IPlayer bPlayer) {
                 steamid = bPlayer.Id;
+                bloodyScriptsCount = 0;
                 username = bPlayer.Name;
                 address = bPlayer.Address;
                 cacheTimestamp = new Time().GetUnixTimestamp();
@@ -989,6 +1018,8 @@ namespace Oxide.Plugins {
             public string ServerAdminEmail = string.Empty;
             public string ServerApiKey = "FREE";
 
+            public bool AutoKick_Hardware_Bloody = true;
+
             public bool AutoKick_Reason_Keyword_Aimbot = false;
             public bool AutoKick_Reason_Keyword_Hack = false;
             public bool AutoKick_Reason_Keyword_EspHack = false;
@@ -1040,6 +1071,8 @@ namespace Oxide.Plugins {
                 GetConfig(ref DissallowVacBanDays, "Auto Kick: Min age of VAC ban allowed");
                 GetConfig(ref AutoKickFamilyShare, "Auto Kick: Family share accounts");
                 GetConfig(ref AutoKickFamilyShareIfDirty, "Auto Kick: Family share accounts that are dirty");
+                GetConfig(ref AutoKick_Hardware_Bloody, "Auto Kick: Kick if user owns a bloody device (now and past)");
+
                 GetConfig(ref AutoKick_Reason_Keyword_Aimbot, "Auto Kick: Ban: Contains previous Aimbot ban");
                 GetConfig(ref AutoKick_Reason_Keyword_Hack, "Auto Kick: Ban: Contains previous Hack ban");
                 GetConfig(ref AutoKick_Reason_Keyword_EspHack, "Auto Kick: Ban: Contains previous ESP ban");
@@ -1049,6 +1082,7 @@ namespace Oxide.Plugins {
                 GetConfig(ref AutoKick_Reason_Keyword_Insult, "Auto Kick: Ban: Contains previous Insult ban");
                 GetConfig(ref AutoKick_Reason_Keyword_Ping, "Auto Kick: Ban: Contains previous Ping ban");
                 GetConfig(ref AutoKick_Reason_Keyword_Racism, "Auto Kick: Ban: Contains previous Racism ban");
+
                 GetConfig(ref AutoKick_BadIp, "Auto Kick: VPN and Proxy");
                 GetConfig(ref AutoKick_BadIp_Sensitivity, "Auto Kick: VPN and Proxy: Sensitivity");
 
