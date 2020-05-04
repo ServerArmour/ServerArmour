@@ -14,14 +14,14 @@ using Time = Oxide.Core.Libraries.Time;
 
 
 namespace Oxide.Plugins {
-    [Info("Server Armour", "Pho3niX90", "0.2.6")]
+    [Info("Server Armour", "Pho3niX90", "0.2.8")]
     [Description("Protect your server! Auto ban known hacker, scripter and griefer accounts, and notify server owners of threats.")]
     class ServerArmour : CovalencePlugin {
 
         #region Variables
         Dictionary<string, ISAPlayer> _playerData = new Dictionary<string, ISAPlayer>();
         private Time _time = GetLibrary<Time>();
-        private double cacheLifetime = 60; // minutes
+        private double cacheLifetime = 15; // minutes
         string[] groups;
         private SAConfig config;
         string specifier = "G";
@@ -158,12 +158,16 @@ namespace Oxide.Plugins {
         }
         #endregion
 
+        #region API_Hooks
+
+        #endregion
+
         #region WebRequests
 
         bool reportSent = false;
 
         void GetPlayerBans(IPlayer player, bool reCache = false, string type = "C") {
-            if (type == "C") KickIfBanned(GetPlayerCache(player?.Id));
+            if (type == "C" && IsCacheValid(player?.Id)) KickIfBanned(GetPlayerCache(player?.Id));
             _webCheckPlayer(player.Name, player.Id, player.Address, player.IsConnected, type);
         }
 
@@ -195,43 +199,56 @@ namespace Oxide.Plugins {
                     UpdatePlayerData(isaPlayer);
                 }
                 // lets check bans first
-                KickIfBanned(isaPlayer);
-
+                try {
+                    KickIfBanned(isaPlayer);
+                } catch (ArgumentNullException ane) {
+                    Puts("An ArgumentNullException occured. Please notify the developer along with the below information: ");
+                    Puts($"PlayerName `{playerName}`\nUrl: `{url}`\nIsaPlayer? {isaPlayer != null}\nIsLender {isaPlayer?.lendersteamid}");
+                }
                 // now lets check for a recent vac
                 if (config.AutoKickOn && !HasPermission(isaPlayer.steamid, PermissionWhitelistRecentVacKick) && HasRecentVac(isaPlayer?.steamid)) {
                     int vacLast = GetPlayerCache(isaPlayer?.steamid).steamData.DaysSinceLastBan;
                     int until = config.DissallowVacBanDays - vacLast;
+
+                    Interface.CallHook("OnSARecentVacKick", isaPlayer.steamid, vacLast, until);
+
                     string msg = GetMsg("Reason: VAC Ban Too Fresh", new Dictionary<string, string> { ["daysago"] = vacLast.ToString(), ["daysto"] = until.ToString() });
                     KickPlayer(isaPlayer?.steamid, msg, type);
                 }
 
                 // lets check if this user is using VPN
                 if (config.AutoKickOn && !HasPermission(isaPlayer.steamid, PermissionWhitelistBadIPKick) && config.AutoKick_BadIp && IsVpn(isaPlayer)) {
+                    Interface.CallHook("OnSAVPNKick", isaPlayer.steamid, isaPlayer.ipRating);
                     KickPlayer(isaPlayer?.steamid, GetMsg("Reason: Bad IP"), type);
                 }
 
                 // does the user contain a keyword ban
                 if (!HasPermission(isaPlayer.steamid, PermissionWhitelistKeywordKick) && HasKeywordBan(isaPlayer)) {
+                    Interface.CallHook("OnSAKeywordKick", isaPlayer.steamid);
                     KickPlayer(isaPlayer?.steamid, GetMsg("Keyword Kick"), type);
                 }
 
                 // Kick players with too many VACs
                 if (!HasPermission(isaPlayer.steamid, PermissionWhitelistVacCeilingKick) && HasReachedVacCeiling(isaPlayer)) {
+                    Interface.CallHook("OnSATooManyVacKick", isaPlayer.steamid, isaPlayer.steamData.NumberOfVACBans);
                     KickPlayer(isaPlayer?.steamid, GetMsg("VAC Ceiling Kick"), type);
                 }
 
                 // Kick players with too many game bans
                 if (!HasPermission(isaPlayer.steamid, PermissionWhitelistGameBanCeilingKick) && HasReachedGameBanCeiling(isaPlayer)) {
+                    Interface.CallHook("OnSATooManyGameBansKick", isaPlayer.steamid, isaPlayer.steamData.NumberOfGameBans);
                     KickPlayer(isaPlayer?.steamid, GetMsg("Too Many Previous Game Bans"), type);
                 }
 
                 // Kick bloody/a4 owners
                 if (!HasPermission(isaPlayer.steamid, PermissionWhitelistHardwareOwnsBloody) && (OwnsBloody(isaPlayer) || HasPermission(isaPlayer.steamid, PermissionHardwareOwnsBloody))) {
+                    Interface.CallHook("OnSABloodyKick", isaPlayer.steamid);
                     KickPlayer(isaPlayer?.steamid, GetMsg("Kick Bloody"), type);
                 }
 
                 // Kick players with too many bans
                 if (!HasPermission(isaPlayer.steamid, PermissionWhitelistServerCeilingKick) && HasReachedServerCeiling(isaPlayer)) {
+                    Interface.CallHook("OnSATooManyBans", isaPlayer.steamid, config.AutoKickCeiling, isaPlayer.serverBanCount);
                     KickPlayer(isaPlayer?.steamid, GetMsg("Too Many Previous Bans"), type);
                 }
 
@@ -242,10 +259,12 @@ namespace Oxide.Plugins {
         void KickIfBanned(ISAPlayer isaPlayer) {
             if (isaPlayer == null) return;
 
-            ISABan lenderBan = IsBanned(isaPlayer?.lendersteamid);
             ISABan ban = IsBanned(isaPlayer?.steamid);
             if (ban != null) KickPlayer(isaPlayer?.steamid, ban.reason, "C");
-            if (lenderBan != null) KickPlayer(isaPlayer?.steamid, GetMsg("Lender Banned"), "C");
+            if (!isaPlayer.lendersteamid.Equals("0")) {
+                ISABan lenderBan = IsBanned(isaPlayer?.lendersteamid);
+                if (lenderBan != null) KickPlayer(isaPlayer?.steamid, GetMsg("Lender Banned"), "C");
+            }
         }
 
 
@@ -291,7 +310,7 @@ namespace Oxide.Plugins {
         [Command("unban", "playerunban", "sa.unban")]
         void SCmdUnban(IPlayer player, string command, string[] args) {
             LogDebug("Will now unban");
-            if (!HasPermission(player.Id, PermissionToUnBan)) {
+            if (!HasPermission(player.Id, PermissionToUnBan) && !player.IsServer) {
                 player.Reply(GetMsg("NoPermission"));
                 return;
             }
@@ -314,7 +333,7 @@ namespace Oxide.Plugins {
         [Command("ban", "playerban", "sa.ban")]
         void SCmdBan(IPlayer player, string command, string[] args) {
 
-            if (!HasPermission(player.Id, PermissionToBan)) {
+            if (!HasPermission(player.Id, PermissionToBan) && !player.IsServer) {
                 player.Reply(GetMsg("NoPermission"));
                 return;
             }
@@ -547,18 +566,19 @@ namespace Oxide.Plugins {
         }
         #endregion
 
+
         #region Data Handling
         string GetFamilyShareLenderSteamId(string steamid) {
             return GetPlayerCache(steamid)?.lendersteamid;
         }
 
         bool IsPlayerDirty(ISAPlayer isaPlayer) {
-            return isaPlayer != null && (isaPlayer.serverBanCount > 0 || isaPlayer.steamData.CommunityBanned > 0 || isaPlayer.steamData.NumberOfGameBans > 0 || isaPlayer.steamData.VACBanned > 0);
+            return isaPlayer != null && (isaPlayer?.serverBanCount > 0 || isaPlayer?.steamData?.CommunityBanned > 0 || isaPlayer?.steamData?.NumberOfGameBans > 0 || isaPlayer?.steamData?.VACBanned > 0);
         }
 
         bool IsPlayerDirty(string steamid) {
             ISAPlayer isaPlayer = GetPlayerCache(steamid);
-            return isaPlayer != null && IsPlayerCached(steamid) && (isaPlayer.serverBanCount > 0 || isaPlayer.steamData.CommunityBanned > 0 || isaPlayer.steamData.NumberOfGameBans > 0 || isaPlayer.steamData.VACBanned > 0);
+            return isaPlayer != null && IsPlayerCached(steamid) && (isaPlayer?.serverBanCount > 0 || isaPlayer?.steamData?.CommunityBanned > 0 || isaPlayer?.steamData?.NumberOfGameBans > 0 || isaPlayer?.steamData?.VACBanned > 0);
         }
 
         bool IsPlayerCached(string steamid) { return _playerData != null && _playerData.Count > 0 && _playerData.ContainsKey(steamid); }
@@ -701,6 +721,8 @@ namespace Oxide.Plugins {
 
         void KickPlayer(string steamid, string reason, string type) {
             IPlayer player = players.FindPlayerById(steamid);
+            if (player == null) return;
+
             if (config.DiscordKickReport && type == "C") {
                 DiscordSend(player, new EmbedFieldList() {
                     name = "Player Kicked",

@@ -110,6 +110,29 @@ https://getipintel.net
 
 ## API Hooks
 
+```csharp
+	void OnSARecentVacKick(string steamId, int unixLastVax, int unixRemainingDays) {
+	
+	}
+	void OnSAVPNKick(string steamId, double ipRating) {
+	
+	}
+	void OnSAKeywordKick(string steamId) {
+	
+	}
+	void OnSATooManyVacKick(string steamId, int numberOfVACBans) {
+	
+	}
+	void OnSATooManyGameBansKick(string steamId, int numberOfGameBans) {
+	
+	}
+	void OnSABloodyKick(string steamId) {
+	
+	}
+	void OnSATooManyBans(string steamId) {
+	
+	}
+```
 ### Methods
 
 
@@ -162,3 +185,13 @@ Information sent to the api is as follows:
 * game name - same as above, but just in readable format.
 
 If more information is needed regarding any of the above, or any concerns, please open a thread so that I can provide more information.
+
+
+### Roadmap
+1. Fix all remainder of bugs. 
+2. Reduce local caching down to 15min, because in 15min they could switch on their VPN, get a game ban etc.
+3. Split server armour into multiple plugins. Consisting of a ServerArmour-core, ServerArmour-websecurity, ServerArmour-steamsecurity, ServerArmour-basicsecurity, ServerArmour-legacysecurity and soon ServerArmour-premiumsecurity.
+4. The need cache any info to disk, and hopefully optimize server side performance. 
+5. Get web version live and working
+
+Please consider supporting the project.
