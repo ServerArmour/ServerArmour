@@ -8,8 +8,8 @@ This tool is a combination of wealth of information regarding players, from thei
 
 Please note, this is a BETA plugin, so not all features are available yet. Autobanning is still being tested to make sure all is well, and should be available within a week.
 
-## NOTE!! Version 0.2.0
-You will need to delete you configuration file, as it will be recreated with default values. Keep your old config as a backup if you have custom settings to repopulate new config.
+## NOTE!! Version 0.3.0
+Never assign group "serverarmour.hardware.ownsbloody" to anyone manually!
 
 ## Permissions
 ```
@@ -57,7 +57,7 @@ serverarmour.whitelist.hardware.ownsbloody
   "API: Submit Arkan Data": true, // submits to server, helps identifying players behaviours, will be usefull when website is online
   "Auto Kick": true, // turn auto kicking on or off. 
   "Auto Kick / Ban Group": "serverarmour.bans", // the group name that banned users should be added in
-  // The below options are to ban based on sentiment analysis on previous bans within the reason. Currently ONLY english is supported. please note that autoban above should also be true for this to work. 
+  // The below options are to ban based on sentiment analysis on previous bans within the reason. Currently ONLY english is supported. please note that Auto Kick above should also be true for this to work. 
   "Auto Kick: Kick if user owns a bloody device (now and past)": true,
   "Auto Kick: Ban: Contains previous Aimbot ban": false,
   "Auto Kick: Ban: Contains previous Cheat ban": false,
@@ -76,6 +76,8 @@ serverarmour.whitelist.hardware.ownsbloody
   "Auto Kick: Min age of VAC ban allowed": 90, //auto kicks users that have received a vac within these days
   "Auto Kick: VPN and Proxy": true, // WIll automatically kick a player if they are either using a proxy, vpn or is a bad IP,
   "Auto Kick: VPN and Proxy: Sensitivity": 1.0, //How sensitive it should be, max 1. Value of 1.0 will only kick known vpns and proxies, a value of 0.98 will kick all suspected vpns, proxies, and spamming ips
+  "Auto Kick: Min Allowed Steam Level (-1 disables)": -1, // Minimum level steam profiles allowed
+  "Auto Kick: Private Steam Profiles": false, //When set to true, it will auto kick all players with private steam profiles.
   "Better Chat: Tag for dirty users": "",
   "Broadcast: New bans": true,
   "Broadcast: Player Reports": true,
@@ -132,6 +134,12 @@ https://getipintel.net
 	void OnSATooManyBans(string steamId) {
 	
 	}
+	void OnSAProfilePrivate(string steamId, int communityvisibilitystate) {
+	
+	}
+	void OnSAProfileLevelLow(string steamId, int minlevelallowed, int userlevel) {
+	
+	}
 ```
 ### Methods
 
@@ -146,8 +154,10 @@ string API_GetEconomyBanStatus(string steamid) // The player's ban status in the
 bool API_GetIsPlayerDirty(string steamid) // Indicates if the player has any bans at all, includes server, game and vac bans
 bool API_GetIsPlayerDirty(string steamid) // Indicates if the game is a family shared game, true indicates the player doesnt own it but lending it. 
 string API_GetFamilyShareLenderSteamId(string steamid) // Gets the steamid of the person lending the game. Returns "0" if there isn't a lender and it's not family share.
-bool API_GetIsFamilyShareLenderDirty(string steamid) // Checks if the current users family share account is dirty
-int API_GetDaysSinceLastVacBan(string steamid) // Get amount of days since last vac ban. This will retun 0 if there is no vac ban
+bool API_GetIsFamilyShareLenderDirty(string steamid) // Checks if the current users family share account is dirty.
+int API_GetDaysSinceLastVacBan(string steamid) // Get amount of days since last vac ban. This will retun 0 if there is no vac ban.
+bool API_GetIsProfilePrivate(string steamid) // Check if the players profile is private.
+int API_GetProfileLevel(string steamid) // Gets the players steam level.
 ```
 
 
