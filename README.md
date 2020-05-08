@@ -26,6 +26,7 @@ serverarmour.whitelist.vacceiling
 serverarmour.whitelist.banceiling
 serverarmour.whitelist.gamebanceiling
 serverarmour.whitelist.hardware.ownsbloody
+serverarmour.whitelist.steamprofile
 ```
 
 ## Commands
