@@ -738,7 +738,7 @@ namespace Oxide.Plugins {
                 DiscordSend(isaPlayer, GetMsg("User Dirty DISCORD MSG", data));
 #if RUST
                 RCon.Broadcast(RCon.LogType.Chat, new Chat.ChatEntry {
-                    Message = GetMsg("User Dirty MSG", data),
+                    Message = GetMsg("User Dirty DISCORD MSG", data),
                     UserId = isaPlayer.steamid,
                     Username = isaPlayer.username,
                     Time = Facepunch.Math.Epoch.Current
