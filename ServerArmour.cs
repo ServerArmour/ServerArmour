@@ -17,7 +17,7 @@ using Time = Oxide.Core.Libraries.Time;
 
 
 namespace Oxide.Plugins {
-    [Info("Server Armour", "Pho3niX90", "0.3.1")]
+    [Info("Server Armour", "Pho3niX90", "0.3.2")]
     [Description("Protect your server! Auto ban known hackers, scripters and griefer accounts, and notify server owners of threats.")]
     class ServerArmour : CovalencePlugin {
 
@@ -132,7 +132,7 @@ namespace Oxide.Plugins {
 
             //lets check the userid first.
             if (config.AutoKick_KickWeirdSteam64 && !player.Id.StartsWith("7656119")) {
-                KickPlayer(player.Id, GetMsg("Strange Steam64ID"));
+                KickPlayer(player.Id, GetMsg("Strange Steam64ID"), "C");
             }
 
             GetPlayerBans(player, true, "C");
@@ -228,6 +228,7 @@ namespace Oxide.Plugins {
                     } else {
                         UpdatePlayerData(isaPlayer);
                     }
+
                     // lets check bans first
                     try {
                         KickIfBanned(isaPlayer);
@@ -245,8 +246,8 @@ namespace Oxide.Plugins {
                     //
 
                     // now lets check for a recent vac
-                    bool pRecentVac = (pSteam.NumberOfVACBans > 0 || pSteam.NumberOfGameBans > 0) && pSteam.DaysSinceLastBan < config.DissallowVacBanDays; //check main player
-                    bool lRecentVac = (lSteam.NumberOfVACBans > 0 || lSteam.NumberOfGameBans > 0) && lSteam.DaysSinceLastBan < config.DissallowVacBanDays; //check the lender player
+                    bool pRecentVac = (pSteam.NumberOfVACBans > 0) && pSteam.DaysSinceLastBan < config.DissallowVacBanDays; //check main player
+                    bool lRecentVac = (lSteam.NumberOfVACBans > 0) && lSteam.DaysSinceLastBan < config.DissallowVacBanDays; //check the lender player
 
                     if (config.AutoKickOn && !HasPerm(pSteamId, PermissionWhitelistRecentVacKick) && (pRecentVac || lRecentVac)) {
                         int vacLast = pRecentVac ? pSteam.DaysSinceLastBan : lSteam.DaysSinceLastBan;
@@ -255,61 +256,61 @@ namespace Oxide.Plugins {
                         Interface.CallHook("OnSARecentVacKick", pSteam, vacLast, until);
 
                         string msg = GetMsg(pRecentVac ? "Reason: VAC Ban Too Fresh" : "Reason: VAC Ban Too Fresh - Lender", new Dictionary<string, string> { ["daysago"] = vacLast.ToString(), ["daysto"] = until.ToString() });
-                        KickPlayer(isaPlayer?.steamid, msg);
+                        KickPlayer(isaPlayer?.steamid, msg, "C");
                     }
 
                     // lets check if this user is using VPN
                     if (config.AutoKickOn && !HasPerm(pSteamId, PermissionWhitelistBadIPKick) && config.AutoKick_BadIp && IsVpn(isaPlayer)) {
                         Interface.CallHook("OnSAVPNKick", pSteamId, isaPlayer.ipRating);
-                        KickPlayer(pSteamId, GetMsg("Reason: Bad IP"));
+                        KickPlayer(pSteamId, GetMsg("Reason: Bad IP"), "C");
                     }
 
                     // does the user contain a keyword ban
                     if (!HasPerm(pSteamId, PermissionWhitelistKeywordKick) && HasKeywordBan(isaPlayer)) {
                         Interface.CallHook("OnSAKeywordKick", pSteamId);
-                        KickPlayer(isaPlayer?.steamid, GetMsg("Keyword Kick"));
+                        KickPlayer(isaPlayer?.steamid, GetMsg("Keyword Kick"), "C");
                     }
 
                     // Kick players with too many VACs
                     if (!HasPerm(pSteamId, PermissionWhitelistVacCeilingKick) && HasReachedVacCeiling(isaPlayer)) {
                         Interface.CallHook("OnSATooManyVacKick", pSteamId, isaPlayer.steamData.NumberOfVACBans);
-                        KickPlayer(isaPlayer?.steamid, GetMsg("VAC Ceiling Kick"));
+                        KickPlayer(isaPlayer?.steamid, GetMsg("VAC Ceiling Kick"), "C");
                     }
 
                     // Kick players with too many game bans
                     if (!HasPerm(pSteamId, PermissionWhitelistGameBanCeilingKick) && HasReachedGameBanCeiling(isaPlayer)) {
                         Interface.CallHook("OnSATooManyGameBansKick", pSteamId, isaPlayer.steamData.NumberOfGameBans);
-                        KickPlayer(isaPlayer?.steamid, GetMsg("Too Many Previous Game Bans"));
+                        KickPlayer(isaPlayer?.steamid, GetMsg("Too Many Previous Game Bans"), "C");
                     }
 
                     // Kick bloody/a4 owners
                     if (!HasPerm(pSteamId, PermissionWhitelistHardwareOwnsBloody) && (OwnsBloody(isaPlayer) || HasGroup(pSteamId, GroupBloody))) {
                         Interface.CallHook("OnSABloodyKick", pSteamId);
-                        KickPlayer(isaPlayer?.steamid, GetMsg("Kick Bloody"));
+                        KickPlayer(isaPlayer?.steamid, GetMsg("Kick Bloody"), "C");
                     }
 
                     // Kick players with too many bans
                     if (!HasPerm(pSteamId, PermissionWhitelistServerCeilingKick) && HasReachedServerCeiling(isaPlayer)) {
                         Interface.CallHook("OnSATooManyBans", pSteamId, config.AutoKickCeiling, isaPlayer.serverBanCount + isaPlayer.lenderServerBanCount);
-                        KickPlayer(isaPlayer?.steamid, GetMsg("Too Many Previous Bans"));
+                        KickPlayer(isaPlayer?.steamid, GetMsg("Too Many Previous Bans"), "C");
                     }
 
                     // Kick players with private profiles
                     if (!HasPerm(pSteamId, PermissionWhitelistSteamProfile) && config.AutoKick_KickPrivateProfile && isaPlayer.communityvisibilitystate == 1) {
                         Interface.CallHook("OnSAProfilePrivate", pSteamId, isaPlayer.communityvisibilitystate);
-                        KickPlayer(isaPlayer?.steamid, GetMsg("Profile Private"));
+                        KickPlayer(isaPlayer?.steamid, GetMsg("Profile Private"), "C");
                     }
 
                     // Kick players with hidden steam level
                     if (!HasPerm(pSteamId, PermissionWhitelistSteamProfile) && isaPlayer.steamLevel == -1 && config.AutoKick_KickHiddenLevel) {
                         Interface.CallHook("OnSASteamLevelHidden", pSteamId);
-                        KickPlayer(isaPlayer?.steamid, GetMsg("Steam Level Hidden"));
+                        KickPlayer(isaPlayer?.steamid, GetMsg("Steam Level Hidden"), "C");
                     }
 
                     // Kick players low steam profile level
                     if (!HasPerm(pSteamId, PermissionWhitelistSteamProfile) && isaPlayer.steamLevel < config.AutoKick_MinSteamProfileLevel) {
                         Interface.CallHook("OnSAProfileLevelLow", pSteamId, config.AutoKick_MinSteamProfileLevel, isaPlayer.steamLevel);
-                        KickPlayer(isaPlayer?.steamid, GetMsg("Profile Low Level", new Dictionary<string, string> { ["level"] = config.AutoKick_MinSteamProfileLevel.ToString() }));
+                        KickPlayer(isaPlayer?.steamid, GetMsg("Profile Low Level", new Dictionary<string, string> { ["level"] = config.AutoKick_MinSteamProfileLevel.ToString() }), "C");
                     }
 
                     GetPlayerReport(isaPlayer, connected);
@@ -326,8 +327,8 @@ namespace Oxide.Plugins {
             if (isaPlayer == null) return;
 
             ISABan ban = IsBanned(isaPlayer?.steamid);
-            if (ban != null) KickPlayer(isaPlayer?.steamid, ban.reason);
-            if (isaPlayer.lenderBanned) KickPlayer(isaPlayer?.steamid, GetMsg("Lender Banned"));
+            if (ban != null) KickPlayer(isaPlayer?.steamid, ban.reason, "U");
+            if (isaPlayer.lenderBanned) KickPlayer(isaPlayer?.steamid, GetMsg("Lender Banned"), "U");
         }
 
 
@@ -606,7 +607,7 @@ namespace Oxide.Plugins {
 
         bool BanPlayer(IPlayer iPlayer, ISABan ban) {
             AddBan(iPlayer, ban);
-            KickPlayer(iPlayer.Id, ban.reason);
+            KickPlayer(iPlayer.Id, ban.reason, "U");
             return true;
         }
         #endregion
@@ -630,7 +631,7 @@ namespace Oxide.Plugins {
         }
 
         void CheckLocalBans() {
-#if RUST
+//#if RUST
             IEnumerable<ServerUsers.User> bannedUsers = ServerUsers.GetAll(ServerUsers.UserGroup.Banned);
             int BannedUsersCount = bannedUsers.Count();
             int BannedUsersCounter = 0;
@@ -807,7 +808,8 @@ namespace Oxide.Plugins {
 
         #region Kicking 
 
-        void KickPlayer(string steamid, string reason) {
+        void KickPlayer(string steamid, string reason, string type) {
+            if (type == "D") return;
             IPlayer player = players.FindPlayerById(steamid);
             if (player == null) return;
 
@@ -1118,6 +1120,8 @@ namespace Oxide.Plugins {
                 string hitsData = aObject.GetValue("hitsData").ToString();
                 string hitInfoProjectileDistance = aObject.GetValue("hitInfoProjectileDistance").ToString();
 
+                Puts("https://io.serverarmour.com/addArkan_Aim" + ServerGetString("?") + $"uid={player.UserIDString}&attach={attachments}&ammo={ammoShortName}&weapon={weaponShortName}&dmg={damage}&bp={bodypart}&distance={hitInfoProjectileDistance}&hits={hitsData}");
+
                 webrequest.Enqueue("https://io.serverarmour.com/addArkan_Aim" + ServerGetString("?"), $"uid={player.UserIDString}&attach={attachments}&ammo={ammoShortName}&weapon={weaponShortName}&dmg={damage}&bp={bodypart}&distance={hitInfoProjectileDistance}&hits={hitsData}", (code, response) => {
                     if (code != 200 || response == null) {
                         Puts(GetMsg("No Response From API", new Dictionary<string, string> { ["code"] = code.ToString(), ["response"] = response }));
@@ -1229,7 +1233,7 @@ namespace Oxide.Plugins {
                 GetConfig(ref AutoKick_KickPrivateProfile, "Auto Kick: Private Steam Profiles");
                 GetConfig(ref AutoKick_KickHiddenLevel, "Auto Kick: When Steam Level Hidden");
                 GetConfig(ref AutoKick_MinSteamProfileLevel, "Auto Kick: Min Allowed Steam Level (-1 disables)");
-                GetConfig(ref AutoKick_MinSteamProfileLevel, "Auto Kick: Profiles that do no conform to the Steam64 IDs (Highly recommended)");
+                GetConfig(ref AutoKick_KickWeirdSteam64, "Auto Kick: Profiles that do no conform to the Steam64 IDs (Highly recommended)");
 
                 GetConfig(ref DiscordWebhookURL, "Discord: Webhook URL");
                 GetConfig(ref DiscordQuickConnect, "Discord: Show Quick Connect On report");
