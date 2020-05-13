@@ -160,23 +160,14 @@ namespace Oxide.Plugins {
                 if (!IsPlayerCached(id) && (IsPlayerCached(id) && !ContainsMyBan(id))) {
                     Puts($"Player wasn't banned via Server Armour, now adding to DB with a default lengh ban of 100yrs {name} ({id}) at {ipAddress} was banned: {reason}");
                     IPlayer bPlayer = players.FindPlayerById(id);
-                    if (bPlayer != null) {
-                        AddBan(bPlayer, new ISABan {
-                            serverName = server.Name,
-                            serverIp = server.Address.ToString(),
-                            reason = reason,
-                            date = DateTime.Now.ToString(DATE_FORMAT),
-                            banUntil = DateTime.Now.AddYears(100).ToString(DATE_FORMAT)
-                        });
-                    } else {
-                        AddBan(id, new ISABan {
-                            serverName = server.Name,
-                            serverIp = server.Address.ToString(),
-                            reason = reason,
-                            date = DateTime.Now.ToString(DATE_FORMAT),
-                            banUntil = DateTime.Now.AddYears(100).ToString(DATE_FORMAT)
-                        });
-                    }
+                    AddBan(bPlayer, new ISABan {
+                        serverName = server.Name,
+                        serverIp = server.Address.ToString(),
+                        reason = reason,
+                        date = DateTime.Now.ToString(DATE_FORMAT),
+                        banUntil = DateTime.Now.AddYears(100).ToString(DATE_FORMAT)
+                    });
+
                 }
             });
         }
@@ -346,37 +337,31 @@ namespace Oxide.Plugins {
         void AddBan(IPlayer player, ISABan thisBan) {
             if (thisBan == null) return;
             DateTime now = DateTime.Now;
-
-            string url = $"https://io.serverarmour.com/addBan?steamid={player.Id}&ip={player.Address}&reason={thisBan.reason}&dateTime={thisBan.date}&dateUntil={thisBan.banUntil}" + ServerGetString();
+            string reason = Uri.EscapeDataString(thisBan.reason);
+            string url = $"https://io.serverarmour.com/addBan?steamid={player.Id}&ip={player.Address}&reason={reason}&dateTime={thisBan.date}&dateUntil={thisBan.banUntil}" + ServerGetString();
             string resp = "";
-            try {
-                webrequest.Enqueue(url, null, (code, response) => {
-                    resp = response;
-                    LogDebug(url);
-                    if (code != 200 || response == null) { Puts(GetMsg("No Response From API", new Dictionary<string, string> { ["code"] = code.ToString(), ["response"] = response })); return; }
-                    // ISABan thisBan = new ISABan { serverName = server.Name, date = dateTime, reason = banreason, serverIp = thisServerIp, banUntil = dateBanUntil };
-                    if (IsPlayerCached(player.Id)) {
-                        LogDebug($"{player.Id} has ban cached, now updating.");
-                        AddPlayerData(player.Id, thisBan);
-                    } else {
-                        LogDebug($"{player.Id} had no ban data cached, now creating.");
-                        ISAPlayer newPlayer = new ISAPlayer(player);
-                        newPlayer.serverBanData.Add(thisBan);
-                        AddPlayerCached(player, newPlayer);
-                    }
-                    //SaveData();
-                }, this, RequestMethod.GET);
-            } catch (Exception ice) {
-                Puts("An ArgumentNullException occured. Please notify the developer along with the below information: ");
-                Puts($"Player `{player.Id}`\nUrl: `{url}`");
-                Puts(resp);
-                return;
-            }
+            webrequest.Enqueue(url, null, (code, response) => {
+                LogDebug(url);
+                if (code != 200 || response == null) { Puts(GetMsg("No Response From API", new Dictionary<string, string> { ["code"] = code.ToString(), ["response"] = response })); return; }
+                // ISABan thisBan = new ISABan { serverName = server.Name, date = dateTime, reason = banreason, serverIp = thisServerIp, banUntil = dateBanUntil };
+                if (IsPlayerCached(player.Id)) {
+                    LogDebug($"{player.Id} has ban cached, now updating.");
+                    AddPlayerData(player.Id, thisBan);
+                } else {
+                    LogDebug($"{player.Id} had no ban data cached, now creating.");
+                    ISAPlayer newPlayer = new ISAPlayer(player);
+                    newPlayer.serverBanData.Add(thisBan);
+                    AddPlayerCached(player, newPlayer);
+                }
+                //SaveData();
+            }, this, RequestMethod.GET);
         }
 
-
         void AddBan(string playerId, ISABan thisBan) {
-            if (thisBan == null) return;
+            if (thisBan == null) {
+                Puts($"This ban is null");
+                return;
+            }
             DateTime now = DateTime.Now;
 
             string url = $"https://io.serverarmour.com/addBan?steamid={playerId}&ip=0.0.0.0&reason={thisBan.reason}&dateTime={thisBan.date}&dateUntil={thisBan.banUntil}" + ServerGetString();
@@ -394,7 +379,7 @@ namespace Oxide.Plugins {
                         LogDebug($"{playerId} had no ban data cached, now creating.");
                         ISAPlayer newPlayer = new ISAPlayer().CreatePlayer(playerId);
                         newPlayer.serverBanData.Add(thisBan);
-                        AddPlayerCached(playerId, newPlayer);
+                        AddPlayerCached(newPlayer.steamid, newPlayer);
                     }
                     //SaveData();
                 }, this, RequestMethod.GET);
@@ -683,16 +668,20 @@ namespace Oxide.Plugins {
             if (BannedUsersCount > 0)
                 timer.Repeat(waitTime, BannedUsersCount, () => {
                     ServerUsers.User usr = bannedUsers.ElementAt(BannedUsersCounter);
-                    LogDebug($"Checking local user ban {BannedUsersCounter + 1} of {BannedUsersCounter}");
-                    if (IsBanned(usr.steamid.ToString(specifier, culture)) == null) {
+                    LogDebug($"Checking local user ban {BannedUsersCounter + 1} of {BannedUsersCount}");
+                    if (IsBanned(usr.steamid.ToString(specifier, culture)) == null && !usr.IsExpired) {
                         IPlayer player = covalence.Players.FindPlayer(usr.steamid.ToString(specifier, culture));
-                        Puts($"Adding ban for {player.Name} with reason `{usr.notes}` to server armour.");
+                        DateTime expireDate = ConvertUnixToDateTime(usr.expiry);
+                        if(expireDate.Year <= 1970) {
+                            expireDate = expireDate.AddYears(100);
+                        }
+                        Puts($"Adding ban for {((player == null) ? usr.steamid.ToString() : player.Name)} with reason `{usr.notes}`, and expiry {expireDate.ToString(DATE_FORMAT)} to server armour.");
                         AddBan(player, new ISABan {
                             serverName = server.Name,
                             serverIp = server.Address.ToString(),
                             reason = usr.notes,
                             date = DateTime.Now.ToString(DATE_FORMAT),
-                            banUntil = usr.expiry.ToString()
+                            banUntil = expireDate.ToString(DATE_FORMAT)
                         });
                     }
 
@@ -807,6 +796,14 @@ namespace Oxide.Plugins {
             while (playerCounter < playerCount) {
                 LoadPlayerData(connectedPlayers.ElementAt(playerCounter)?.Id);
                 playerCounter++;
+            }
+
+            IEnumerable<ServerUsers.User> bannedUsers = ServerUsers.GetAll(ServerUsers.UserGroup.Banned);
+            int BannedUsersCount = bannedUsers.Count();
+            int BannedUsersCounter = 0;
+            while (BannedUsersCounter < BannedUsersCount) {
+                LoadPlayerData(bannedUsers.ElementAt(BannedUsersCounter)?.steamid.ToString());
+                BannedUsersCounter++;
             }
         }
 
@@ -1050,6 +1047,12 @@ namespace Oxide.Plugins {
 
         private static DateTime ConverToDateTime(string stringDate) {
             return DateTime.ParseExact(stringDate, DATE_FORMAT, null);
+        }
+        private static DateTime ConvertUnixToDateTime(long unixTimeStamp) {
+            // Unix timestamp is seconds past epoch
+            System.DateTime dtDateTime = new DateTime(1970, 1, 1, 0, 0, 0, 0, System.DateTimeKind.Utc);
+            dtDateTime = dtDateTime.AddSeconds(unixTimeStamp).ToLocalTime();
+            return dtDateTime;
         }
         #endregion
 
