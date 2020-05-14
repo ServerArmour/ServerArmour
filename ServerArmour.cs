@@ -15,7 +15,7 @@ using System.Linq;
 using Time = Oxide.Core.Libraries.Time;
 
 namespace Oxide.Plugins {
-    [Info("Server Armour", "Pho3niX90", "0.3.5")]
+    [Info("Server Armour", "Pho3niX90", "0.3.6")]
     [Description("Protect your server! Auto ban known hackers, scripters and griefer accounts, and notify server owners of threats.")]
     class ServerArmour : CovalencePlugin {
 
@@ -104,8 +104,12 @@ namespace Oxide.Plugins {
             CheckLocalBans();
 
             Puts("Server Armour is being initialized.");
+            string serverAddress = covalence.Server.Address.ToString();
+            if (string.IsNullOrEmpty(config.ServerIp) && !string.IsNullOrEmpty(serverAddress) && !serverAddress.Equals("0.0.0.0")) {
+                config.ServerIp = serverAddress;
+            }
             SaveConfig();
-
+            Puts($"Server IP is {config.ServerIp}");
             AddGroup(GroupBloody);
 
             RegPerm(PermissionToBan);
@@ -757,7 +761,7 @@ namespace Oxide.Plugins {
         }
 
         void GetPlayerReport(ISAPlayer isaPlayer, bool isConnected = true, bool isCommand = false, IPlayer cmdPlayer = null) {
-
+            if (isaPlayer == null) return;
             Dictionary<string, string> data =
                        new Dictionary<string, string> {
                            ["status"] = IsPlayerDirty(isaPlayer.steamid) ? "dirty" : "clean",
@@ -929,8 +933,9 @@ namespace Oxide.Plugins {
         }
 
         bool IsFamilyShare(string steamid) {
+            if (steamid.Length != 17 || string.IsNullOrEmpty(steamid)) return false;
             ISAPlayer player = GetPlayerCache(steamid);
-            return !player.lendersteamid.Equals("0");
+            return player != null && player.lendersteamid != null && !player.lendersteamid.Equals("0");
         }
 
         bool IsProfilePrivate(string steamid) {
@@ -1333,6 +1338,11 @@ namespace Oxide.Plugins {
                 if (plugin.Config.Get(path) == null) {
                     SetConfig(ref variable, path);
                     plugin.PrintWarning($"Added new field to config: {string.Join("/", path)}");
+                }
+                string serverAddress = plugin.covalence.Server.Address.ToString();
+                if (path.Equals("Your Server IP") && string.IsNullOrEmpty(ServerIp) && !string.IsNullOrEmpty(serverAddress) && !serverAddress.Equals("0.0.0.0")) {
+                    ServerIp = serverAddress;
+                    SetConfig(ref variable, path);
                 }
 
                 variable = (T)Convert.ChangeType(plugin.Config.Get(path), typeof(T));
