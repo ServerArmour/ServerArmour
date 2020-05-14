@@ -29,7 +29,7 @@ namespace Oxide.Plugins {
         bool debug = false;
         int secondsBetweenWebRequests;
         CultureInfo culture = CultureInfo.CreateSpecificCulture("en-US");
-        StringComparison defaultCompare = StringComparison.InvariantCultureIgnoreCase;
+        //StringComparison defaultCompare = StringComparison.InvariantCultureIgnoreCase;
         const string DATE_FORMAT = "yyyy/MM/dd HH:mm";
         #region Permissions
         const string PermissionToBan = "serverarmour.ban";
@@ -197,8 +197,6 @@ namespace Oxide.Plugins {
 
         #region WebRequests
 
-        bool reportSent = false;
-
         void GetPlayerBans(IPlayer player, bool reCache = false, string type = "C") {
             if (type == "C" && IsCacheValid(player?.Id)) KickIfBanned(GetPlayerCache(player?.Id));
             _webCheckPlayer(player.Name, player.Id, player.Address, player.IsConnected, type);
@@ -243,6 +241,7 @@ namespace Oxide.Plugins {
                         Puts("An ArgumentNullException occured. Please notify the developer along with the below information: ");
                         Puts($"PlayerName `{playerName}`\nUrl: `{url}`\nIsaPlayer? {isaPlayer != null}\nIsLender {isaPlayer?.lendersteamid}");
                         Puts(response);
+                        Puts(ane.Message);
                     }
 
                     //script vars
@@ -326,6 +325,7 @@ namespace Oxide.Plugins {
                 Puts("An ArgumentNullException occured. Please notify the developer along with the below information: ");
                 Puts($"PlayerName `{playerName}`\nUrl: `{url}`");
                 Puts(resp);
+                Puts(ice.Message);
                 return;
             }
         }
@@ -344,7 +344,6 @@ namespace Oxide.Plugins {
             DateTime now = DateTime.Now;
             string reason = Uri.EscapeDataString(thisBan.reason);
             string url = $"https://io.serverarmour.com/addBan?steamid={player.Id}&ip={player.Address}&reason={reason}&dateTime={thisBan.date}&dateUntil={thisBan.banUntil}" + ServerGetString();
-            string resp = "";
             webrequest.Enqueue(url, null, (code, response) => {
                 LogDebug(url);
                 if (code != 200 || response == null) { Puts(GetMsg("No Response From API", new Dictionary<string, string> { ["code"] = code.ToString(), ["response"] = response })); return; }
@@ -392,6 +391,7 @@ namespace Oxide.Plugins {
                 Puts("An ArgumentNullException occured. Please notify the developer along with the below information: ");
                 Puts($"Player `{playerId}`\nUrl: `{url}`");
                 Puts(resp);
+                Puts(ice.Message);
                 return;
             }
         }
@@ -906,6 +906,7 @@ namespace Oxide.Plugins {
                 if (_playerData.ContainsKey(steamid)) {
                     _playerData.Remove(steamid);
                 }
+                Puts(ioe.Message);
                 return null;
             }
         }
