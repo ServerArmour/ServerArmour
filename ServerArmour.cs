@@ -15,7 +15,7 @@ using System.Linq;
 using Time = Oxide.Core.Libraries.Time;
 
 namespace Oxide.Plugins {
-    [Info("Server Armour", "Pho3niX90", "0.3.6")]
+    [Info("Server Armour", "Pho3niX90", "0.4.0")]
     [Description("Protect your server! Auto ban known hackers, scripters and griefer accounts, and notify server owners of threats.")]
     class ServerArmour : CovalencePlugin {
 
@@ -181,12 +181,27 @@ namespace Oxide.Plugins {
             Puts($"Player {player.Name} ({player.Id}) was kicked, {reason}");
             if (!reason.Equals(GetMsg("Kick Bloody")) && (reason.ToLower().Contains("bloody") || reason.ToLower().Contains("a4") || reason.ToLower().Contains("blacklisted"))) {
                 AssignGroup(player.Id, GroupBloody);
-                webrequest.Enqueue("https://io.serverarmour.com/addBloodyKicks" + ServerGetString("?"), $"steamid={player.Id}&reason={reason}", (code, response) => {
+                webrequest.Enqueue("https://io.serverarmour.com/api/plugin/addBloodyKicks" + ServerGetString("?"), $"steamid={player.Id}&reason={reason}", (code, response) => {
                     if (code != 200 || response == null) {
                         Puts(GetMsg("No Response From API", new Dictionary<string, string> { ["code"] = code.ToString(), ["response"] = response }));
                         return;
                     }
                 }, this, RequestMethod.POST);
+            } else if (!reason.Equals(GetMsg("Kick Bloody")) && (reason.ToLower().Contains("gameban") || reason.ToLower().Contains("PublisherIssuedBan"))) {
+                webrequest.Enqueue("https://io.serverarmour.com/api/plugin/addGameBan" + ServerGetString("?"), $"steamid={player.Id}&reason={reason}", (code, response) => {
+                    if (code != 200 || response == null) {
+                        Puts(GetMsg("No Response From API", new Dictionary<string, string> { ["code"] = code.ToString(), ["response"] = response }));
+                        return;
+                    }
+                }, this, RequestMethod.POST);
+
+                if(config.DiscordNotifyGameBan) { 
+                    DiscordSend(player, new EmbedFieldList() {
+                        name = "Player Game Banned",
+                        value = reason,
+                        inline = true
+                    }, 13459797);
+                }
             }
         }
         #endregion
@@ -204,7 +219,7 @@ namespace Oxide.Plugins {
 
         void _webCheckPlayer(string name, string id, string address, Boolean connected, string type) {
             string playerName = Uri.EscapeDataString(name);
-            string url = $"https://io.serverarmour.com/checkUser?steamid={id}&ip={address}&t={type}" + ServerGetString();
+            string url = $"https://io.serverarmour.com/api/plugin/checkUser?steamid={id}&ip={address}&t={type}" + ServerGetString();
             //Puts(url);
             string resp = "";
             try {
@@ -343,7 +358,7 @@ namespace Oxide.Plugins {
             if (thisBan == null) return;
             DateTime now = DateTime.Now;
             string reason = Uri.EscapeDataString(thisBan.reason);
-            string url = $"https://io.serverarmour.com/addBan?steamid={player.Id}&ip={player.Address}&reason={reason}&dateTime={thisBan.date}&dateUntil={thisBan.banUntil}" + ServerGetString();
+            string url = $"https://io.serverarmour.com/api/plugin/addBan?steamid={player.Id}&ip={player.Address}&reason={reason}&dateTime={thisBan.date}&dateUntil={thisBan.banUntil}" + ServerGetString();
             webrequest.Enqueue(url, null, (code, response) => {
                 LogDebug(url);
                 if (code != 200 || response == null) { Puts(GetMsg("No Response From API", new Dictionary<string, string> { ["code"] = code.ToString(), ["response"] = response })); return; }
@@ -368,7 +383,7 @@ namespace Oxide.Plugins {
             }
             DateTime now = DateTime.Now;
             string reason = Uri.EscapeDataString(thisBan.reason);
-            string url = $"https://io.serverarmour.com/addBan?steamid={playerId}&ip=0.0.0.0&reason={reason}&dateTime={thisBan.date}&dateUntil={thisBan.banUntil}" + ServerGetString();
+            string url = $"https://io.serverarmour.com/api/plugin/addBan?steamid={playerId}&ip=0.0.0.0&reason={reason}&dateTime={thisBan.date}&dateUntil={thisBan.banUntil}" + ServerGetString();
             string resp = "";
             try {
                 webrequest.Enqueue(url, null, (code, response) => {
@@ -1187,7 +1202,7 @@ namespace Oxide.Plugins {
                 string attachments = String.Join(", ", aObject.GetValue("attachments").Select(jv => (string)jv).ToArray());
                 string suspiciousNoRecoilShots = aObject.GetValue("suspiciousNoRecoilShots").ToString();
 
-                webrequest.Enqueue("https://io.serverarmour.com/addArkan" + ServerGetString("?"), $"uid={player.UserIDString}&vp={violationProbability}&sc={shotsCnt}&ammo={ammoShortName}&weapon={weaponShortName}&attach={attachments}&snrs={suspiciousNoRecoilShots}", (code, response) => {
+                webrequest.Enqueue("https://io.serverarmour.com/api/plugin/addArkan" + ServerGetString("?"), $"uid={player.UserIDString}&vp={violationProbability}&sc={shotsCnt}&ammo={ammoShortName}&weapon={weaponShortName}&attach={attachments}&snrs={suspiciousNoRecoilShots}", (code, response) => {
                     if (code != 200 || response == null) {
                         Puts(GetMsg("No Response From API", new Dictionary<string, string> { ["code"] = code.ToString(), ["response"] = response }));
                         return;
@@ -1207,9 +1222,9 @@ namespace Oxide.Plugins {
                 string hitsData = aObject.GetValue("hitsData").ToString();
                 string hitInfoProjectileDistance = aObject.GetValue("hitInfoProjectileDistance").ToString();
 
-                Puts("https://io.serverarmour.com/addArkan_Aim" + ServerGetString("?") + $"uid={player.UserIDString}&attach={attachments}&ammo={ammoShortName}&weapon={weaponShortName}&dmg={damage}&bp={bodypart}&distance={hitInfoProjectileDistance}&hits={hitsData}");
+                Puts("https://io.serverarmour.com/api/plugin/addArkan_Aim" + ServerGetString("?") + $"uid={player.UserIDString}&attach={attachments}&ammo={ammoShortName}&weapon={weaponShortName}&dmg={damage}&bp={bodypart}&distance={hitInfoProjectileDistance}&hits={hitsData}");
 
-                webrequest.Enqueue("https://io.serverarmour.com/addArkan_Aim" + ServerGetString("?"), $"uid={player.UserIDString}&attach={attachments}&ammo={ammoShortName}&weapon={weaponShortName}&dmg={damage}&bp={bodypart}&distance={hitInfoProjectileDistance}&hits={hitsData}", (code, response) => {
+                webrequest.Enqueue("https://io.serverarmour.com/api/plugin/addArkan_Aim" + ServerGetString("?"), $"uid={player.UserIDString}&attach={attachments}&ammo={ammoShortName}&weapon={weaponShortName}&dmg={damage}&bp={bodypart}&distance={hitInfoProjectileDistance}&hits={hitsData}", (code, response) => {
                     if (code != 200 || response == null) {
                         Puts(GetMsg("No Response From API", new Dictionary<string, string> { ["code"] = code.ToString(), ["response"] = response }));
                         return;
@@ -1270,6 +1285,7 @@ namespace Oxide.Plugins {
             public bool DiscordOnlySendDirtyReports = true;
             public bool DiscordKickReport = true;
             public bool DiscordBanReport = true;
+            public bool DiscordNotifyGameBan = true;
             public bool SubmitArkanData = true;
 
             public string OwnerSteamId = "";
@@ -1327,6 +1343,7 @@ namespace Oxide.Plugins {
                 GetConfig(ref DiscordWebhookURL, "Discord: Webhook URL");
                 GetConfig(ref DiscordQuickConnect, "Discord: Show Quick Connect On report");
                 GetConfig(ref DiscordOnlySendDirtyReports, "Discord: Send Only Dirty Player Reports");
+                GetConfig(ref DiscordNotifyGameBan, "Discord: Notify when a player has received a game ban");
                 GetConfig(ref DiscordKickReport, "Discord: Send Kick Report");
                 GetConfig(ref DiscordBanReport, "Discord: Send Ban Report");
 
