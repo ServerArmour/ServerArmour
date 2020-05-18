@@ -15,7 +15,7 @@ using System.Linq;
 using Time = Oxide.Core.Libraries.Time;
 
 namespace Oxide.Plugins {
-    [Info("Server Armour", "Pho3niX90", "0.4.0")]
+    [Info("Server Armour", "Pho3niX90", "0.4.1")]
     [Description("Protect your server! Auto ban known hackers, scripters and griefer accounts, and notify server owners of threats.")]
     class ServerArmour : CovalencePlugin {
 
@@ -195,7 +195,7 @@ namespace Oxide.Plugins {
                     }
                 }, this, RequestMethod.POST);
 
-                if(config.DiscordNotifyGameBan) { 
+                if (config.DiscordNotifyGameBan) {
                     DiscordSend(player, new EmbedFieldList() {
                         name = "Player Game Banned",
                         value = reason,
@@ -671,10 +671,14 @@ namespace Oxide.Plugins {
                 timer.Repeat(waitTime, allPlayersCount, () => {
                     LogDebug("Will now inspect all online users, time etimation: " + (allPlayersCount * waitTime) + " seconds");
                     LogDebug($"Inpecting online user {allPlayersCounter + 1} of {allPlayersCount} for infractions");
-                    IPlayer player = allPlayers.ElementAt(allPlayersCounter);
-                    if (player != null) GetPlayerBans(player, true, "U");
-                    if (allPlayersCounter < allPlayersCount) LogDebug("Inspection completed.");
-                    allPlayersCounter++;
+                    try {
+                        IPlayer player = allPlayers.ElementAt(allPlayersCounter);
+                        if (player != null) GetPlayerBans(player, true, "U");
+                        if (allPlayersCounter < allPlayersCount) LogDebug("Inspection completed.");
+                        allPlayersCounter++;
+                    } catch (ArgumentOutOfRangeException aore) {
+                        allPlayersCounter++;
+                    }
                 });
         }
 
@@ -690,28 +694,32 @@ namespace Oxide.Plugins {
                     ServerUsers.User usr = bannedUsers.ElementAt(BannedUsersCounter);
                     LogDebug($"Checking local user ban {BannedUsersCounter + 1} of {BannedUsersCount}");
                     if (IsBanned(usr.steamid.ToString(specifier, culture)) == null && !usr.IsExpired) {
-                        IPlayer player = covalence.Players.FindPlayer(usr.steamid.ToString(specifier, culture));
-                        DateTime expireDate = ConvertUnixToDateTime(usr.expiry);
-                        if (expireDate.Year <= 1970) {
-                            expireDate = expireDate.AddYears(100);
-                        }
-                        Puts($"Adding ban for {((player == null) ? usr.steamid.ToString() : player.Name)} with reason `{usr.notes}`, and expiry {expireDate.ToString(DATE_FORMAT)} to server armour.");
-                        if (player != null) {
-                            AddBan(player, new ISABan {
-                                serverName = server.Name,
-                                serverIp = config.ServerIp,
-                                reason = usr.notes,
-                                date = DateTime.Now.ToString(DATE_FORMAT),
-                                banUntil = expireDate.ToString(DATE_FORMAT)
-                            });
-                        } else {
-                            AddBan(usr.steamid.ToString(), new ISABan {
-                                serverName = server.Name,
-                                serverIp = config.ServerIp,
-                                reason = usr.notes,
-                                date = DateTime.Now.ToString(DATE_FORMAT),
-                                banUntil = expireDate.ToString(DATE_FORMAT)
-                            });
+                        try {
+                            IPlayer player = covalence.Players.FindPlayer(usr.steamid.ToString(specifier, culture));
+                            DateTime expireDate = ConvertUnixToDateTime(usr.expiry);
+                            if (expireDate.Year <= 1970) {
+                                expireDate = expireDate.AddYears(100);
+                            }
+                            Puts($"Adding ban for {((player == null) ? usr.steamid.ToString() : player.Name)} with reason `{usr.notes}`, and expiry {expireDate.ToString(DATE_FORMAT)} to server armour.");
+                            if (player != null) {
+                                AddBan(player, new ISABan {
+                                    serverName = server.Name,
+                                    serverIp = config.ServerIp,
+                                    reason = usr.notes,
+                                    date = DateTime.Now.ToString(DATE_FORMAT),
+                                    banUntil = expireDate.ToString(DATE_FORMAT)
+                                });
+                            } else {
+                                AddBan(usr.steamid.ToString(), new ISABan {
+                                    serverName = server.Name,
+                                    serverIp = config.ServerIp,
+                                    reason = usr.notes,
+                                    date = DateTime.Now.ToString(DATE_FORMAT),
+                                    banUntil = expireDate.ToString(DATE_FORMAT)
+                                });
+                            }
+                        } catch (ArgumentOutOfRangeException aore) {
+                            BannedUsersCounter++;
                         }
                     }
 
