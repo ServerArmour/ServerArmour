@@ -20,7 +20,7 @@ using Time = Oxide.Core.Libraries.Time;
 
 namespace Oxide.Plugins
 {
-    [Info("Server Armour", "Pho3niX90", "0.4.92")]
+    [Info("Server Armour", "Pho3niX90", "0.4.93")]
     [Description("Protect your server! Auto ban known hackers, scripters and griefer accounts, and notify server owners of threats.")]
     class ServerArmour : CovalencePlugin
     {
@@ -444,7 +444,6 @@ namespace Oxide.Plugins
         }
 
         void SaUnban(string playerId, IPlayer player = null) {
-            players.FindPlayer(playerId);
             LogDebug("Will now unban");
 
             IPlayer iPlayer = players.FindPlayer(playerId);
@@ -487,6 +486,7 @@ namespace Oxide.Plugins
                 SendReplyWithIcon(player, GetMsg("Ban Syntax"));
                 return;
             }
+
             string banPlayer = args[0];
             string banReason = args[1];
             ulong banSteamId = 0;
@@ -684,7 +684,7 @@ namespace Oxide.Plugins
 
         void RemoveBans(string id) {
             if (_playerData.ContainsKey(id) && _playerData[id].serverBanData.Count > 0) {
-                _playerData[id].serverBanData.RemoveAll(x => x.serverIp == config.ServerIp);
+                _playerData[id].serverBanData.RemoveAll(x => x.serverIp == config.ServerIp || x.adminSteamId.Equals(config.OwnerSteamId));
                 SavePlayerData(id);
             }
         }
@@ -939,7 +939,6 @@ namespace Oxide.Plugins
 
             if (player.IsConnected) player?.Kick(reason);
 
-            if (type != "C") return;
             if (config.DiscordKickReport) {
                 DiscordSend(player.Id, player.Name, new EmbedFieldList() {
                     name = "Player Kicked",
@@ -947,6 +946,8 @@ namespace Oxide.Plugins
                     inline = true
                 }, 13459797);
             }
+
+            if (type == "D") return;
             if (config.BroadcastNewBans) {
                 BroadcastWithIcon(GetMsg("Player Kicked", new Dictionary<string, string> { ["player"] = player.Name, ["reason"] = reason }));
             }
@@ -1082,7 +1083,7 @@ namespace Oxide.Plugins
                 ["Reason: Proxy IP"] = "VPN & Proxy's not allowed.",
                 ["Player Not Found"] = "Player wasn't found",
                 ["Multiple Players Found"] = "Multiple players found with that name ({players}), please try something more unique like a steamid",
-                ["Ban Syntax"] = "sa.ban <playerNameOrID> \"<reason>\" [duration days: default 3650]",
+                ["Ban Syntax"] = "sa.ban <playerNameOrID> \"<reason>\" length (example: 1h for 1 hour, 1m for 1 month etc)",
                 ["UnBan Syntax"] = "sa.unban <playerNameOrID>",
                 ["No Response From API"] = "Couldn't get an answer from ServerArmour.com! Error: {code} {response}",
                 ["Player Not Banned"] = "Player not banned",
