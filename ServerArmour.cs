@@ -17,7 +17,7 @@ using Time = Oxide.Core.Libraries.Time;
 
 namespace Oxide.Plugins
 {
-    [Info("Server Armour", "Pho3niX90", "0.4.992")]
+    [Info("Server Armour", "Pho3niX90", "0.4.994")]
     [Description("Protect your server! Auto ban known hackers, scripters and griefer accounts, and notify server owners of threats.")]
     class ServerArmour : CovalencePlugin
     {
@@ -297,6 +297,12 @@ namespace Oxide.Plugins
                         } else {
                             KickPlayer(pSteamId, GetMsg("Reason: Bad IP"), "C");
                         }
+                    }
+
+                    // Kick family share accounts
+                    if (config.AutoKickFamilyShare && IsFamilyShare(pSteamId)) {
+                        Interface.CallHook("OnSAFamilyShareKick", pSteamId);
+                        KickPlayer(isaPlayer?.steamid, GetMsg("Family Share Kick"), "C");
                     }
 
                     // does the user contain a keyword ban
@@ -594,7 +600,7 @@ namespace Oxide.Plugins
                         name = "Player Banned",
                         value = msgClean,
                         inline = true
-                    }, 13459797);
+                    }, 13459797, true);
                 }
             }
         }
@@ -1096,6 +1102,7 @@ namespace Oxide.Plugins
                 ["Reason: VAC Ban Too Fresh - Lender"] = "VAC ban received {daysago} days ago on lender account, wait another {daysto} days",
                 ["Lender Banned"] = "The lender account contained a ban",
                 ["Keyword Kick"] = "Due to your past behaviour on other servers, you aren't allowed in.",
+                ["Family Share Kick"] = "Family share accounts are not allowed on this server.",
                 ["Too Many Previous Bans"] = "You have too many previous bans (other servers included). Appeal in discord",
                 ["Too Many Previous Game Bans"] = "You have too many previous game bans. Appeal in discord",
                 ["Kick Bloody"] = "You own a bloody/a4 tech device. Appeal in discord",
