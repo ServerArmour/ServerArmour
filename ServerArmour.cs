@@ -13,11 +13,12 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using WebSocketSharp;
+using Oxide.Game.Rust.Libraries;
 using Time = Oxide.Core.Libraries.Time;
 
 namespace Oxide.Plugins
 {
-    [Info("Server Armour", "Pho3niX90", "0.4.994")]
+    [Info("Server Armour", "Pho3niX90", "0.4.995")]
     [Description("Protect your server! Auto ban known hackers, scripters and griefer accounts, and notify server owners of threats.")]
     class ServerArmour : CovalencePlugin
     {
@@ -33,6 +34,10 @@ namespace Oxide.Plugins
         //StringComparison defaultCompare = StringComparison.InvariantCultureIgnoreCase;
         const string DATE_FORMAT = "yyyy/MM/dd HH:mm";
         ulong ServerArmourId = 76561199060671869L;
+        #endregion
+
+        #region Libraries
+        private readonly Game.Rust.Libraries.Player Player = Interface.Oxide.GetLibrary<Game.Rust.Libraries.Player>();
         #endregion
 
         #region Permissions
@@ -51,15 +56,15 @@ namespace Oxide.Plugins
         #endregion
 
         #region Plugins
-        [PluginReference] Plugin DiscordApi, DiscordMessages, BetterChat;
+        [PluginReference] Plugin DiscordApi, DiscordMessages, BetterChat, Ember;
 
         void DiscordSend(string steamId, string name, EmbedFieldList report, int color = 39423, bool isBan = false) {
             string webHook;
             if (isBan) {
-                if (config.DiscordBanWebhookURL.Length == 0 && !config.DiscordBanWebhookURL.Equals("https://support.discordapp.com/hc/en-us/articles/228383668-Intro-to-Webhooks")) { Puts("Discord webhook not setup."); return; }
+                if (config.DiscordBanWebhookURL.Length == 0 || config.DiscordBanWebhookURL.Equals("https://support.discordapp.com/hc/en-us/articles/228383668-Intro-to-Webhooks")) { Puts("Discord webhook not setup."); return; }
                 webHook = config.DiscordBanWebhookURL;
             } else {
-                if (config.DiscordWebhookURL.Length == 0 && !config.DiscordWebhookURL.Equals("https://support.discordapp.com/hc/en-us/articles/228383668-Intro-to-Webhooks")) { Puts("Discord webhook not setup."); return; }
+                if (config.DiscordWebhookURL.Length == 0 || config.DiscordWebhookURL.Equals("https://support.discordapp.com/hc/en-us/articles/228383668-Intro-to-Webhooks")) { Puts("Discord webhook not setup."); return; }
                 webHook = config.DiscordWebhookURL;
             }
 
@@ -149,7 +154,6 @@ namespace Oxide.Plugins
         }
 
         void OnUserDisconnected(IPlayer player) {
-            GetPlayerBans(player, true, "D");
             SaveThenPurge(player.Id);
         }
 
@@ -379,6 +383,8 @@ namespace Oxide.Plugins
             DateTime now = DateTime.Now;
             string reason = Uri.EscapeDataString(thisBan.reason);
             string url = $"https://io.serverarmour.com/api/plugin/addBan?steamid={player.Id}&ip={player?.Address}&reason={reason}&dateTime={thisBan.date}&dateUntil={thisBan.banUntil}" + ServerGetString();
+
+
             webrequest.Enqueue(url, null, (code, response) => {
                 LogDebug(url);
                 if (code != 200 || response == null) { Puts(GetMsg("No Response From API", new Dictionary<string, string> { ["code"] = code.ToString(), ["response"] = response })); return; }
@@ -441,7 +447,6 @@ namespace Oxide.Plugins
         void SCmdCheckLocalBans(IPlayer player, string command, string[] args) {
             CheckLocalBans();
         }
-
         [Command("unban", "playerunban", "sa.unban"), Permission(PermissionToUnBan)]
         void SCmdUnban(IPlayer player, string command, string[] args) {
             if (args == null || (args.Length != 1)) {
@@ -459,6 +464,12 @@ namespace Oxide.Plugins
             if (iPlayer != null && iPlayer.IsBanned) iPlayer.Unban();
             RemoveBans(iPlayer.Id);
             Puts($"Player {iPlayer.Name} ({iPlayer.Id}) at {iPlayer.Address} was unbanned");
+
+
+            // Add ember support.
+            if (Ember != null)
+                Ember?.Call("Unban", playerId, Player.FindById(player?.Id));
+            //
 
             RCon.Broadcast(RCon.LogType.Chat, new Chat.ChatEntry {
                 Message = "Unbanned",
@@ -506,6 +517,7 @@ namespace Oxide.Plugins
              * If time specified, default to 100 years
              ***/
             string lengthOfBan = argsLength >= 3 ? args[2] : "100y";
+            bool isPerma = lengthOfBan.ToLower().Trim().Equals("100y");
             string dateBanUntil = _BanUntil(lengthOfBan).ToString(DATE_FORMAT);
 
             if (argsLength == 4) {
@@ -574,6 +586,11 @@ namespace Oxide.Plugins
                 string msgClean = GetMsg("Player Now Banned Clean", new Dictionary<string, string> { ["player"] = playerName, ["reason"] = args[1], ["length"] = banLengthText });
 
 
+                // Add ember support.
+                if (Ember != null)
+                    Ember?.Call("Ban", playerId, BanMinutes(_BanUntil(lengthOfBan)), banReason, true, config.OwnerSteamId, Player.FindById(player.Id));
+                //
+
                 RCon.Broadcast(RCon.LogType.Chat, new Chat.ChatEntry {
                     Message = msgClean,
                     UserId = playerId,
@@ -624,14 +641,18 @@ namespace Oxide.Plugins
 
         #region Ban System
 
+        string BanMinutes(DateTime ban) {
+            return ((int)Math.Round((ban - DateTime.UtcNow).TotalMinutes)).ToString();
+        }
         DateTime _BanUntil(string banLength) {
             int digit = int.Parse(new string(banLength.Where(char.IsDigit).ToArray()));
+            Puts($"digit of ban length is {digit}");
             string del = new string(banLength.Where(char.IsLetter).ToArray());
             if (digit <= 0) {
                 digit = 100;
             }
 
-            DateTime now = DateTime.Now;
+            DateTime now = DateTime.UtcNow;
             string dateTime = now.ToString(DATE_FORMAT);
             DateTime dateBanUntil;
 
@@ -922,16 +943,12 @@ namespace Oxide.Plugins
         }
 
         void SavePlayerData(string id) {
-            if (!string.IsNullOrEmpty(id) && _playerData.ContainsKey(id)) {
+            if (!string.IsNullOrEmpty(id) && _playerData.ContainsKey(id) && IsCacheValid(id)) {
                 Interface.Oxide.DataFileSystem.WriteObject($"ServerArmour/{id}", _playerData[id], true);
             }
         }
 
-        string ServerGetString() {
-            return ServerGetString("&");
-        }
-
-        string ServerGetString(string start) {
+        string ServerGetString(string start = "&") {
             string sname = Uri.EscapeDataString(server.Name);
             string aname = Uri.EscapeDataString(config.ServerAdminName);
             string aemail = Uri.EscapeDataString(config.ServerAdminEmail);
@@ -1151,15 +1168,12 @@ namespace Oxide.Plugins
             }
         }
         void BroadcastWithIcon(string format, params object[] args) {
-
             foreach (var player in BasePlayer.activePlayerList) {
                 SendReplyWithIcon(player.IPlayer, format, args);
             }
         }
 
-        string FixColors(string msg) {
-            return msg.Replace("[/#]", "</color>").Replace("[", "<color=").Replace("]", ">");
-        }
+        string FixColors(string msg) => msg.Replace("[/#]", "</color>").Replace("[", "<color=").Replace("]", ">");
 
         void AddGroup(string group) {
             if (!permission.GroupExists(group)) permission.CreateGroup(group, "Bloody Mouse Owners", 0);
