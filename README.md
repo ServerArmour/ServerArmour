@@ -27,6 +27,7 @@ serverarmour.whitelist.banceiling
 serverarmour.whitelist.gamebanceiling
 serverarmour.whitelist.hardware.ownsbloody
 serverarmour.whitelist.steamprofile
+serverarmour.whitelist.twitterban
 ```
 
 ## Commands
@@ -78,7 +79,8 @@ serverarmour.whitelist.steamprofile
   "Auto Kick: VPN and Proxy": true, // WIll automatically kick a player if they are either using a proxy, vpn or is a bad IP,
   "Auto Kick: VPN and Proxy: Sensitivity": 1.0, //How sensitive it should be, max 1. Value of 1.0 will only kick known vpns and proxies, a value of 0.98 will kick all suspected vpns, proxies, and spamming ips
   "Auto Kick: Min Allowed Steam Level (-1 disables)": -1, // Minimum level steam profiles allowed
-  "Auto Kick: Private Steam Profiles": false, //When set to true, it will auto kick all players with private steam profiles.
+  "Auto Kick: Private Steam Profiles": false, //When set to true, it will auto kick all players with private steam profiles.,
+  "Auto Kick: Users that have been banned on rusthackreport": true, //When set to true, it will kick players that were reported as banned on https://twitter.com/rusthackreport - Only valid for games bans after 2020-08-08 19:33:00 UTC
   "Better Chat: Tag for dirty users": "",
   "Broadcast: New bans": true,
   "Broadcast: Player Reports": true,
