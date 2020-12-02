@@ -353,3 +353,7 @@ MigrationBackup/
 
 .gitignore
 /SmoothRestart.cs
+/.idea/vcs.xml
+/.idea/ServerArmour.iml
+/.idea/modules.xml
+/.idea/misc.xml

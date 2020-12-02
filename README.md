@@ -2,19 +2,24 @@ Protect your gaming server against hackers, scripters, cheats and grievers!
 
 The plugin allows you to auto kick known hackers and scripters, as well as cheaters, griefers, toxic playes, racist players etc, the list goes on and growing each day. 
 
+**Note: ** All auto kick features are configurable by server, so you can make use of the banDB or just use the features that are made available. 
+
 You can also auto kick users that are on VPN, PROXY or a BAD IP (See more at the bottom)
 
 This tool is a combination of wealth of information regarding players, from their vac ban counts, economy bans, game bans and server bans. It also gives you the family share information, if they are lending, and whom they are lending from, as well if the lender is either vac banned or community banned. 
 
-Please note, this is a BETA plugin, so not all features are available yet. Autobanning is still being tested to make sure all is well, and should be available within a week.
+## Disclaimer:
+* If you are an abusive & biased admin, your server ip will be blacklisted from using this service. 
 
-## NOTE!! Version 0.3.0
-Never assign group "serverarmour.hardware.ownsbloody" to anyone manually!
+## Discord: nd54sKX
+You can add the Server Armour bot to your discord by following this link:
 
+[Add the ServerArmour discord bot to your discord.](https://discord.com/api/oauth2/authorize?client_id=781921686202220575&permissions=281373767&scope=bot)
 ## Permissions
 ```
 /sa.ban - requires permission serverarmour.ban
 /sa.unban - requires permission serverarmour.unban
+/clanban - requires permission serverarmour.ban
 ```
 
 ## Whitelist Permissions
@@ -28,6 +33,7 @@ serverarmour.whitelist.gamebanceiling
 serverarmour.whitelist.hardware.ownsbloody
 serverarmour.whitelist.steamprofile
 serverarmour.whitelist.twitterban
+serverarmour.whitelist.familyshare
 ```
 
 ## Commands
@@ -38,6 +44,7 @@ serverarmour.whitelist.twitterban
 /sa.unban "username/id" - unbans a user
 
 /sa.ban "username/id" "reason" - This will ban a player for 1 hour, please keep reason english for now (this helps with sentiment analysis.)
+/clanban "username/id" "reason" - This will ban a player for 1 hour, please keep reason english for now (this helps with sentiment analysis.)
 /sa.ban "username/id" "reason" 1h - This will ban a player for 1 hour, please keep reason english for now (this helps with sentiment analysis.)
 /sa.ban "username/id" "reason" 1d - This will ban a player for 1 day, please keep reason english for now (this helps with sentiment analysis.)
 /sa.ban "username/id" "reason" 1m - This will ban a player for 1 month, please keep reason english for now (this helps with sentiment analysis.)
@@ -54,7 +61,6 @@ serverarmour.whitelist.twitterban
   "API: Admin Email": "", // please fill in your main admins email. This is to add a better trust level to your server.
   "API: Admin Real Name": "", // please fill in your main admins real name. This is to add a better trust level to your server.
   "API: Owner Steam64 ID": "",
-  "API: Server Key": "FREE", //leave as is
   "API: Share details with other server owners": true,
   "API: Submit Arkan Data": true, // submits to server, helps identifying players behaviours, will be usefull when website is online
   "Auto Kick": true, // turn auto kicking on or off. 
@@ -79,8 +85,7 @@ serverarmour.whitelist.twitterban
   "Auto Kick: VPN and Proxy": true, // WIll automatically kick a player if they are either using a proxy, vpn or is a bad IP,
   "Auto Kick: VPN and Proxy: Sensitivity": 1.0, //How sensitive it should be, max 1. Value of 1.0 will only kick known vpns and proxies, a value of 0.98 will kick all suspected vpns, proxies, and spamming ips
   "Auto Kick: Min Allowed Steam Level (-1 disables)": -1, // Minimum level steam profiles allowed
-  "Auto Kick: Private Steam Profiles": false, //When set to true, it will auto kick all players with private steam profiles.,
-  "Auto Kick: Users that have been banned on rusthackreport": true, //When set to true, it will kick players that were reported as banned on https://twitter.com/rusthackreport - Only valid for games bans after 2020-08-08 19:33:00 UTC
+  "Auto Kick: Private Steam Profiles": false, //When set to true, it will auto kick all players with private steam profiles.
   "Better Chat: Tag for dirty users": "",
   "Broadcast: New bans": true,
   "Broadcast: Player Reports": true,
@@ -198,13 +203,5 @@ Information sent to the api is as follows:
 * game name - same as above, but just in readable format.
 
 If more information is needed regarding any of the above, or any concerns, please open a thread so that I can provide more information.
-
-
-### Roadmap
-1. Fix all remainder of bugs. 
-2. Reduce local caching down to 15min, because in 15min they could switch on their VPN, get a game ban etc.
-3. Split server armour into multiple plugins. Consisting of a ServerArmour-core, ServerArmour-websecurity, ServerArmour-steamsecurity, ServerArmour-basicsecurity, ServerArmour-legacysecurity and soon ServerArmour-premiumsecurity.
-4. The need cache any info to disk, and hopefully optimize server side performance. 
-5. Get web version live and working
 
 Please consider supporting the project.
