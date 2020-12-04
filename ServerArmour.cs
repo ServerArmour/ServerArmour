@@ -18,7 +18,7 @@ using Time = Oxide.Core.Libraries.Time;
 
 namespace Oxide.Plugins
 {
-    [Info("Server Armour", "Pho3niX90", "0.5.4")]
+    [Info("Server Armour", "Pho3niX90", "0.5.5")]
     [Description("Protect your server! Auto ban known hackers, scripters and griefer accounts, and notify server owners of threats.")]
     class ServerArmour : CovalencePlugin
     {
@@ -381,11 +381,11 @@ namespace Oxide.Plugins
                     bool pRecentVac = (isaPlayer.steamNumberOfVACBans > 0 || isaPlayer.steamDaysSinceLastBan > 0)
                     && isaPlayer.steamDaysSinceLastBan < config.DissallowVacBanDays; //check main player
 
-                    bool lRecentVac = (isaPlayer.lender?.steamNumberOfVACBans > 0 || isaPlayer.lender?.steamDaysSinceLastBan > 0)
-                    && isaPlayer.lender?.steamDaysSinceLastBan < config.DissallowVacBanDays; //check the lender player
+                    bool lRecentVac = false;/* (isaPlayer.lender?.steamNumberOfVACBans > 0 || isaPlayer.lender?.steamDaysSinceLastBan > 0)
+                    && isaPlayer.lender?.steamDaysSinceLastBan < config.DissallowVacBanDays; //check the lender player*/
 
                     if (config.AutoKickOn && !HasPerm(pSteamId, PermissionWhitelistRecentVacKick) && (pRecentVac || lRecentVac)) {
-                        int vacLast = pRecentVac ? isaPlayer.steamDaysSinceLastBan : isaPlayer.lender.steamDaysSinceLastBan;
+                        int vacLast = isaPlayer.steamDaysSinceLastBan;/// pRecentVac ? isaPlayer.steamDaysSinceLastBan : isaPlayer.lender.steamDaysSinceLastBan;
                         int until = config.DissallowVacBanDays - vacLast;
 
                         Interface.CallHook("OnSARecentVacKick", vacLast, until);
@@ -427,7 +427,7 @@ namespace Oxide.Plugins
 
                     LogDebug("Check for players with too many bans");
                     if (!HasPerm(pSteamId, PermissionWhitelistServerCeilingKick) && HasReachedServerCeiling(isaPlayer)) {
-                        Interface.CallHook("OnSATooManyBans", pSteamId, config.AutoKickCeiling, ServerBanCount(isaPlayer) + ServerBanCount(isaPlayer.lender));
+                        Interface.CallHook("OnSATooManyBans", pSteamId, config.AutoKickCeiling, ServerBanCount(isaPlayer) /*+ ServerBanCount(isaPlayer.lender)*/);
                         KickPlayer(isaPlayer?.steamid, GetMsg("Too Many Previous Bans"), "C");
                     }
 
@@ -479,10 +479,10 @@ namespace Oxide.Plugins
             LogDebug("KIB 1");
             ISABan ban = IsBanned(isaPlayer?.steamid);
             LogDebug("KIB 2");
-            ISABan lban = IsBanned(isaPlayer?.lender?.steamid);
+            //ISABan lban = IsBanned(isaPlayer?.lender?.steamid);
             LogDebug("KIB 3");
             if (ban != null) KickPlayer(isaPlayer?.steamid, ban.reason, "U");
-            if (lban != null) KickPlayer(isaPlayer?.steamid, GetMsg("Lender Banned"), "U");
+            //if (lban != null) KickPlayer(isaPlayer?.steamid, GetMsg("Lender Banned"), "U");
         }
 
 
@@ -887,7 +887,7 @@ namespace Oxide.Plugins
 
         #region Data Handling
         string GetFamilyShareLenderSteamId(string steamid) {
-            return GetPlayerCache(steamid)?.lender?.steamid;
+            return "";// GetPlayerCache(steamid)?.lender?.steamid;
         }
 
         bool IsPlayerDirty(string steamid) {
@@ -1074,11 +1074,11 @@ namespace Oxide.Plugins
         }
 
         bool HasReachedVacCeiling(ISAPlayer isaPlayer) {
-            return config.AutoKickOn && config.AutoVacBanCeiling < (isaPlayer.steamNumberOfVACBans + isaPlayer.lender?.steamNumberOfVACBans);
+            return config.AutoKickOn && config.AutoVacBanCeiling < (isaPlayer.steamNumberOfVACBans /*+ isaPlayer.lender?.steamNumberOfVACBans*/);
         }
 
         bool HasReachedGameBanCeiling(ISAPlayer isaPlayer) {
-            return config.AutoKickOn && config.AutoGameBanCeiling < (isaPlayer.steamNumberOfGameBans + isaPlayer.lender?.steamNumberOfGameBans);
+            return config.AutoKickOn && config.AutoGameBanCeiling < (isaPlayer.steamNumberOfGameBans /*+ isaPlayer.lender?.steamNumberOfGameBans*/);
         }
 
         bool OwnsBloody(ISAPlayer isaPlayer) {
@@ -1086,13 +1086,14 @@ namespace Oxide.Plugins
         }
 
         bool HasReachedServerCeiling(ISAPlayer isaPlayer) {
-            return config.AutoKickOn && config.AutoKickCeiling < (ServerBanCount(isaPlayer) + ServerBanCount(isaPlayer?.lender));
+            return config.AutoKickOn && config.AutoKickCeiling < (ServerBanCount(isaPlayer) /*+ ServerBanCount(isaPlayer?.lender)*/);
         }
 
         bool IsFamilyShare(string steamid) {
-            if (steamid.Length != 17 || string.IsNullOrEmpty(steamid)) return false;
+            return false;
+            /*if (steamid.Length != 17 || string.IsNullOrEmpty(steamid)) return false;
             ISAPlayer player = GetPlayerCache(steamid);
-            return player != null && player.lender != null && !player.lender.steamid.Equals("0");
+            return player != null && player.lender != null && !player.lender.steamid.Equals("0");*/
         }
 
         bool IsProfilePrivate(string steamid) {
@@ -1434,7 +1435,6 @@ namespace Oxide.Plugins
 
             public uint? lastConnected { get; set; }
             public List<ISABan> bans { get; set; }
-            public ISAPlayer lender { get; set; }
 
             public ISAPlayer() {
             }
