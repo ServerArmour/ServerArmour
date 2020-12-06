@@ -18,7 +18,7 @@ using Time = Oxide.Core.Libraries.Time;
 
 namespace Oxide.Plugins
 {
-    [Info("Server Armour", "Pho3niX90", "0.5.61")]
+    [Info("Server Armour", "Pho3niX90", "0.5.62")]
     [Description("Protect your server! Auto ban known hackers, scripters and griefer accounts, and notify server owners of threats.")]
     class ServerArmour : CovalencePlugin
     {
@@ -1444,7 +1444,7 @@ namespace Oxide.Plugins
             public string ipLastCheck { get; set; }
             public int bloodyScriptsCount { get; set; }
             public int communityvisibilitystate { get; set; }
-            public int profilestate { get; set; }
+            public int? profilestate { get; set; }
             public string personaname { get; set; }
             public string avatar { get; set; }
             public string personastateflags { get; set; }
