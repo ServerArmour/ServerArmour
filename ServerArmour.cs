@@ -18,12 +18,12 @@ using Time = Oxide.Core.Libraries.Time;
 
 namespace Oxide.Plugins
 {
-    [Info("Server Armour", "Pho3niX90", "0.5.6")]
+    [Info("Server Armour", "Pho3niX90", "0.5.61")]
     [Description("Protect your server! Auto ban known hackers, scripters and griefer accounts, and notify server owners of threats.")]
     class ServerArmour : CovalencePlugin
     {
         #region Variables
-        string api_hostname = "https://io.serverarmour.com"; // "http://localhost:6500";//
+        string api_hostname = "https://io.serverarmour.com"; // 
         Dictionary<string, ISAPlayer> _playerData = new Dictionary<string, ISAPlayer>();
         private Time _time = GetLibrary<Time>();
         private double cacheLifetime = 1; // minutes
@@ -363,7 +363,6 @@ namespace Oxide.Plugins
                     }
 
                     LogDebug("Getting player from API");
-                    Puts(response);
                     ISAPlayer isaPlayer = JsonConvert.DeserializeObject<ISAPlayer>(response);
 
                     isaPlayer.cacheTimestamp = _time.GetUnixTimestamp();
