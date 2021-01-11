@@ -18,7 +18,7 @@ using Time = Oxide.Core.Libraries.Time;
 
 namespace Oxide.Plugins
 {
-    [Info("Server Armour", "Pho3niX90", "0.5.63")]
+    [Info("Server Armour", "Pho3niX90", "0.5.66")]
     [Description("Protect your server! Auto ban known hackers, scripters and griefer accounts, and notify server owners of threats.")]
     class ServerArmour : CovalencePlugin
     {
@@ -164,12 +164,19 @@ namespace Oxide.Plugins
         void CheckServerConnection() {
             string body = ServerGetString();
             webrequest.Enqueue($"{api_hostname}/api/v1/plugin/check_server", body, (code, response) => {
-                if (code > 204 || response == null) {
+                if (code > 204 || response.IsNullOrEmpty()) {
                     Puts(GetMsg("No Response From API", new Dictionary<string, string> { ["code"] = code.ToString(), ["response"] = response }));
                     return;
                 }
 
-                JObject obj = JObject.Parse(response);
+                JObject obj = null;
+
+                try {
+                    obj = JObject.Parse(response);
+                } catch (Exception e) {
+                    timer.Once(5, CheckServerConnection);
+                    return;
+                }
 
                 if (obj != null) {
                     var msg = obj["message"].ToString();
@@ -283,7 +290,6 @@ namespace Oxide.Plugins
         }
 
         void OnUserBanned(string name, string id, string ipAddress, string reason) {
-
             //this is to make sure that if an app like battlemetrics for example, bans a player, we catch it.
             timer.Once(3f, () => {
                 //lets make sure first it wasn't us. 
@@ -299,7 +305,7 @@ namespace Oxide.Plugins
                             reason = reason,
                             created = DateTime.Now.ToString(DATE_FORMAT),
                             banUntil = DateTime.Now.AddYears(100).ToString(DATE_FORMAT)
-                        });
+                        }, false);
                     }
                 }
             });
@@ -319,7 +325,7 @@ namespace Oxide.Plugins
         }
 
         void OnUserKicked(IPlayer player, string reason) {
-            Puts($"Player {player.Name} ({player.Id}) was kicked, {reason}");
+            LogDebug($"Player {player.Name} ({player.Id}) was kicked, {reason}");
             if (!reason.Equals(GetMsg("Kick Bloody")) && (reason.ToLower().Contains("bloody") || reason.ToLower().Contains("a4") || reason.ToLower().Contains("blacklisted"))) {
                 AssignGroup(player.Id, GroupBloody);
                 webrequest.Enqueue($"{api_hostname}/api/v1/plugin/player/{player.Id}/addbloodykick",
@@ -343,6 +349,7 @@ namespace Oxide.Plugins
             KickIfBanned(GetPlayerCache(player?.Id));
             _webCheckPlayer(player.Name, player.Id, player.Address, player.IsConnected, ipRating);
         }
+
         void GetPlayerBans(string playerId, string playerName) {
             KickIfBanned(GetPlayerCache(playerId));
             _webCheckPlayer(playerName, playerId, "0.0.0.0", true, null);
@@ -352,13 +359,21 @@ namespace Oxide.Plugins
             string playerName = Uri.EscapeDataString(name);
             try {
                 webrequest.Enqueue($"{api_hostname}/api/v1/plugin/player/{id}?bans=true", $"ipAddress={address}", (code, response) => {
-                    if (code > 204 || response == null) {
+                    if (code > 204 || response.IsNullOrEmpty()) {
                         Puts(GetMsg("No Response From API", new Dictionary<string, string> { ["code"] = code.ToString(), ["response"] = response }));
                         return;
                     }
 
                     LogDebug("Getting player from API");
-                    ISAPlayer isaPlayer = JsonConvert.DeserializeObject<ISAPlayer>(response);
+                    ISAPlayer isaPlayer = null;
+
+
+                    try {
+                        isaPlayer = JsonConvert.DeserializeObject<ISAPlayer>(response);
+                    } catch (Exception e) {
+                        timer.Once(5, () => _webCheckPlayer(name, id, address, connected, ipRating));
+                        return;
+                    }
 
                     isaPlayer.cacheTimestamp = _time.GetUnixTimestamp();
                     isaPlayer.lastConnected = _time.GetUnixTimestamp();
@@ -500,11 +515,13 @@ namespace Oxide.Plugins
             LogDebug("KIB 2");
             ISABan lban = IsBanned(isaPlayer?.lender?.steamid);
             LogDebug("KIB 3");
-            if (ban != null) KickPlayer(isaPlayer?.steamid, ban.reason, "U");
+            if (ban != null) {
+                KickPlayer(isaPlayer?.steamid, ban.reason, "U");
+            }
             if (lban != null) KickPlayer(isaPlayer?.steamid, GetMsg("Lender Banned"), "U");
         }
 
-        void AddBan(IPlayer player, ISABan thisBan) {
+        void AddBan(IPlayer player, ISABan thisBan, bool doNative = true) {
             if (config.IgnoreAdmins && player.IsAdmin) return;
             if (thisBan == null) return;
             string reason = Uri.EscapeDataString(thisBan.reason);
@@ -564,6 +581,9 @@ namespace Oxide.Plugins
         }
         [Command("unban", "playerunban", "sa.unban"), Permission(PermissionToUnBan)]
         void SCmdUnban(IPlayer player, string command, string[] args) {
+
+            NativeUnban(args[0]);
+
             if (args == null || (args.Length != 1)) {
                 SendReplyWithIcon(player, GetMsg("UnBan Syntax"));
                 return;
@@ -571,10 +591,55 @@ namespace Oxide.Plugins
             SaUnban(args[0], player);
         }
 
+        void SilentBan(IPlayer iPlayer, TimeSpan timeSpan, string reason) {
+            Unsubscribe(nameof(OnUserBanned));
+            iPlayer.Ban(reason, timeSpan);
+            Subscribe(nameof(OnUserBanned));
+        }
+
+        bool SilentUnban(IPlayer iPlayer) {
+            bool unbanned = false;
+            if (iPlayer != null && iPlayer.IsBanned) {
+                iPlayer.Unban();
+                unbanned = true;
+            }
+            return unbanned;
+        }
+
+        void NativeUnban(string playerId) {
+            ulong playerIdLong = 0;
+            if (!ulong.TryParse(playerId, out playerIdLong)) {
+                Puts(string.Format("This doesn't appear to be a 64bit steamid: {0}", playerId));
+                return;
+            }
+
+            Unsubscribe(nameof(OnUserUnbanned));
+            IPlayer iPlayer = covalence.Players.FindPlayer(playerId);
+            if (iPlayer != null || !SilentUnban(iPlayer)) {
+                FallbackNative(playerIdLong);
+            }
+            Subscribe(nameof(OnUserUnbanned));
+        }
+
+        void FallbackNative(ulong playerIdLong) {
+            ServerUsers.User user = ServerUsers.Get(playerIdLong);
+            if (user == null || user.@group != ServerUsers.UserGroup.Banned) {
+                Puts(string.Format("User {0} isn't banned", playerIdLong));
+                return;
+            }
+            ServerUsers.Remove(playerIdLong);
+            Puts(string.Concat("Unbanned User: ", playerIdLong));
+        }
+
         void SaUnban(string playerId, IPlayer player = null) {
+
             IPlayer iPlayer = players.FindPlayer(playerId);
-            if (iPlayer == null) { GetMsg("Player Not Found", new Dictionary<string, string> { ["player"] = playerId }); return; }
-            if (iPlayer != null && iPlayer.IsBanned) iPlayer.Unban();
+            NativeUnban(playerId);
+
+            if (iPlayer == null) {
+                GetMsg("Player Not Found", new Dictionary<string, string> { ["player"] = playerId }); return;
+            }
+
             RemoveBans(iPlayer.Id);
             LogDebug($"Player {iPlayer?.Name} ({iPlayer.Id}) was unbanned by {player.Name} ({player.Id})");
 
@@ -1264,9 +1329,9 @@ namespace Oxide.Plugins
                     }, 13459797, true);
                 }
                 try {
-                    BasePlayer.Find(playerId)?.IPlayer.Ban(banReason, TimeSpan.FromMinutes((_BanUntil(lengthOfBan) - DateTime.Now).TotalMinutes));
+                    SilentBan(BasePlayer.Find(playerId)?.IPlayer, TimeSpan.FromMinutes((_BanUntil(lengthOfBan) - DateTime.Now).TotalMinutes), banReason);
                 } catch (Exception e) {
-
+                    Subscribe(nameof(OnUserBanned));
                 }
             }
         }
