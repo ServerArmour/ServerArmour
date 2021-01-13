@@ -18,7 +18,7 @@ using Time = Oxide.Core.Libraries.Time;
 
 namespace Oxide.Plugins
 {
-    [Info("Server Armour", "Pho3niX90", "0.5.66")]
+    [Info("Server Armour", "Pho3niX90", "0.5.67")]
     [Description("Protect your server! Auto ban known hackers, scripters and griefer accounts, and notify server owners of threats.")]
     class ServerArmour : CovalencePlugin
     {
@@ -32,7 +32,7 @@ namespace Oxide.Plugins
         bool debug = false;
         CultureInfo culture = CultureInfo.CreateSpecificCulture("en-US");
         //StringComparison defaultCompare = StringComparison.InvariantCultureIgnoreCase;
-        const string DATE_FORMAT = "yyyy/MM/dd HH:mm";
+        const string DATE_FORMAT = "yyyy/MM/dd HH:mm";  
         const string DATE_FORMAT2 = "yyyy-MM-dd HH:mm:ss";
         ulong ServerArmourId = 76561199060671869L;
         bool init = false;
@@ -186,6 +186,11 @@ namespace Oxide.Plugins
                         Puts("connected to SA API");
                     } else if (msg.Equals("key assigned to server") || msg.Equals("key assigned to new server")) {
                         config.SetConfig(ref key, "API: Server Key");
+
+                        headers = new Dictionary<string, string> {
+                        { "server_key", key },
+                        { "Accept", "application/json" } };
+
                         SaveConfig();
                         Puts("Server key has been updated");
                         init = true;
