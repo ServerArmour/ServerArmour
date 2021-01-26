@@ -54,48 +54,56 @@ serverarmour.whitelist.familyshare
 ## Configuration
 
 ### Default Configuration
-
 ```json
-
 {
-  "API: Admin Email": "", // please fill in your main admins email. This is to add a better trust level to your server.
-  "API: Admin Real Name": "", // please fill in your main admins real name. This is to add a better trust level to your server.
+  "API: Owner Email": "",
+  "API: Owner Real Name": "",
   "API: Owner Steam64 ID": "",
   "API: Share details with other server owners": true,
-  "API: Submit Arkan Data": true, // submits to server, helps identifying players behaviours, will be usefull when website is online
-  "Auto Kick": true, // turn auto kicking on or off. 
-  "Auto Kick / Ban Group": "serverarmour.bans", // the group name that banned users should be added in
-  // The below options are to ban based on sentiment analysis on previous bans within the reason. Currently ONLY english is supported. please note that Auto Kick above should also be true for this to work. 
-  "Auto Kick: Kick if user owns a bloody device (now and past)": true,
-  "Auto Kick: Ban: Contains previous Aimbot ban": false,
-  "Auto Kick: Ban: Contains previous Cheat ban": false,
-  "Auto Kick: Ban: Contains previous ESP ban": false,
-  "Auto Kick: Ban: Contains previous Hack ban": false,
-  "Auto Kick: Ban: Contains previous Insult ban": false,
-  "Auto Kick: Ban: Contains previous Ping ban": false,
-  "Auto Kick: Ban: Contains previous Racism ban": false,
-  "Auto Kick: Ban: Contains previous Script ban": false,
-  "Auto Kick: Ban: Contains previous Toxic ban": false,
-  "Auto Kick: Family share accounts": false, // Auto kick players that are lending (Family sharing) the game.
-  "Auto Kick: Family share accounts that are dirty": false, // Auto kick players that are lending (Family sharing) the game, and the owner of the game is dirty.
+  "API: Submit Arkan Data": true,
+  "Auto Kick": true,
+  "Auto Kick: Bans on your network": true,
+  "Auto Kick: Family share accounts": false,
+  "Auto Kick: Family share accounts that are dirty": false,
+  "Auto Kick: Ignore nVidia & Steam?": true,
+  "Auto Kick: Ignore nVidia Cloud Gaming": true,
   "Auto Kick: Max allowed Game bans": 2,
-  "Auto Kick: Max allowed previous bans": 5,
-  "Auto Kick: Max allowed VAC bans": 2, // Auto kick players with X amount of previous bans.
-  "Auto Kick: Min age of VAC ban allowed": 90, //auto kicks users that have received a vac within these days
-  "Auto Kick: VPN and Proxy": true, // WIll automatically kick a player if they are either using a proxy, vpn or is a bad IP,
-  "Auto Kick: VPN and Proxy: Sensitivity": 1.0, //How sensitive it should be, max 1. Value of 1.0 will only kick known vpns and proxies, a value of 0.98 will kick all suspected vpns, proxies, and spamming ips
-  "Auto Kick: Min Allowed Steam Level (-1 disables)": -1, // Minimum level steam profiles allowed
-  "Auto Kick: Private Steam Profiles": false, //When set to true, it will auto kick all players with private steam profiles.
+  "Auto Kick: Max allowed previous bans": 3,
+  "Auto Kick: Max allowed VAC bans": 1,
+  "Auto Kick: Min age of VAC ban allowed": 90,
+  "Auto Kick: Min Allowed Steam Level (-1 disables)": -1,
+  "Auto Kick: Private Steam Profiles": false,
+  "Auto Kick: Profiles that do no conform to the Steam64 IDs (Highly recommended)": true,
+  "Auto Kick: Users that have been banned on rusthackreport": true,
+  "Auto Kick: VPN and Proxy": true,
+  "Auto Kick: VPN and Proxy: Sensitivity": 1.0,
+  "Auto Kick: When Steam Level Hidden": false,
   "Better Chat: Tag for dirty users": "",
+  "Broadcast: Kicks": false,
   "Broadcast: New bans": true,
   "Broadcast: Player Reports": true,
+  "Broadcast: RCON": false,
   "Broadcast: When VAC is younger than": 120,
-  "Debug: Show additional debug console logs": false, // never turn on, unless asked to do so by the developer, otherwise your logs will contain tons of messages.
-  "Discord: Send Player Reports": true,  // only send payers that have a dirty report to discord
+  "Clan Ban: Ban Native Team Members": true,
+  "Clan Ban: Reason Prefix": "Assoc Ban -> {playerId}: {reason}",
+  "Debug: Show additional debug console logs": true,
+  "Discord: Bans Webhook URL": "https://support.discordapp.com/hc/en-us/articles/228383668-Intro-to-Webhooks",
+  "Discord: Notify when a player has received a game ban": true,
+  "Discord: Send Ban Report": true,
+  "Discord: Send Kick Report": true,
+  "Discord: Send Only Dirty Player Reports": true,
+  "Discord: Show Quick Connect On report": true,
   "Discord: Webhook URL": "https://support.discordapp.com/hc/en-us/articles/228383668-Intro-to-Webhooks",
-  "Show Protected MSG": true
+  "Game Port": "",
+  "Ignore Admins": true,
+  "io.serverarmour.com API KEY": "",
+  "Query Port": "",
+  "RCON Port": "",
+  "Show Protected MSG": true,
+  "Your Server IP": ""
 }
 ```
+
 #### Bad IP: 
 It refers any combination of crawlers / comment & email spammers / brute force attacks. IPs that are behaving "badly" in an automated manner. Networks that are infected with malware / trojans / botnet / etc are also considered "bad". It may be possible that the user is not aware that their systems are infected or they have received an IP by their ISP that was recently infected with malicious code. If you wish to skip this, see variations of implementation.
 
