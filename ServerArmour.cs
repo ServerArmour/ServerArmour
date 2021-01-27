@@ -18,7 +18,7 @@ using Time = Oxide.Core.Libraries.Time;
 
 namespace Oxide.Plugins
 {
-    [Info("Server Armour", "Pho3niX90", "0.5.75")]
+    [Info("Server Armour", "Pho3niX90", "0.5.76")]
     [Description("Protect your server! Auto ban known hackers, scripters and griefer accounts, and notify server owners of threats.")]
     class ServerArmour : CovalencePlugin
     {
@@ -29,7 +29,7 @@ namespace Oxide.Plugins
         private double cacheLifetime = 1; // minutes
         private SAConfig config;
         string specifier = "G";
-        bool debug = true;
+        bool debug = false;
         CultureInfo culture = CultureInfo.CreateSpecificCulture("en-US");
         //StringComparison defaultCompare = StringComparison.InvariantCultureIgnoreCase;
         const string DATE_FORMAT = "yyyy/MM/dd HH:mm";

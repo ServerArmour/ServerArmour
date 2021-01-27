@@ -23,6 +23,7 @@ You can add the Server Armour bot to your discord by following this link:
 ```
 
 ## Whitelist Permissions
+## Whitelist Permissions
 ```
 serverarmour.whitelist.recentvac
 serverarmour.whitelist.badip
@@ -116,15 +117,9 @@ WIll automatically kick a player if they are either using a proxy, vpn or is a b
 ```json
 "Auto Kick: VPN and Proxy: Sensitivity": 1.0
 ``` 
-How sensitive it should be, max 1. Value of 1.0 will only kick known vpns and proxies, a value of 0.98 will kick all suspected vpns, proxies, and spamming ips
-
-**More info regarding sensitivity from  https://getipintel.net**
-If a value of 0.50 is returned, then it is as good as flipping a 2 sided fair coin, which implies it's not very accurate. From my personal experience, values > 0.95 should be looked at and values > 0.99 are most likely proxies. Anything below the value of 0.90 is considered as "low risk". Since a real value is returned, different levels of protection can be implemented. It is best for a system admin to test some sample datasets with this system and adjust implementation accordingly. 
-
-I only recommend automated action on high values ( > 0.99 or even > 0.995 )
 
 #### Service used: 
-https://getipintel.net
+https://proxycheck.io/
 
 ## API Hooks
 
