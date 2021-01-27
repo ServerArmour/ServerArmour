@@ -18,7 +18,7 @@ using Time = Oxide.Core.Libraries.Time;
 
 namespace Oxide.Plugins
 {
-    [Info("Server Armour", "Pho3niX90", "0.5.76")]
+    [Info("Server Armour", "Pho3niX90", "0.5.77")]
     [Description("Protect your server! Auto ban known hackers, scripters and griefer accounts, and notify server owners of threats.")]
     class ServerArmour : CovalencePlugin
     {
@@ -572,7 +572,8 @@ namespace Oxide.Plugins
                 SendReplyWithIcon(player, GetMsg("UnBan Syntax"));
                 return;
             }
-            SaUnban(args[0], player, args[1]);
+            var reason = args.Length > 1 ? args[1] : null;
+            SaUnban(args[0], player, reason);
         }
 
         void SilentBan(IPlayer iPlayer, TimeSpan timeSpan, string reason) {
