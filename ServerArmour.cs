@@ -18,7 +18,7 @@ using Time = Oxide.Core.Libraries.Time;
 
 namespace Oxide.Plugins
 {
-    [Info("Server Armour", "Pho3niX90", "0.5.77")]
+    [Info("Server Armour", "Pho3niX90", "0.6.13")]
     [Description("Protect your server! Auto ban known hackers, scripters and griefer accounts, and notify server owners of threats.")]
     class ServerArmour : CovalencePlugin
     {
@@ -49,18 +49,18 @@ namespace Oxide.Plugins
         #region Permissions
         const string PermissionToBan = "serverarmour.ban";
         const string PermissionToUnBan = "serverarmour.unban";
+
+        const string PermissionAdminWebsite = "serverarmour.website.admin";
+
         const string PermissionWhitelistRecentVacKick = "serverarmour.whitelist.recentvac";
         const string PermissionWhitelistBadIPKick = "serverarmour.whitelist.badip";
         const string PermissionWhitelistKeywordKick = "serverarmour.whitelist.keyword";
         const string PermissionWhitelistVacCeilingKick = "serverarmour.whitelist.vacceiling";
         const string PermissionWhitelistServerCeilingKick = "serverarmour.whitelist.banceiling";
         const string PermissionWhitelistGameBanCeilingKick = "serverarmour.whitelist.gamebanceiling";
-        const string PermissionWhitelistHardwareOwnsBloody = "serverarmour.whitelist.hardware.ownsbloody";
         const string PermissionWhitelistSteamProfile = "serverarmour.whitelist.steamprofile";
         const string PermissionWhitelistFamilyShare = "serverarmour.whitelist.familyshare";
         const string PermissionWhitelistTwitterBan = "serverarmour.whitelist.twitterban";
-
-        const string GroupBloody = "serverarmour.hardware.ownsbloody";
         #endregion
 
         #region Plugins
@@ -132,10 +132,11 @@ namespace Oxide.Plugins
             SaveConfig();
             Puts($"Server IP is {config.ServerIp} / {server.Address}");
             Puts($"Server Port is {server.Port}");
-            AddGroup(GroupBloody);
 
             RegPerm(PermissionToBan);
             RegPerm(PermissionToUnBan);
+
+            RegPerm(PermissionAdminWebsite);
 
             RegPerm(PermissionWhitelistBadIPKick);
             RegPerm(PermissionWhitelistKeywordKick);
@@ -144,20 +145,39 @@ namespace Oxide.Plugins
             RegPerm(PermissionWhitelistVacCeilingKick);
             RegPerm(PermissionWhitelistGameBanCeilingKick);
             RegPerm(PermissionWhitelistSteamProfile);
-            RegPerm(PermissionWhitelistHardwareOwnsBloody);
             RegPerm(PermissionWhitelistFamilyShare);
             RegPerm(PermissionWhitelistTwitterBan);
             RegisterTag();
 
             headers = new Dictionary<string, string> {
                 { "server_key", config.ServerApiKey },
-                { "Accept", "application/json" } };
+                { "Accept", "application/json" }
+            };
 
             string[] _admins = permission.GetUsersInGroup("admin");
             if (config.OwnerSteamId != null && config.OwnerSteamId.Length > 0 && !_admins.Contains(config.OwnerSteamId)) {
                 var adminsList = new List<string>();
                 adminsList.AddRange(_admins);
                 adminsList.AddRange(config.OwnerSteamId.Split(','));
+
+                var extraAdmins = permission.GetPermissionUsers(PermissionAdminWebsite);
+                if (extraAdmins != null && extraAdmins.Length > 0) {
+                    adminsList.AddRange(extraAdmins);
+                }
+
+                int e = 0;
+                foreach (string extraAdminsGroups in permission.GetPermissionGroups(PermissionAdminWebsite)) {
+                    foreach (string extraAdmin in permission.GetUsersInGroup(extraAdminsGroups)) {
+                        if (!adminsList.Contains(extraAdmin)) {
+                            adminsList.Add(extraAdmin);
+                            e++;
+                        }
+                    }
+                }
+
+                Puts($"{(extraAdmins.Length + e)} admins found with website permission");
+
+
                 _admins = adminsList.Distinct().ToArray();
             }
 
@@ -214,10 +234,9 @@ namespace Oxide.Plugins
         }
 
         void Unload() {
-            Puts("Server Armour unloading, will now save all ");
             SaveData();
             _playerData.Clear();
-            Puts("Server Armour finished unloaded.");
+            _playerData = null;
         }
 
         //[Command("tc")]
@@ -228,7 +247,7 @@ namespace Oxide.Plugins
             } else {
 
                 //lets check the userid first.
-                if (config.AutoKick_KickWeirdSteam64 && !player.Id.StartsWith("7656119")) {
+                if (config.AutoKick_KickWeirdSteam64 && !player.Id.IsSteamId()) {
                     KickPlayer(player.Id, GetMsg("Strange Steam64ID"), "C");
                     return;
                 }
@@ -288,20 +307,6 @@ namespace Oxide.Plugins
                         return;
                     }
                 }, this, RequestMethod.POST, headers);
-        }
-
-        void OnUserKicked(IPlayer player, string reason) {
-            LogDebug($"Player {player.Name} ({player.Id}) was kicked, {reason}");
-            if (!reason.Equals(GetMsg("Kick Bloody")) && (reason.ToLower().Contains("bloody") || reason.ToLower().Contains("a4") || reason.ToLower().Contains("blacklisted"))) {
-                AssignGroup(player.Id, GroupBloody);
-                webrequest.Enqueue($"{api_hostname}/api/v1/plugin/player/{player.Id}/addbloodykick",
-                    $"reason={reason}", (code, response) => {
-                        if (code > 204 || response == null) {
-                            Puts(GetMsg("No Response From API", new Dictionary<string, string> { ["code"] = code.ToString(), ["response"] = response }));
-                            return;
-                        }
-                    }, this, RequestMethod.POST, headers);
-            }
         }
         #endregion
 
@@ -368,7 +373,7 @@ namespace Oxide.Plugins
 
                     //script vars
                     string pSteamId = isaPlayer.steamid;
-                    string lSteamId = isaPlayer.lender?.steamid;
+                    string lSteamId = GetFamilyShare(isaPlayer.steamid);
                     //
 
                     LogDebug("Check for a twitter game ban");
@@ -402,12 +407,6 @@ namespace Oxide.Plugins
                         KickPlayer(isaPlayer?.steamid, GetMsg("Family Share Kick"), "C");
                     }
 
-                    // does the user contain a keyword ban
-                    /*if (!HasPerm(pSteamId, PermissionWhitelistKeywordKick) && HasKeywordBan(isaPlayer)) {
-                        Interface.CallHook("OnSAKeywordKick", pSteamId);
-                        KickPlayer(isaPlayer?.steamid, GetMsg("Keyword Kick"), "C");
-                    }*/
-
                     LogDebug("Check for too many vac bans");
                     if (!HasPerm(pSteamId, PermissionWhitelistVacCeilingKick) && HasReachedVacCeiling(isaPlayer)) {
                         Interface.CallHook("OnSATooManyVacKick", pSteamId, isaPlayer?.steamNumberOfVACBans);
@@ -420,11 +419,11 @@ namespace Oxide.Plugins
                         KickPlayer(isaPlayer?.steamid, GetMsg("Too Many Previous Game Bans"), "C");
                     }
 
-                    LogDebug("Check for bloody/a4tech owner");
+                    /*LogDebug("Check for bloody/a4tech owner");
                     if (!HasPerm(pSteamId, PermissionWhitelistHardwareOwnsBloody) && (OwnsBloody(isaPlayer) || HasGroup(pSteamId, GroupBloody))) {
                         Interface.CallHook("OnSABloodyKick", pSteamId);
                         KickPlayer(isaPlayer?.steamid, GetMsg("Kick Bloody"), "C");
-                    }
+                    }*/
 
                     LogDebug("Check for players with too many bans");
                     if (!HasPerm(pSteamId, PermissionWhitelistServerCeilingKick) && HasReachedServerCeiling(isaPlayer)) {
@@ -452,7 +451,7 @@ namespace Oxide.Plugins
                     }
 
                     LogDebug("Check for VPN");
-                    Puts($"IPINTEL/CACHE| ID:{id} ADD:{address} RATING:{isaPlayer.ipRating} AGE:{isaPlayer.ipLastCheck}");
+                    Puts($"IP/CACHE| ID:{id} ADD:{address} RATING:{isaPlayer.ipRating} AGE:{isaPlayer.ipLastCheck}");
                     if (config.AutoKickOn && config.AutoKick_BadIp && !HasPerm(id, PermissionWhitelistBadIPKick) && config.AutoKick_BadIp) {
                         if (IsBadIp(isaPlayer)) {
                             if (isaPlayer.ipInfo.proxy == "yes")
@@ -462,15 +461,6 @@ namespace Oxide.Plugins
 
                             Interface.CallHook("OnSAVPNKick", id, isaPlayer.ipRating);
                         }
-                        /* if (isaPlayer.ipRating == 1 || isaPlayer.ipRating >= config.AutoKick_BadIp_Sensitivity || isaPlayer.ipInfo.proxy == "yes") {
-                             if (isaPlayer.ipRating == 1 || isaPlayer.ipInfo.proxy == "yes")
-                                 KickPlayer(id, GetMsg("Reason: Proxy IP"), "C");
-                             else
-                                 KickPlayer(id, GetMsg("Reason: Bad IP"), "C");
-
-                             Interface.CallHook("OnSAVPNKick", id, isaPlayer.ipRating);
-                         }*/
-
                     }
 
                     GetPlayerReport(isaPlayer, connected);
@@ -568,10 +558,11 @@ namespace Oxide.Plugins
 
             NativeUnban(args[0]);
 
-            if (args == null || (args.Length != 1)) {
+            if (args == null || (args.Length > 2 || args.Length < 1)) {
                 SendReplyWithIcon(player, GetMsg("UnBan Syntax"));
                 return;
             }
+
             var reason = args.Length > 1 ? args[1] : null;
             SaUnban(args[0], player, reason);
         }
@@ -662,9 +653,9 @@ namespace Oxide.Plugins
             string msgClean = "";
 
             if (reason.IsNullOrEmpty()) {
-                msgClean = GetMsg("Player Now Unbanned Clean - NoReason");
+                msgClean = GetMsg("Player Now Unbanned Clean - NoReason", new Dictionary<string, string> { ["player"] = iPlayer.Name });
             } else {
-                msgClean = GetMsg("Player Now Unbanned Clean - Reason", new Dictionary<string, string> { ["player"] = player.Name, ["reason"] = reason });
+                msgClean = GetMsg("Player Now Unbanned Clean - Reason", new Dictionary<string, string> { ["player"] = iPlayer.Name, ["reason"] = reason });
             }
 
             if (config.DiscordBanReport) {
@@ -672,7 +663,7 @@ namespace Oxide.Plugins
                     name = "Player Unbanned",
                     value = msgClean,
                     inline = true
-                }, 13459797, true);
+                }, 3066993, true);
             }
         }
 
@@ -1029,7 +1020,7 @@ namespace Oxide.Plugins
 
             if (IsPlayerDirty(isaPlayer.steamid) || isCommand) {
                 string report = GetMsg("User Dirty MSG", data);
-                if (config.BroadcastPlayerBanReport && isConnected && !isCommand && config.BroadcastPlayerBanReportVacDays > isaPlayer.steamDaysSinceLastBan) {
+                if (config.BroadcastPlayerBanReport && isConnected && isCommand && !(config.BroadcastPlayerBanReportVacDays > isaPlayer.steamDaysSinceLastBan)) {
                     BroadcastWithIcon(report.Replace(isaPlayer.steamid + ":", string.Empty).Replace(isaPlayer.steamid, string.Empty));
                 }
                 if (isCommand) {
@@ -1080,7 +1071,7 @@ namespace Oxide.Plugins
             string qport = Uri.EscapeDataString(config.ServerQPort);
             string rport = Uri.EscapeDataString(config.ServerRPort);
             string sname = Uri.EscapeDataString(server.Name);
-            return $"sip={config.ServerIp}&gport={gport}&qport={qport}&rport={rport}&{owner}&port={server.Port}&an={aname}&ae={aemail}&adminIds={adminIds}&gameId={covalence.ClientAppId}&gameName={covalence.Game}&v={this.Version}&sname={sname}";
+            return $"sip={config.ServerIp}&gport={gport}&qport={qport}&rport={rport}&ownerid={owner}&port={server.Port}&an={aname}&ae={aemail}&adminIds={adminIds}&gameId={covalence.ClientAppId}&gameName={covalence.Game}&v={this.Version}&sname={sname}";
         }
         #endregion
 
@@ -1110,8 +1101,7 @@ namespace Oxide.Plugins
 
         bool IsBadIp(ISAPlayer isaPlayer) {
             return (config.AutoKick_BadIp
-                //&& isaPlayer.ipRating >= config.AutoKick_BadIp_Sensitivity 
-                && (isaPlayer.ipInfo.type.ToLower() == "vpn" || isaPlayer.ipInfo.type.ToLower() == "proxy" || isaPlayer.ipInfo.proxy == "yes")
+                && (isaPlayer.ipInfo != null && isaPlayer.ipInfo.type.ToLower() == "vpn" || isaPlayer.ipInfo.type.ToLower() == "proxy" || isaPlayer.ipInfo.proxy == "yes")
                 && !(config.AutoKick_IgnoreNvidia && isaPlayer.ipInfo.isCloudComputing));
         }
 
@@ -1168,25 +1158,27 @@ namespace Oxide.Plugins
         }
 
         bool HasReachedVacCeiling(ISAPlayer isaPlayer) {
-            return config.AutoKickOn && config.AutoVacBanCeiling < (isaPlayer.steamNumberOfVACBans + isaPlayer.lender?.steamNumberOfVACBans);
+            return config.AutoKickOn && config.AutoVacBanCeiling < (isaPlayer.steamNumberOfVACBans + (isaPlayer.lender != null ? isaPlayer.lender.steamNumberOfVACBans : 0));
         }
 
         bool HasReachedGameBanCeiling(ISAPlayer isaPlayer) {
             return config.AutoKickOn && config.AutoGameBanCeiling < (isaPlayer.steamNumberOfGameBans + isaPlayer.lender?.steamNumberOfGameBans);
         }
 
-        bool OwnsBloody(ISAPlayer isaPlayer) {
+        /*bool OwnsBloody(ISAPlayer isaPlayer) {
             return config.AutoKickOn && config.AutoKick_Hardware_Bloody && isaPlayer.bloodyScriptsCount > 0;
-        }
+        }*/
 
         bool HasReachedServerCeiling(ISAPlayer isaPlayer) {
             return config.AutoKickOn && config.AutoKickCeiling < (ServerBanCount(isaPlayer) + ServerBanCount(isaPlayer?.lender));
         }
 
-        bool IsFamilyShare(string steamid) {
-            if (steamid.Length != 17 || string.IsNullOrEmpty(steamid)) return false;
-            ISAPlayer player = GetPlayerCache(steamid);
-            return player != null && player.lender != null && !player.lender.steamid.Equals("0");
+        bool IsFamilyShare(string steamid) => !GetFamilyShare(steamid).IsNullOrEmpty();
+
+        string GetFamilyShare(string steamid) {
+            if (string.IsNullOrEmpty(steamid) || steamid.Length != 17) return null;
+            var playerConn = BasePlayer.Find(steamid)?.Connection;
+            return !playerConn.ownerid.ToString().Equals(steamid) ? playerConn.ownerid.ToString() : null;
         }
 
         bool IsProfilePrivate(string steamid) {
@@ -1199,25 +1191,6 @@ namespace Oxide.Plugins
             return (int)player.steamlevel;
         }
 
-        /*bool HasKeywordBan(ISAPlayer isaPlayer) {
-            bool keywordBan = false;
-            bool keywordBanCheck = config.AutoKickOn && (config.AutoKick_Reason_Keyword_Aimbot || config.AutoKick_Reason_Keyword_Cheat || config.AutoKick_Reason_Keyword_EspHack || config.AutoKick_Reason_Keyword_Hack || config.AutoKick_Reason_Keyword_Insult || config.AutoKick_Reason_Keyword_Ping || config.AutoKick_Reason_Keyword_Racism || config.AutoKick_Reason_Keyword_Script || config.AutoKick_Reason_Keyword_Toxic);
-            if (keywordBanCheck) {
-                foreach (ISABan ban in isaPlayer.bans) {
-                    if (config.AutoKick_Reason_Keyword_Aimbot && ban.isAimbot) keywordBan = true;
-                    if (config.AutoKick_Reason_Keyword_Cheat && ban.isCheat) keywordBan = true;
-                    if (config.AutoKick_Reason_Keyword_EspHack && ban.isEspHack) keywordBan = true;
-                    if (config.AutoKick_Reason_Keyword_Hack && ban.isHack) keywordBan = true;
-                    if (config.AutoKick_Reason_Keyword_Insult && ban.isInsult) keywordBan = true;
-                    if (config.AutoKick_Reason_Keyword_Ping && ban.isPing) keywordBan = true;
-                    if (config.AutoKick_Reason_Keyword_Racism && ban.isRacism) keywordBan = true;
-                    if (config.AutoKick_Reason_Keyword_Script && ban.isScript) keywordBan = true;
-                    if (config.AutoKick_Reason_Keyword_Toxic && ban.isToxic) keywordBan = true;
-                    if (keywordBan) return true;
-                }
-            }
-            return false;
-        }*/
         #endregion
 
         #region API Hooks
@@ -1370,14 +1343,14 @@ namespace Oxide.Plugins
                 ["Arkan In Rock Violation"] = "[#ff0000]{player}[/#] received an Arkan in rock violation.\n[#ff0000]Violation[/#]  #{violationNr}, [#ff0000]Weapon:[/#] {weapon}, [#ff0000]Ammo:[/#] {ammo}\n Admins will investigate ASAP, please have handcams ready.\n This might be a false-positive, but all violations need to be investigated.",
                 ["Player Now Banned Perma"] = "[#ff0000]{player}[/#] has been banned\n[#ff0000]Reason:[/#] {reason}\n[#ff0000]Length:[/#] {length}",
                 ["Player Now Banned Clean"] = "{player} has been banned\nReason: {reason}\nLength: {length}",
-                ["Player Now Unbanned Clean - Reason"] = "{player} has been banned\nReason: {reason}",
-                ["Player Now Unbanned Clean - NoReason"] = "{player} has been banned",
+                ["Player Now Unbanned Clean - Reason"] = "{player} has been unbanned\nReason: {reason}",
+                ["Player Now Unbanned Clean - NoReason"] = "{player} has been unbanned",
                 ["Reason: Bad IP"] = "Bad IP Detected, either due to a VPN/Proxy",
                 ["Reason: Proxy IP"] = "VPN & Proxy's not allowed.",
                 ["Player Not Found"] = "Player wasn't found",
                 ["Multiple Players Found"] = "Multiple players found with that name ({players}), please try something more unique like a steamid",
                 ["Ban Syntax"] = "sa.ban <playerNameOrID> \"<reason>\" length (example: 1h for 1 hour, 1m for 1 month etc)",
-                ["UnBan Syntax"] = "sa.unban <playerNameOrID>",
+                ["UnBan Syntax"] = "sa.unban <playerNameOrID> <reason>",
                 ["No Response From API"] = "Couldn't get an answer from ServerArmour.com! Error: {code} {response}",
                 ["Player Not Banned"] = "Player not banned",
                 ["Broadcast Player Banned"] = "{tag} {username} wasn't allowed to connect\nReason: {reason}",
@@ -1699,25 +1672,15 @@ namespace Oxide.Plugins
             public string ServerAdminEmail = string.Empty;
             public string ServerApiKey = string.Empty;
 
-            public bool AutoKick_Hardware_Bloody = true;
+            //public bool AutoKick_Hardware_Bloody = true;
             public bool AutoKick_KickHiddenLevel = false;
             public int AutoKick_MinSteamProfileLevel = -1;
             public bool AutoKick_KickPrivateProfile = false;
             public bool AutoKick_KickWeirdSteam64 = true;
 
-            /*            public bool AutoKick_Reason_Keyword_Aimbot = false;
-                        public bool AutoKick_Reason_Keyword_Hack = false;
-                        public bool AutoKick_Reason_Keyword_EspHack = false;
-                        public bool AutoKick_Reason_Keyword_Script = false;
-                        public bool AutoKick_Reason_Keyword_Cheat = false;
-                        public bool AutoKick_Reason_Keyword_Toxic = false;
-                        public bool AutoKick_Reason_Keyword_Insult = false;
-                        public bool AutoKick_Reason_Keyword_Ping = false;
-                        public bool AutoKick_Reason_Keyword_Racism = false;*/
             public bool AutoKick_KickTwitterGameBanned = true;
             public bool AutoKick_BadIp = true;
             public bool AutoKick_BadIp_IgnoreComputing = true;
-            public double AutoKick_BadIp_Sensitivity = 1.0;
 
             public string DiscordWebhookURL = "https://support.discordapp.com/hc/en-us/articles/228383668-Intro-to-Webhooks";
             public string DiscordBanWebhookURL = "https://support.discordapp.com/hc/en-us/articles/228383668-Intro-to-Webhooks";
@@ -1743,71 +1706,60 @@ namespace Oxide.Plugins
                 /**
                  * Load all saved config values
                  * */
-                GetConfig(ref ServerIp, "Your Server IP");
-                GetConfig(ref ServerGPort, "Game Port");
-                GetConfig(ref ServerQPort, "Query Port");
-                GetConfig(ref ServerRPort, "RCON Port");
-                GetConfig(ref Debug, "Debug: Show additional debug console logs");
+                GetConfig(ref ServerIp, "Server Info", "Your Server IP");
+                GetConfig(ref ServerGPort, "Server Info", "Game Port");
+                GetConfig(ref ServerQPort, "Server Info", "Query Port");
+                GetConfig(ref ServerRPort, "Server Info", "RCON Port");
 
-                GetConfig(ref ServerApiKey, "io.serverarmour.com API KEY");
+                GetConfig(ref IgnoreAdmins, "General", "Ignore Admins");
+                GetConfig(ref Debug, "General", "Debug: Show additional debug console logs");
+
 
                 GetConfig(ref ShowProtectedMsg, "Show Protected MSG");
                 GetConfig(ref BetterChatDirtyPlayerTag, "Better Chat: Tag for dirty users");
-                GetConfig(ref BroadcastPlayerBanReport, "Broadcast: Player Reports");
-                GetConfig(ref BroadcastPlayerBanReportVacDays, "Broadcast: When VAC is younger than");
-                GetConfig(ref BroadcastNewBans, "Broadcast: New bans");
-                GetConfig(ref BroadcastKicks, "Broadcast: Kicks");
-                GetConfig(ref RconBroadcast, "Broadcast: RCON");
 
-                GetConfig(ref ServerAdminShareDetails, "API: Share details with other server owners");
-                GetConfig(ref ServerAdminName, "API: Owner Real Name");
-                GetConfig(ref ServerAdminEmail, "API: Owner Email");
-                GetConfig(ref OwnerSteamId, "API: Owner Steam64 ID");
-                GetConfig(ref SubmitArkanData, "API: Submit Arkan Data");
+                GetConfig(ref BroadcastPlayerBanReport, "Broadcast", "Player Reports");
+                GetConfig(ref BroadcastPlayerBanReportVacDays, "Broadcast", "When VAC is younger than");
+                GetConfig(ref BroadcastNewBans, "Broadcast", "New bans");
+                GetConfig(ref BroadcastKicks, "Broadcast", "Kicks");
+                GetConfig(ref RconBroadcast, "Broadcast", "RCON");
 
-                GetConfig(ref AutoKickOn, "Auto Kick");
-                GetConfig(ref AutoKick_NetworkBan, "Auto Kick: Bans on your network");
-                GetConfig(ref AutoKickCeiling, "Auto Kick: Max allowed previous bans");
-                GetConfig(ref AutoVacBanCeiling, "Auto Kick: Max allowed VAC bans");
-                GetConfig(ref AutoGameBanCeiling, "Auto Kick: Max allowed Game bans");
-                GetConfig(ref DissallowVacBanDays, "Auto Kick: Min age of VAC ban allowed");
-                GetConfig(ref AutoKickFamilyShare, "Auto Kick: Family share accounts");
-                GetConfig(ref AutoKickFamilyShareIfDirty, "Auto Kick: Family share accounts that are dirty");
-                // GetConfig(ref AutoKick_Hardware_Bloody, "Auto Kick: Kick if user owns a bloody device (now and past)");
+                GetConfig(ref ServerAdminShareDetails, "io.serverarmour.com", "Share details with other server owners");
+                GetConfig(ref ServerApiKey, "io.serverarmour.com", "Server Key");
+                GetConfig(ref ServerAdminName, "io.serverarmour.com", "Owner Real Name");
+                GetConfig(ref ServerAdminEmail, "io.serverarmour.com", "Owner Email");
+                GetConfig(ref OwnerSteamId, "io.serverarmour.com", "Owner Steam64 ID");
+                GetConfig(ref SubmitArkanData, "io.serverarmour.com", "Submit Arkan Data");
 
-                /*                GetConfig(ref AutoKick_Reason_Keyword_Aimbot, "Auto Kick: Ban: Contains previous Aimbot ban");
-                                GetConfig(ref AutoKick_Reason_Keyword_Hack, "Auto Kick: Ban: Contains previous Hack ban");
-                                GetConfig(ref AutoKick_Reason_Keyword_EspHack, "Auto Kick: Ban: Contains previous ESP ban");
-                                GetConfig(ref AutoKick_Reason_Keyword_Script, "Auto Kick: Ban: Contains previous Script ban");
-                                GetConfig(ref AutoKick_Reason_Keyword_Cheat, "Auto Kick: Ban: Contains previous Cheat ban");
-                                GetConfig(ref AutoKick_Reason_Keyword_Toxic, "Auto Kick: Ban: Contains previous Toxic ban");
-                                GetConfig(ref AutoKick_Reason_Keyword_Insult, "Auto Kick: Ban: Contains previous Insult ban");
-                                GetConfig(ref AutoKick_Reason_Keyword_Ping, "Auto Kick: Ban: Contains previous Ping ban");
-                                GetConfig(ref AutoKick_Reason_Keyword_Racism, "Auto Kick: Ban: Contains previous Racism ban");*/
+                GetConfig(ref AutoKickOn, "Auto Kick", "Enabled");
+                GetConfig(ref AutoKick_NetworkBan, "Auto Kick", "Bans on your network");
+                GetConfig(ref AutoKickCeiling, "Auto Kick", "Max allowed previous bans");
 
-                GetConfig(ref AutoKick_BadIp, "Auto Kick: VPN and Proxy");
-                GetConfig(ref AutoKick_BadIp_IgnoreComputing, "Auto Kick: Ignore nVidia & Steam?");
-                GetConfig(ref AutoKick_BadIp_Sensitivity, "Auto Kick: VPN and Proxy: Sensitivity");
-                GetConfig(ref AutoKick_IgnoreNvidia, "Auto Kick: Ignore nVidia Cloud Gaming");
+                GetConfig(ref AutoKick_BadIp, "Auto Kick", "VPN", "Enabled");
+                GetConfig(ref AutoKick_IgnoreNvidia, "Auto Kick", "VPN", "Ignore nVidia Cloud Gaming");
 
-                GetConfig(ref AutoKick_KickPrivateProfile, "Auto Kick: Private Steam Profiles");
-                GetConfig(ref AutoKick_KickHiddenLevel, "Auto Kick: When Steam Level Hidden");
-                GetConfig(ref AutoKick_MinSteamProfileLevel, "Auto Kick: Min Allowed Steam Level (-1 disables)");
-                GetConfig(ref AutoKick_KickWeirdSteam64, "Auto Kick: Profiles that do no conform to the Steam64 IDs (Highly recommended)");
-                GetConfig(ref AutoKick_KickTwitterGameBanned, "Auto Kick: Users that have been banned on rusthackreport");
+                GetConfig(ref AutoKick_KickTwitterGameBanned, "Auto Kick", "Users that have been banned on rusthackreport");
 
-                GetConfig(ref DiscordWebhookURL, "Discord: Webhook URL");
-                GetConfig(ref DiscordBanWebhookURL, "Discord: Bans Webhook URL");
-                GetConfig(ref DiscordQuickConnect, "Discord: Show Quick Connect On report");
-                GetConfig(ref DiscordOnlySendDirtyReports, "Discord: Send Only Dirty Player Reports");
-                GetConfig(ref DiscordNotifyGameBan, "Discord: Notify when a player has received a game ban");
-                GetConfig(ref DiscordKickReport, "Discord: Send Kick Report");
-                GetConfig(ref DiscordKickReport, "Discord: Send Kick Report");
-                GetConfig(ref DiscordBanReport, "Discord: Send Ban Report");
-                GetConfig(ref ClanBanPrefix, "Clan Ban: Reason Prefix");
-                GetConfig(ref ClanBanTeams, "Clan Ban: Ban Native Team Members");
+                GetConfig(ref AutoKick_KickPrivateProfile, "Auto Kick", "Steam", "Private Steam Profiles");
+                GetConfig(ref AutoKick_KickHiddenLevel, "Auto Kick", "Steam", "When Steam Level Hidden");
+                GetConfig(ref AutoKick_MinSteamProfileLevel, "Auto Kick", "Steam", "Min Allowed Steam Level (-1 disables)");
+                GetConfig(ref AutoKick_KickWeirdSteam64, "Auto Kick", "Steam", "Profiles that do no conform to the Steam64 IDs (Highly recommended)");
+                GetConfig(ref AutoVacBanCeiling, "Auto Kick", "Steam", "Max allowed VAC bans");
+                GetConfig(ref AutoGameBanCeiling, "Auto Kick", "Steam", "Max allowed Game bans");
+                GetConfig(ref DissallowVacBanDays, "Auto Kick", "Steam", "Min age of VAC ban allowed");
+                GetConfig(ref AutoKickFamilyShare, "Auto Kick", "Steam", "Family share accounts");
+                GetConfig(ref AutoKickFamilyShareIfDirty, "Auto Kick", "Steam", "Family share accounts that are dirty");
 
-                GetConfig(ref IgnoreAdmins, "Ignore Admins");
+                GetConfig(ref DiscordWebhookURL, "Discord", "Webhook URL");
+                GetConfig(ref DiscordBanWebhookURL, "Discord", "Bans Webhook URL");
+                GetConfig(ref DiscordQuickConnect, "Discord", "Show Quick Connect On report");
+                GetConfig(ref DiscordOnlySendDirtyReports, "Discord", "Send Only Dirty Player Reports");
+                GetConfig(ref DiscordNotifyGameBan, "Discord", "Notify when a player has received a game ban");
+                GetConfig(ref DiscordKickReport, "Discord", "Send Kick Report");
+                GetConfig(ref DiscordBanReport, "Discord", "Send Ban Report");
+
+                GetConfig(ref ClanBanPrefix, "Clan Ban", "Reason Prefix");
+                GetConfig(ref ClanBanTeams, "Clan Ban", "Ban Native Team Members");
 
                 plugin.SaveConfig();
             }
@@ -1815,8 +1767,8 @@ namespace Oxide.Plugins
             private void GetConfig<T>(ref T variable, params string[] path) {
                 if (path.Length == 0) return;
 
-                if (string.Join("", path).Equals("io.serverarmour.com API KEY") && plugin.Config.Get(path) == null && plugin.Config.Get("API: Server Key") != null) {
-                    variable = (T)Convert.ChangeType(plugin.Config.Get("API: Server Key"), typeof(T));
+                if (path[path.Length - 1].Equals("Server Key") && plugin.Config.Get(path) == null && plugin.Config.Get("API: Server Key") != null) {
+                    variable = (T)Convert.ChangeType(plugin.Config.Get("io.serverarmour.com API KEY"), typeof(T));
                     SetConfig(ref variable, path);
                     plugin.Config.Remove("API: Server Key");
                 } else {
@@ -1827,14 +1779,13 @@ namespace Oxide.Plugins
                     }
 
                     string serverAddress = plugin.covalence.Server.Address.ToString();
-                    if (path.Equals("Your Server IP") && string.IsNullOrEmpty(ServerIp) && !string.IsNullOrEmpty(serverAddress) && !serverAddress.Equals("0.0.0.0")) {
+                    if (path[path.Length - 1].Equals("Your Server IP") && string.IsNullOrEmpty(ServerIp) && !string.IsNullOrEmpty(serverAddress) && !serverAddress.Equals("0.0.0.0")) {
                         ServerIp = serverAddress;
                         SetConfig(ref variable, path);
                     }
 
                     variable = (T)Convert.ChangeType(plugin.Config.Get(path), typeof(T));
                 }
-
             }
 
             public void SetConfig<T>(ref T variable, params string[] path) => plugin.Config.Set(path.Concat(new object[] { variable }).ToArray());
@@ -1885,7 +1836,7 @@ namespace Oxide.Plugins
         /// </summary>
         /// <param name="code"></param>
         /// <returns></returns>
-        bool CodeExistsAndValid(string code) => code.IsNullOrEmpty() || _codes.Values.Contains(code);
+        bool CodeExistsAndValid(string code) => !code.IsNullOrEmpty() && _codes.Values.Contains(code);
 
         [Command("sa.auth.check")]
         void cmdCheckCode(IPlayer player, string command, string[] args) {

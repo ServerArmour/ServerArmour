@@ -22,7 +22,13 @@ You can add the Server Armour bot to your discord by following this link:
 /clanban - requires permission serverarmour.ban
 ```
 
-## Whitelist Permissions
+## Admin Permissions
+```
+serverarmour.website.admin
+serverarmour.ban
+serverarmour.unban
+```
+
 ## Whitelist Permissions
 ```
 serverarmour.whitelist.recentvac
@@ -57,51 +63,67 @@ serverarmour.whitelist.familyshare
 ### Default Configuration
 ```json
 {
-  "API: Owner Email": "",
-  "API: Owner Real Name": "",
-  "API: Owner Steam64 ID": "",
-  "API: Share details with other server owners": true,
-  "API: Submit Arkan Data": true,
-  "Auto Kick": true,
-  "Auto Kick: Bans on your network": true,
-  "Auto Kick: Family share accounts": false,
-  "Auto Kick: Family share accounts that are dirty": false,
-  "Auto Kick: Ignore nVidia & Steam?": true,
-  "Auto Kick: Ignore nVidia Cloud Gaming": true,
-  "Auto Kick: Max allowed Game bans": 2,
-  "Auto Kick: Max allowed previous bans": 3,
-  "Auto Kick: Max allowed VAC bans": 1,
-  "Auto Kick: Min age of VAC ban allowed": 90,
-  "Auto Kick: Min Allowed Steam Level (-1 disables)": -1,
-  "Auto Kick: Private Steam Profiles": false,
-  "Auto Kick: Profiles that do no conform to the Steam64 IDs (Highly recommended)": true,
-  "Auto Kick: Users that have been banned on rusthackreport": true,
-  "Auto Kick: VPN and Proxy": true,
-  "Auto Kick: VPN and Proxy: Sensitivity": 1.0,
-  "Auto Kick: When Steam Level Hidden": false,
-  "Better Chat: Tag for dirty users": "",
-  "Broadcast: Kicks": false,
-  "Broadcast: New bans": true,
-  "Broadcast: Player Reports": true,
-  "Broadcast: RCON": false,
-  "Broadcast: When VAC is younger than": 120,
-  "Clan Ban: Ban Native Team Members": true,
-  "Clan Ban: Reason Prefix": "Assoc Ban -> {playerId}: {reason}",
-  "Debug: Show additional debug console logs": true,
-  "Discord: Bans Webhook URL": "https://support.discordapp.com/hc/en-us/articles/228383668-Intro-to-Webhooks",
-  "Discord: Notify when a player has received a game ban": true,
-  "Discord: Send Ban Report": true,
-  "Discord: Send Kick Report": true,
-  "Discord: Send Only Dirty Player Reports": true,
-  "Discord: Show Quick Connect On report": true,
-  "Discord: Webhook URL": "https://support.discordapp.com/hc/en-us/articles/228383668-Intro-to-Webhooks",
-  "Game Port": "",
-  "Ignore Admins": true,
-  "io.serverarmour.com API KEY": "",
-  "Query Port": "",
-  "RCON Port": "",
-  "Show Protected MSG": true,
-  "Your Server IP": ""
+  "Auto Kick": {
+    "Bans on your network": true, // should SA auto kick bans create on any of your other servers you are admin on?
+    "Enabled": true, // Is auto kick enabled?
+    "Max allowed previous bans": 3, // max allowed bans on other servers, for a player
+    "Steam": {
+      "Min age of VAC ban allowed": 90, // Example: a player with a 89day vac should be kicked, 90+ wont.
+      "When Steam Level Hidden": false, // Kicks a player that has a hidden steam level, this includes private accounts.
+      "Family share accounts": false, // kick family share accounts?
+      "Family share accounts that are dirty": false, // kick family share accounts that are considered dirty?
+      "Max allowed Game bans": 2, 
+      "Max allowed VAC bans": 1,
+      "Min Allowed Steam Level (-1 disables)": -1, //
+      "Private Steam Profiles": false,
+      "Profiles that do no conform to the Steam64 IDs (Highly recommended)": true
+    },
+    "Users that have been banned on rusthackreport": true,
+    "VPN": {
+      "Enabled": true, // should vpn or proxy players be kicked?
+      "Ignore nVidia Cloud Gaming": true, // should players on the nvidia network be ignored?
+    }
+  },
+  "Better Chat: Tag for dirty users": "", //will prefix player names with this tag that are dirty
+  "Broadcast": { // this will broadcast in chat by default
+    "Kicks": false, // when a player gets kicked?
+    "New bans": true, // when a player gets banned?
+    "RCON": false, // should it all the above be broadcasted via RCON as well (usefull for battlemetrics player history)
+    "Player Reports": true, //should their player report be broadcasted on connect
+    "When VAC is younger than": 120 // goes together with the below
+  },
+  "Clan Ban": {
+    "Ban Native Team Members": true, // this is the normal team members in vanilla rust, by default will ban members in a Clan in Clans or ClansReborn
+    "Reason Prefix": "Assoc Ban -> {playerId}: {reason}" // will use this reason prefifx format.
+  },
+  "Discord": {
+    "Webhook URL": "https://support.discordapp.com/hc/en-us/articles/228383668-Intro-to-Webhooks", // webhook for connect reports, and kicks
+    "Bans Webhook URL": "https://support.discordapp.com/hc/en-us/articles/228383668-Intro-to-Webhooks", // webhook for bans, else it will default to above
+    "Notify when a player has received a game ban": true,
+    "Send Ban Report": true,
+    "Send Kick Report": true,
+    "Send Only Dirty Player Reports": true, //if only reports should be sent to discord when a player is dirty, if false, it will send a report for every player that connects
+    "Show Quick Connect On report": true //this will embed a clickable link in the report to the server connect.
+  },
+  "General": {
+    "Debug: Show additional debug console logs": false, // always false, unless you want to debug where an issue occurs for the developer.
+    "Ignore Admins": true // this will ignore admins completely.
+  },
+  "io.serverarmour.com": {
+    "Owner Email": "", // owner email, not required, but usefull for important communication (not spam)
+    "Owner Real Name": "", // your name, the owner
+    "Owner Steam64 ID": "", // the owners steam64id
+    "Server Key": "", // THIS WILL AUTO GENERATE ON FIRST CONNECT, NEVER LOSE THIS KEY. NEVER SHARE IT. IT WONT GENERATE AGAIN ON THE SAME IP/PORT
+    "Share details with other server owners": true, // For future use, so that other server admins can send you emails for evidence etc, or discuss a ban.
+    "Submit Arkan Data": true // if arkan data can be submitted to the cloud server, for analysis. 
+  },
+  "Server Info": {
+    "Game Port": "", // your normal port, that users connect to
+    "Query Port": "", // if you havent changed this, the default is the same as gameport.
+    "RCON Port": "", // not used now, for future management from io.serverarmour.com
+    "Your Server IP": "" // your server IP ONLY, without : ports
+  },
+  "Show Protected MSG": true // shows that your server is protected by serverarmour, to a player that connects
 }
 ```
 
