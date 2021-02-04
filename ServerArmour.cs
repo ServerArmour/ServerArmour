@@ -18,7 +18,7 @@ using Time = Oxide.Core.Libraries.Time;
 
 namespace Oxide.Plugins
 {
-    [Info("Server Armour", "Pho3niX90", "0.6.13")]
+    [Info("Server Armour", "Pho3niX90", "0.6.14")]
     [Description("Protect your server! Auto ban known hackers, scripters and griefer accounts, and notify server owners of threats.")]
     class ServerArmour : CovalencePlugin
     {
@@ -213,7 +213,7 @@ namespace Oxide.Plugins
                         init = true;
                         Puts("connected to SA API");
                     } else if (msg.Equals("key assigned to server") || msg.Equals("key assigned to new server")) {
-                        config.SetConfig(ref key, "io.serverarmour.com API KEY");
+                        config.SetConfig(ref key, "io.serverarmour.com", "Server Key");
 
                         headers = new Dictionary<string, string> {
                         { "server_key", key },
@@ -1100,9 +1100,11 @@ namespace Oxide.Plugins
         }
 
         bool IsBadIp(ISAPlayer isaPlayer) {
+            if (isaPlayer.ipInfo == null) return false;
+
             return (config.AutoKick_BadIp
-                && (isaPlayer.ipInfo != null && isaPlayer.ipInfo.type.ToLower() == "vpn" || isaPlayer.ipInfo.type.ToLower() == "proxy" || isaPlayer.ipInfo.proxy == "yes")
-                && !(config.AutoKick_IgnoreNvidia && isaPlayer.ipInfo.isCloudComputing));
+                && isaPlayer.ipInfo.type.ToLower() == "vpn" || isaPlayer.ipInfo.type.ToLower() == "proxy" || isaPlayer.ipInfo.proxy == "yes")
+                && !(config.AutoKick_IgnoreNvidia && isaPlayer.ipInfo.isCloudComputing);
         }
 
         bool ContainsMyBan(string steamid) {
@@ -1768,7 +1770,7 @@ namespace Oxide.Plugins
                 if (path.Length == 0) return;
 
                 if (path[path.Length - 1].Equals("Server Key") && plugin.Config.Get(path) == null && plugin.Config.Get("API: Server Key") != null) {
-                    variable = (T)Convert.ChangeType(plugin.Config.Get("io.serverarmour.com API KEY"), typeof(T));
+                    variable = (T)Convert.ChangeType(plugin.Config.Get("API: Server Key"), typeof(T));
                     SetConfig(ref variable, path);
                     plugin.Config.Remove("API: Server Key");
                 } else {
