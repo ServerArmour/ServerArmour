@@ -18,7 +18,7 @@ using Time = Oxide.Core.Libraries.Time;
 
 namespace Oxide.Plugins
 {
-    [Info("Server Armour", "Pho3niX90", "0.6.14")]
+    [Info("Server Armour", "Pho3niX90", "0.6.15")]
     [Description("Protect your server! Auto ban known hackers, scripters and griefer accounts, and notify server owners of threats.")]
     class ServerArmour : CovalencePlugin
     {
@@ -223,7 +223,7 @@ namespace Oxide.Plugins
                         Puts("Server key has been updated");
                         init = true;
                     } else {
-                        LogError("Server Armour has not initialized. Is your apikey correct? Get it from io.serverarmour.com or join discord for support https://discord.gg/jxvRaPR");
+                        LogError("Server Armour has not initialized. Is your apikey correct? Get it from https://io.serverarmour.com/my-servers or join discord for support https://discord.gg/jxvRaPR");
                         Interface.Oxide.UnloadPlugin(Name);
                         return;
                     }
