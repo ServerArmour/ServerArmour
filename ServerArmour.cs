@@ -18,7 +18,7 @@ using Time = Oxide.Core.Libraries.Time;
 
 namespace Oxide.Plugins
 {
-    [Info("Server Armour", "Pho3niX90", "0.6.15")]
+    [Info("Server Armour", "Pho3niX90", "0.6.16")]
     [Description("Protect your server! Auto ban known hackers, scripters and griefer accounts, and notify server owners of threats.")]
     class ServerArmour : CovalencePlugin
     {
@@ -1769,25 +1769,18 @@ namespace Oxide.Plugins
             private void GetConfig<T>(ref T variable, params string[] path) {
                 if (path.Length == 0) return;
 
-                if (path[path.Length - 1].Equals("Server Key") && plugin.Config.Get(path) == null && plugin.Config.Get("API: Server Key") != null) {
-                    variable = (T)Convert.ChangeType(plugin.Config.Get("API: Server Key"), typeof(T));
+                if (plugin.Config.Get(path) == null) {
                     SetConfig(ref variable, path);
-                    plugin.Config.Remove("API: Server Key");
-                } else {
-
-                    if (plugin.Config.Get(path) == null) {
-                        SetConfig(ref variable, path);
-                        plugin.PrintWarning($"Added new field to config: {string.Join("/", path)}");
-                    }
-
-                    string serverAddress = plugin.covalence.Server.Address.ToString();
-                    if (path[path.Length - 1].Equals("Your Server IP") && string.IsNullOrEmpty(ServerIp) && !string.IsNullOrEmpty(serverAddress) && !serverAddress.Equals("0.0.0.0")) {
-                        ServerIp = serverAddress;
-                        SetConfig(ref variable, path);
-                    }
-
-                    variable = (T)Convert.ChangeType(plugin.Config.Get(path), typeof(T));
+                    plugin.PrintWarning($"Added new field to config: {string.Join("/", path)}");
                 }
+
+                string serverAddress = plugin.covalence.Server.Address.ToString();
+                if (path[path.Length - 1].Equals("Your Server IP") && string.IsNullOrEmpty(ServerIp) && !string.IsNullOrEmpty(serverAddress) && !serverAddress.Equals("0.0.0.0")) {
+                    ServerIp = serverAddress;
+                    SetConfig(ref variable, path);
+                }
+
+                variable = (T)Convert.ChangeType(plugin.Config.Get(path), typeof(T));
             }
 
             public void SetConfig<T>(ref T variable, params string[] path) => plugin.Config.Set(path.Concat(new object[] { variable }).ToArray());
