@@ -18,7 +18,7 @@ using Time = Oxide.Core.Libraries.Time;
 
 namespace Oxide.Plugins
 {
-    [Info("Server Armour", "Pho3niX90", "0.6.16")]
+    [Info("Server Armour", "Pho3niX90", "0.6.19")]
     [Description("Protect your server! Auto ban known hackers, scripters and griefer accounts, and notify server owners of threats.")]
     class ServerArmour : CovalencePlugin
     {
@@ -115,7 +115,6 @@ namespace Oxide.Plugins
         #region Hooks
         void OnServerInitialized(bool first) {
             _instance = this;
-            config = new SAConfig(this);
             LoadData();
 
             // CheckOnlineUsers();
@@ -201,7 +200,7 @@ namespace Oxide.Plugins
 
                 try {
                     obj = JObject.Parse(response);
-                } catch (Exception e) {
+                } catch (Exception) {
                     timer.Once(5, CheckServerConnection);
                     return;
                 }
@@ -332,7 +331,7 @@ namespace Oxide.Plugins
                 webrequest.Enqueue($"{api_hostname}/api/v1/plugin/player/{id}?bans=true", $"ipAddress={address}", (code, response) => {
                     if (code > 204 || response.IsNullOrEmpty()) {
                         if (code == 500) {
-                            timer.Once(5, () => _webCheckPlayer(name, id, address, connected));
+                            timer.Once(5, () => _webCheckPlayer(playerName, id, address, connected));
                         } else {
                             Puts(GetMsg("No Response From API", new Dictionary<string, string> { ["code"] = code.ToString(), ["response"] = response }));
                         }
@@ -345,8 +344,8 @@ namespace Oxide.Plugins
 
                     try {
                         isaPlayer = JsonConvert.DeserializeObject<ISAPlayer>(response);
-                    } catch (Exception e) {
-                        timer.Once(5, () => _webCheckPlayer(name, id, address, connected));
+                    } catch (Exception) {
+                        timer.Once(5, () => _webCheckPlayer(playerName, id, address, connected));
                         return;
                     }
 
@@ -373,7 +372,7 @@ namespace Oxide.Plugins
 
                     //script vars
                     string pSteamId = isaPlayer.steamid;
-                    string lSteamId = GetFamilyShare(isaPlayer.steamid);
+                    //string lSteamId = GetFamilyShare(isaPlayer.steamid);
                     //
 
                     LogDebug("Check for a twitter game ban");
@@ -691,7 +690,7 @@ namespace Oxide.Plugins
 
             try {
                 API_BanPlayer(player, playerId, reason, length, ignoreSearch);
-            } catch (Exception e) {
+            } catch (Exception) {
                 SendReplyWithIcon(player, GetMsg("Ban Syntax"));
             }
         }
@@ -756,7 +755,7 @@ namespace Oxide.Plugins
 
             try {
                 ignoreSearch = bool.Parse(args[3]);
-            } catch (Exception e) {
+            } catch (Exception) {
 
             }
 
@@ -801,7 +800,7 @@ namespace Oxide.Plugins
             }
 
             DateTime now = DateTime.UtcNow;
-            string dateTime = now.ToString(DATE_FORMAT);
+            //string dateTime = now.ToString(DATE_FORMAT);
             DateTime dateBanUntil;
 
             switch (del.ToUpper()) {
@@ -832,8 +831,8 @@ namespace Oxide.Plugins
             string del = new string(banLength.Where(char.IsLetter).ToArray());
 
 
-            DateTime now = DateTime.Now;
-            string dateTime = now.ToString(DATE_FORMAT);
+            // DateTime now = DateTime.Now;
+            //string dateTime = now.ToString(DATE_FORMAT);
             string dateBanUntil;
 
             switch (del.ToUpper()) {
@@ -902,7 +901,7 @@ namespace Oxide.Plugins
                         if (player != null) GetPlayerBans(player);
                         if (allPlayersCounter < allPlayersCount) LogDebug("Inspection completed.");
                         allPlayersCounter++;
-                    } catch (ArgumentOutOfRangeException aore) {
+                    } catch (ArgumentOutOfRangeException) {
                         allPlayersCounter++;
                     }
                 });
@@ -944,7 +943,7 @@ namespace Oxide.Plugins
                                     banUntil = expireDate.ToString(DATE_FORMAT)
                                 });
                             }
-                        } catch (ArgumentOutOfRangeException aore) {
+                        } catch (ArgumentOutOfRangeException) {
                             BannedUsersCounter++;
                         }
                     }
@@ -1146,6 +1145,7 @@ namespace Oxide.Plugins
         }
 
         bool IsLenderDirty(string steamid) {
+            if (steamid.IsNullOrEmpty()) return false;
             string lendersteamid = GetFamilyShareLenderSteamId(steamid);
             return lendersteamid != "0" ? IsPlayerDirty(lendersteamid) : false;
         }
@@ -1160,11 +1160,11 @@ namespace Oxide.Plugins
         }
 
         bool HasReachedVacCeiling(ISAPlayer isaPlayer) {
-            return config.AutoKickOn && config.AutoVacBanCeiling < (isaPlayer.steamNumberOfVACBans + (isaPlayer.lender != null ? isaPlayer.lender.steamNumberOfVACBans : 0));
+            return config.AutoKickOn && config.AutoVacBanCeiling >= 0 && config.AutoVacBanCeiling < (isaPlayer.steamNumberOfVACBans + (isaPlayer.lender != null ? isaPlayer.lender.steamNumberOfVACBans : 0));
         }
 
         bool HasReachedGameBanCeiling(ISAPlayer isaPlayer) {
-            return config.AutoKickOn && config.AutoGameBanCeiling < (isaPlayer.steamNumberOfGameBans + isaPlayer.lender?.steamNumberOfGameBans);
+            return config.AutoKickOn && config.AutoGameBanCeiling >= 0 && config.AutoGameBanCeiling < (isaPlayer.steamNumberOfGameBans + isaPlayer.lender?.steamNumberOfGameBans);
         }
 
         /*bool OwnsBloody(ISAPlayer isaPlayer) {
@@ -1178,8 +1178,11 @@ namespace Oxide.Plugins
         bool IsFamilyShare(string steamid) => !GetFamilyShare(steamid).IsNullOrEmpty();
 
         string GetFamilyShare(string steamid) {
-            if (string.IsNullOrEmpty(steamid) || steamid.Length != 17) return null;
+            if (steamid.IsNullOrEmpty() || steamid?.Length != 17) return null;
             var playerConn = BasePlayer.Find(steamid)?.Connection;
+            if (playerConn == null) {
+                return null;
+            }
             return !playerConn.ownerid.ToString().Equals(steamid) ? playerConn.ownerid.ToString() : null;
         }
 
@@ -1232,7 +1235,7 @@ namespace Oxide.Plugins
             if (ignoreSearch) {
                 try {
                     banSteamId = ulong.Parse(banPlayer);
-                } catch (Exception e) {
+                } catch (Exception) {
                     SendReplyWithIcon(player, GetMsg("Ban Syntax"));
                     return;
                 }
@@ -1320,7 +1323,7 @@ namespace Oxide.Plugins
                 }
                 try {
                     SilentBan(BasePlayer.Find(playerId)?.IPlayer, TimeSpan.FromMinutes((_BanUntil(lengthOfBan) - DateTime.Now).TotalMinutes), banReason);
-                } catch (Exception e) {
+                } catch (Exception) {
                     Subscribe(nameof(OnUserBanned));
                 }
             }
@@ -1443,7 +1446,7 @@ namespace Oxide.Plugins
             DateTime time;
             try {
                 time = DateTime.ParseExact(stringDate, DATE_FORMAT, null);
-            } catch (Exception e) {
+            } catch (Exception) {
                 time = DateTime.ParseExact(stringDate.Replace("T", " ").Replace(".000Z", ""), DATE_FORMAT2, null);
             }
             _instance.Puts(time.ToString(DATE_FORMAT));
@@ -1544,6 +1547,7 @@ namespace Oxide.Plugins
 
         public class IPInfo
         {
+#pragma warning disable 0649
             public string ip;
             public string lastcheck;
             public long longIp;
@@ -1561,10 +1565,12 @@ namespace Oxide.Plugins
             public string type;
             public float rating;
             public bool isCloudComputing;
+#pragma warning restore 0649
         }
 
         public class ISABan
         {
+#pragma warning disable 0649
             public int id;
             public string adminSteamId;
             public long steamid;
@@ -1576,6 +1582,7 @@ namespace Oxide.Plugins
             public string created;
             public int gameId;
             public string banUntil;
+#pragma warning restore 0649
 
             public uint GetUnixBanUntill() {
                 return ConvertToTimestamp(banUntil);
@@ -1584,7 +1591,7 @@ namespace Oxide.Plugins
                 DateTime t;
                 try {
                     t = DateTime.ParseExact(banUntil, DATE_FORMAT, null);
-                } catch (Exception e) {
+                } catch (Exception) {
                     t = DateTime.ParseExact(banUntil.Replace("T", " ").Replace(".000Z", ""), DATE_FORMAT2, null);
                 }
                 return t;
@@ -1647,6 +1654,7 @@ namespace Oxide.Plugins
         #endregion
 
         #region Configuration
+
         private class SAConfig
         {
             // Config default vars
@@ -1787,6 +1795,16 @@ namespace Oxide.Plugins
         }
 
         protected override void LoadDefaultConfig() => PrintWarning("Generating new configuration file.");
+        protected override void LoadConfig() {
+            base.LoadConfig();
+
+            try {
+                config = new SAConfig(this);
+            } catch (InvalidCastException) {
+                PrintError("Your config seems to be corrupted. If you are upgrading from 0.5.*, please backup your config, delete it, reload, and repopulate the new config file.");
+                Interface.Oxide.UnloadPlugin(Name);
+            }
+        }
         #endregion
 
         #region BOT Helpers
