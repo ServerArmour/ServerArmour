@@ -18,7 +18,7 @@ using Time = Oxide.Core.Libraries.Time;
 
 namespace Oxide.Plugins
 {
-    [Info("Server Armour", "Pho3niX90", "0.6.19")]
+    [Info("Server Armour", "Pho3niX90", "0.6.20")]
     [Description("Protect your server! Auto ban known hackers, scripters and griefer accounts, and notify server owners of threats.")]
     class ServerArmour : CovalencePlugin
     {
@@ -273,6 +273,15 @@ namespace Oxide.Plugins
             SaUnban(id);
         }
 
+        /// <summary>
+        /// Processes commands on an interval basis, this is only needed for servers that do not have RCON enabled (not yet implemented).
+        /// </summary>
+        /// <param name="playerId"></param>
+        void APIActions(string playerId) {
+            // do webcall
+               //process instructions.
+        }
+
         void OnUserBanned(string name, string id, string ipAddress, string reason) {
             //this is to make sure that if an app like battlemetrics for example, bans a player, we catch it.
             timer.Once(3f, () => {
@@ -450,7 +459,7 @@ namespace Oxide.Plugins
                     }
 
                     LogDebug("Check for VPN");
-                    Puts($"IP/CACHE| ID:{id} ADD:{address} RATING:{isaPlayer.ipRating} AGE:{isaPlayer.ipLastCheck}");
+                    Puts($"IP/CACHE| ID:{id} ADD:{address} RATING:{isaPlayer.ipRating} AGE: {isaPlayer.ipLastCheck}");
                     if (config.AutoKickOn && config.AutoKick_BadIp && !HasPerm(id, PermissionWhitelistBadIPKick) && config.AutoKick_BadIp) {
                         if (IsBadIp(isaPlayer)) {
                             if (isaPlayer.ipInfo.proxy == "yes")
@@ -554,7 +563,11 @@ namespace Oxide.Plugins
         }
         [Command("unban", "playerunban", "sa.unban"), Permission(PermissionToUnBan)]
         void SCmdUnban(IPlayer player, string command, string[] args) {
-
+            Puts("Someone called SCmdUnban");
+            Puts($"IsAdmin?: {player.IsAdmin}");
+            Puts($"IsConnected?: {player.IsConnected}");
+            Puts($"IsServer?: {player.IsServer}");
+            Puts($"Address?: {player.Address}");
             NativeUnban(args[0]);
 
             if (args == null || (args.Length > 2 || args.Length < 1)) {
@@ -960,6 +973,7 @@ namespace Oxide.Plugins
         }
 
         bool IsPlayerDirty(string steamid) {
+            if (steamid.IsNullOrEmpty()) return false;
             ISAPlayer isaPlayer = GetPlayerCache(steamid);
             return isaPlayer != null && IsPlayerCached(steamid) && (ServerBanCount(isaPlayer) > 0 || isaPlayer?.steamCommunityBanned > 0 || isaPlayer?.steamNumberOfGameBans > 0 || isaPlayer?.steamVACBanned > 0);
         }
@@ -968,7 +982,7 @@ namespace Oxide.Plugins
         void AddPlayerCached(ISAPlayer isaplayer) => _playerData.Add(isaplayer.steamid, isaplayer);
         void AddPlayerCached(IPlayer iplayer, ISAPlayer isaplayer) => _playerData.Add(iplayer.Id, isaplayer);
         ISAPlayer GetPlayerCache(string steamid) {
-            return IsPlayerCached(steamid) ? _playerData[steamid] : null;
+            return !steamid.IsNullOrEmpty() && IsPlayerCached(steamid) ? _playerData[steamid] : null;
         }
         List<ISABan> GetPlayerBanData(string steamid) => _playerData[steamid].bans;
         int GetPlayerBanDataCount(string steamid) => ServerBanCount(_playerData[steamid]);
@@ -1147,7 +1161,7 @@ namespace Oxide.Plugins
         bool IsLenderDirty(string steamid) {
             if (steamid.IsNullOrEmpty()) return false;
             string lendersteamid = GetFamilyShareLenderSteamId(steamid);
-            return lendersteamid != "0" ? IsPlayerDirty(lendersteamid) : false;
+            return !lendersteamid.IsNullOrEmpty() && lendersteamid != "0" ? IsPlayerDirty(lendersteamid) : false;
         }
 
         int ServerBanCount(ISAPlayer player) {
