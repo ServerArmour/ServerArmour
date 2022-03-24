@@ -15,10 +15,11 @@ using System.Linq;
 using WebSocketSharp;
 using Oxide.Game.Rust.Libraries;
 using Time = Oxide.Core.Libraries.Time;
+using Facepunch.Extend;
 
 namespace Oxide.Plugins
 {
-    [Info("Server Armour", "Pho3niX90", "0.6.20")]
+    [Info("Server Armour", "Pho3niX90", "0.7.2")]
     [Description("Protect your server! Auto ban known hackers, scripters and griefer accounts, and notify server owners of threats.")]
     class ServerArmour : CovalencePlugin
     {
@@ -35,7 +36,10 @@ namespace Oxide.Plugins
         const string DATE_FORMAT = "yyyy/MM/dd HH:mm";
         const string DATE_FORMAT2 = "yyyy-MM-dd HH:mm:ss";
         ulong ServerArmourId = 76561199060671869L;
-        bool init = false;
+
+        bool apiConnected = false;
+        bool serverStarted = false;
+
         private Dictionary<string, string> headers;
         string adminIds = "";
 
@@ -58,6 +62,7 @@ namespace Oxide.Plugins
         const string PermissionWhitelistVacCeilingKick = "serverarmour.whitelist.vacceiling";
         const string PermissionWhitelistServerCeilingKick = "serverarmour.whitelist.banceiling";
         const string PermissionWhitelistGameBanCeilingKick = "serverarmour.whitelist.gamebanceiling";
+        const string PermissionWhitelistTotalBanCeiling = "serverarmour.whitelist.totalbanceiling";
         const string PermissionWhitelistSteamProfile = "serverarmour.whitelist.steamprofile";
         const string PermissionWhitelistFamilyShare = "serverarmour.whitelist.familyshare";
         const string PermissionWhitelistTwitterBan = "serverarmour.whitelist.twitterban";
@@ -66,32 +71,40 @@ namespace Oxide.Plugins
         #region Plugins
         [PluginReference] Plugin DiscordApi, DiscordMessages, BetterChat, Ember, Clans;
 
-        void DiscordSend(string steamId, string name, EmbedFieldList report, int color = 39423, bool isBan = false) {
+        void DiscordSend(string steamId, string name, EmbedFieldList report, int color = 39423, bool isBan = false)
+        {
             string webHook;
-            if (isBan) {
+            if (isBan)
+            {
                 if (config.DiscordBanWebhookURL.Length == 0 || config.DiscordBanWebhookURL.Equals("https://support.discordapp.com/hc/en-us/articles/228383668-Intro-to-Webhooks")) { Puts("Discord webhook not setup."); return; }
                 webHook = config.DiscordBanWebhookURL;
-            } else {
+            }
+            else
+            {
                 if (config.DiscordWebhookURL.Length == 0 || config.DiscordWebhookURL.Equals("https://support.discordapp.com/hc/en-us/articles/228383668-Intro-to-Webhooks")) { Puts("Discord webhook not setup."); return; }
                 webHook = config.DiscordWebhookURL;
             }
 
             List<EmbedFieldList> fields = new List<EmbedFieldList>();
-            if (config.DiscordQuickConnect) {
-                fields.Add(new EmbedFieldList() {
+            if (config.DiscordQuickConnect)
+            {
+                fields.Add(new EmbedFieldList()
+                {
                     name = server.Name,
                     value = $"[steam://connect/{config.ServerIp}:{server.Port}](steam://connect/{config.ServerIp}:{server.Port})",
                     inline = true
                 });
             }
 
-            fields.Add(new EmbedFieldList() {
+            fields.Add(new EmbedFieldList()
+            {
                 name = "Steam Profile",
                 value = $"[{name}\n{steamId}](https://steamcommunity.com/profiles/{steamId})",
                 inline = !config.DiscordQuickConnect
             });
 
-            fields.Add(new EmbedFieldList() {
+            fields.Add(new EmbedFieldList()
+            {
                 name = "Server Armour Profile ",
                 value = $"[{name}\n{steamId}](https://io.serverarmour.com/profile/{steamId})",
                 inline = !config.DiscordQuickConnect
@@ -101,11 +114,16 @@ namespace Oxide.Plugins
             var fieldsObject = fields.Cast<object>().ToArray();
             string json = JsonConvert.SerializeObject(fieldsObject);
 
-            if (DiscordApi != null && DiscordApi.IsLoaded) {
+            if (DiscordApi != null && DiscordApi.IsLoaded)
+            {
                 DiscordApi?.Call("API_SendEmbeddedMessage", webHook, "Server Armour Report: ", color, json);
-            } else if (DiscordMessages != null && DiscordMessages.IsLoaded) {
+            }
+            else if (DiscordMessages != null && DiscordMessages.IsLoaded)
+            {
                 DiscordMessages?.Call("API_SendFancyMessage", webHook, "Server Armour Report: ", color, json);
-            } else {
+            }
+            else
+            {
                 LogWarning("No discord API plugin loaded, will not publish to hook!");
             }
         }
@@ -113,19 +131,33 @@ namespace Oxide.Plugins
         #endregion
 
         #region Hooks
-        void OnServerInitialized(bool first) {
+        void OnServerInitialized(bool first)
+        {
             _instance = this;
             LoadData();
+
+            if (first)
+            {
+                //quick fix to ignore bans on server restart. (rust rebanning.)
+                Unsubscribe(nameof(OnUserBanned));
+                timer.Once(60, () =>
+                {
+                    Subscribe(nameof(OnUserBanned));
+                    serverStarted = true;
+                });
+            }
+            else
+            {
+                serverStarted = true;
+            }
 
             // CheckOnlineUsers();
             // CheckLocalBans();
 
             Puts("Server Armour is being initialized.");
-            string serverAddress = covalence.Server.Address.ToString();
-            if (string.IsNullOrEmpty(config.ServerIp) && !string.IsNullOrEmpty(serverAddress) && !serverAddress.Equals("0.0.0.0")) {
-                config.ServerIp = serverAddress;
-            }
-            if (string.IsNullOrEmpty(config.ServerGPort)) {
+
+            if (string.IsNullOrEmpty(config.ServerGPort))
+            {
                 config.ServerGPort = server.Port.ToString();
             }
             SaveConfig();
@@ -143,6 +175,7 @@ namespace Oxide.Plugins
             RegPerm(PermissionWhitelistServerCeilingKick);
             RegPerm(PermissionWhitelistVacCeilingKick);
             RegPerm(PermissionWhitelistGameBanCeilingKick);
+            RegPerm(PermissionWhitelistTotalBanCeiling);
             RegPerm(PermissionWhitelistSteamProfile);
             RegPerm(PermissionWhitelistFamilyShare);
             RegPerm(PermissionWhitelistTwitterBan);
@@ -154,43 +187,49 @@ namespace Oxide.Plugins
             };
 
             string[] _admins = permission.GetUsersInGroup("admin");
-            if (config.OwnerSteamId != null && config.OwnerSteamId.Length > 0 && !_admins.Contains(config.OwnerSteamId)) {
+            if (config.OwnerSteamId != null && config.OwnerSteamId.Length > 0 && !_admins.Contains(config.OwnerSteamId))
+            {
                 var adminsList = new List<string>();
                 adminsList.AddRange(_admins);
                 adminsList.AddRange(config.OwnerSteamId.Split(','));
 
                 var extraAdmins = permission.GetPermissionUsers(PermissionAdminWebsite);
-                if (extraAdmins != null && extraAdmins.Length > 0) {
+                if (extraAdmins != null && extraAdmins.Length > 0)
+                {
                     adminsList.AddRange(extraAdmins);
                 }
 
                 int e = 0;
-                foreach (string extraAdminsGroups in permission.GetPermissionGroups(PermissionAdminWebsite)) {
-                    foreach (string extraAdmin in permission.GetUsersInGroup(extraAdminsGroups)) {
-                        if (!adminsList.Contains(extraAdmin)) {
+                foreach (string extraAdminsGroups in permission.GetPermissionGroups(PermissionAdminWebsite))
+                {
+                    foreach (string extraAdmin in permission.GetUsersInGroup(extraAdminsGroups))
+                    {
+                        if (!adminsList.Contains(extraAdmin))
+                        {
                             adminsList.Add(extraAdmin);
                             e++;
                         }
                     }
                 }
 
-                Puts($"{(extraAdmins.Length + e)} admins found with website permission");
-
-
                 _admins = adminsList.Distinct().ToArray();
             }
 
-            for (int i = 0, n = _admins.Length; i < n; i++) {
+            for (int i = 0, n = _admins.Length; i < n; i++)
+            {
                 adminIds += $"{_admins[i].Substring(0, 17)}" + (i < _admins.Length - 1 ? "," : "");
             }
 
             CheckServerConnection();
         }
 
-        void CheckServerConnection() {
+        void CheckServerConnection()
+        {
             string body = ServerGetString();
-            webrequest.Enqueue($"{api_hostname}/api/v1/plugin/check_server", body, (code, response) => {
-                if (code > 204 || response.IsNullOrEmpty()) {
+            webrequest.Enqueue($"{api_hostname}/api/v1/plugin/check_server", body, (code, response) =>
+            {
+                if (code > 204 || response.IsNullOrEmpty())
+                {
                     Puts(GetMsg("No Response From API", new Dictionary<string, string> { ["code"] = code.ToString(), ["response"] = response }));
                     timer.Once(3, CheckServerConnection);
                     return;
@@ -198,20 +237,27 @@ namespace Oxide.Plugins
 
                 JObject obj = null;
 
-                try {
+                try
+                {
                     obj = JObject.Parse(response);
-                } catch (Exception) {
+                }
+                catch (Exception)
+                {
                     timer.Once(5, CheckServerConnection);
                     return;
                 }
 
-                if (obj != null) {
+                if (obj != null)
+                {
                     var msg = obj["message"].ToString();
                     var key = obj["key"]?.ToString();
-                    if (msg.Equals("connected")) {
-                        init = true;
+                    if (msg.Equals("connected"))
+                    {
+                        apiConnected = true;
                         Puts("connected to SA API");
-                    } else if (msg.Equals("key assigned to server") || msg.Equals("key assigned to new server")) {
+                    }
+                    else if (msg.Equals("key assigned to server") || msg.Equals("key assigned to new server"))
+                    {
                         config.SetConfig(ref key, "io.serverarmour.com", "Server Key");
 
                         headers = new Dictionary<string, string> {
@@ -220,8 +266,10 @@ namespace Oxide.Plugins
 
                         SaveConfig();
                         Puts("Server key has been updated");
-                        init = true;
-                    } else {
+                        apiConnected = true;
+                    }
+                    else
+                    {
                         LogError("Server Armour has not initialized. Is your apikey correct? Get it from https://io.serverarmour.com/my-servers or join discord for support https://discord.gg/jxvRaPR");
                         Interface.Oxide.UnloadPlugin(Name);
                         return;
@@ -232,21 +280,27 @@ namespace Oxide.Plugins
             }, this, RequestMethod.POST, headers);
         }
 
-        void Unload() {
+        void Unload()
+        {
             SaveData();
             _playerData.Clear();
             _playerData = null;
         }
 
         //[Command("tc")]
-        void OnUserConnected(IPlayer player) {
+        void OnUserConnected(IPlayer player)
+        {
 
-            if (!init) {
+            if (!apiConnected)
+            {
                 LogError("User not checked. Server armour is not loaded.");
-            } else {
+            }
+            else
+            {
 
                 //lets check the userid first.
-                if (config.AutoKick_KickWeirdSteam64 && !player.Id.IsSteamId()) {
+                if (config.AutoKick_KickWeirdSteam64 && !player.Id.IsSteamId())
+                {
                     KickPlayer(player.Id, GetMsg("Strange Steam64ID"), "C");
                     return;
                 }
@@ -257,19 +311,23 @@ namespace Oxide.Plugins
             }
         }
 
-        void OnUserDisconnected(IPlayer player) {
-            if (init) {
+        void OnUserDisconnected(IPlayer player)
+        {
+            if (apiConnected)
+            {
                 _playerData = _playerData.Where(pair => minutesAgo((uint)pair.Value.cacheTimestamp) < cacheLifetime)
                                  .ToDictionary(pair => pair.Key,
                                                pair => pair.Value);
             }
         }
 
-        void OnPluginLoaded(Plugin plugin) {
+        void OnPluginLoaded(Plugin plugin)
+        {
             if (plugin.Title == "BetterChat") RegisterTag();
         }
 
-        void OnUserUnbanned(string name, string id, string ipAddress) {
+        void OnUserUnbanned(string name, string id, string ipAddress)
+        {
             SaUnban(id);
         }
 
@@ -277,22 +335,28 @@ namespace Oxide.Plugins
         /// Processes commands on an interval basis, this is only needed for servers that do not have RCON enabled (not yet implemented).
         /// </summary>
         /// <param name="playerId"></param>
-        void APIActions(string playerId) {
+        void APIActions(string playerId)
+        {
             // do webcall
-               //process instructions.
+            //process instructions.
         }
 
-        void OnUserBanned(string name, string id, string ipAddress, string reason) {
+        void OnUserBanned(string name, string id, string ipAddress, string reason)
+        {
             //this is to make sure that if an app like battlemetrics for example, bans a player, we catch it.
-            timer.Once(3f, () => {
+            timer.Once(3f, () =>
+            {
                 //lets make sure first it wasn't us. 
-                if (!IsPlayerCached(id) && (IsPlayerCached(id) && !ContainsMyBan(id))) {
+                if (!IsPlayerCached(id) && (IsPlayerCached(id) && !ContainsMyBan(id)))
+                {
                     Puts($"Player wasn't banned via Server Armour, now adding to DB with a default lengh ban of 100yrs {name} ({id}) at {ipAddress} was banned: {reason}");
                     IPlayer bPlayer = players.FindPlayerById(id);
-                    if (bPlayer != null) {
+                    if (bPlayer != null)
+                    {
                         if ((bPlayer.IsAdmin && config.IgnoreAdmins)) return;
 
-                        AddBan(bPlayer, new ISABan {
+                        AddBan(bPlayer, new ISABan
+                        {
                             serverName = server.Name,
                             serverIp = config.ServerIp,
                             reason = reason,
@@ -305,12 +369,15 @@ namespace Oxide.Plugins
         }
 
 
-        void OnPlayerReported(BasePlayer reporter, string targetName, string targetId, string subject, string message, string type) {
+        void OnPlayerReported(BasePlayer reporter, string targetName, string targetId, string subject, string message, string type)
+        {
             string messageClean = Uri.EscapeDataString(message);
             string subjectClean = Uri.EscapeDataString(subject);
             webrequest.Enqueue($"{api_hostname}/api/v1/plugin/player/{reporter.UserIDString}/addf7",
-                $"target={targetId}&subject={subjectClean}&message={messageClean}", (code, response) => {
-                    if (code > 204 || response == null) {
+                $"target={targetId}&subject={subjectClean}&message={messageClean}", (code, response) =>
+                {
+                    if (code > 204 || response == null)
+                    {
                         Puts(GetMsg("No Response From API", new Dictionary<string, string> { ["code"] = code.ToString(), ["response"] = response }));
                         return;
                     }
@@ -324,24 +391,33 @@ namespace Oxide.Plugins
 
         #region WebRequests
 
-        void GetPlayerBans(IPlayer player) {
+        void GetPlayerBans(IPlayer player)
+        {
             KickIfBanned(GetPlayerCache(player?.Id));
             _webCheckPlayer(player.Name, player.Id, player.Address, player.IsConnected);
         }
 
-        void GetPlayerBans(string playerId, string playerName) {
+        void GetPlayerBans(string playerId, string playerName)
+        {
             KickIfBanned(GetPlayerCache(playerId));
             _webCheckPlayer(playerName, playerId, "0.0.0.0", true);
         }
 
-        void _webCheckPlayer(string name, string id, string address, bool connected) {
+        void _webCheckPlayer(string name, string id, string address, bool connected)
+        {
             string playerName = Uri.EscapeDataString(name);
-            try {
-                webrequest.Enqueue($"{api_hostname}/api/v1/plugin/player/{id}?bans=true", $"ipAddress={address}", (code, response) => {
-                    if (code > 204 || response.IsNullOrEmpty()) {
-                        if (code == 500) {
+            try
+            {
+                webrequest.Enqueue($"{api_hostname}/api/v1/plugin/player/{id}?bans=true", $"ipAddress={address}", (code, response) =>
+                {
+                    if (code > 204 || response.IsNullOrEmpty())
+                    {
+                        if (code == 500)
+                        {
                             timer.Once(5, () => _webCheckPlayer(playerName, id, address, connected));
-                        } else {
+                        }
+                        else
+                        {
                             Puts(GetMsg("No Response From API", new Dictionary<string, string> { ["code"] = code.ToString(), ["response"] = response }));
                         }
                         return;
@@ -351,9 +427,12 @@ namespace Oxide.Plugins
                     ISAPlayer isaPlayer = null;
 
 
-                    try {
+                    try
+                    {
                         isaPlayer = JsonConvert.DeserializeObject<ISAPlayer>(response);
-                    } catch (Exception) {
+                    }
+                    catch (Exception)
+                    {
                         timer.Once(5, () => _webCheckPlayer(playerName, id, address, connected));
                         return;
                     }
@@ -364,16 +443,22 @@ namespace Oxide.Plugins
 
                     // add cache for player
                     LogDebug("Checking cache");
-                    if (!IsPlayerCached(isaPlayer.steamid)) {
+                    if (!IsPlayerCached(isaPlayer.steamid))
+                    {
                         AddPlayerCached(isaPlayer);
-                    } else {
+                    }
+                    else
+                    {
                         UpdatePlayerData(isaPlayer);
                     }
 
                     // lets check bans first
-                    try {
+                    try
+                    {
                         KickIfBanned(isaPlayer);
-                    } catch (Exception ane) {
+                    }
+                    catch (Exception ane)
+                    {
                         Puts("An ArgumentNullException occured. Please notify the developer along with the below information: ");
                         Puts(response);
                         Puts(ane.StackTrace);
@@ -385,8 +470,10 @@ namespace Oxide.Plugins
                     //
 
                     LogDebug("Check for a twitter game ban");
-                    if (config.AutoKick_KickTwitterGameBanned && !HasPerm(pSteamId, PermissionWhitelistTwitterBan)) {
-                        if (isaPlayer.twitterBanId > 0) {
+                    if (config.AutoKick_KickTwitterGameBanned && !HasPerm(pSteamId, PermissionWhitelistTwitterBan))
+                    {
+                        if (isaPlayer.twitterBanId > 0)
+                        {
                             KickPlayer(isaPlayer?.steamid, $"https://twitter.com/rusthackreport/status/{isaPlayer.twitterBanId}", "C");
                         }
                     }
@@ -398,7 +485,8 @@ namespace Oxide.Plugins
                     bool lRecentVac = (isaPlayer.lender?.steamNumberOfVACBans > 0 || isaPlayer.lender?.steamDaysSinceLastBan > 0)
                     && isaPlayer.lender?.steamDaysSinceLastBan < config.DissallowVacBanDays; //check the lender player
 
-                    if (config.AutoKickOn && !HasPerm(pSteamId, PermissionWhitelistRecentVacKick) && (pRecentVac || lRecentVac)) {
+                    if (config.AutoKickOn && !HasPerm(pSteamId, PermissionWhitelistRecentVacKick) && (pRecentVac || lRecentVac))
+                    {
                         int vacLast = pRecentVac ? isaPlayer.steamDaysSinceLastBan : isaPlayer.lender.steamDaysSinceLastBan;
                         int until = config.DissallowVacBanDays - vacLast;
 
@@ -410,58 +498,67 @@ namespace Oxide.Plugins
                     }
 
                     LogDebug("Check for a family share account");
-                    if (!HasPerm(pSteamId, PermissionWhitelistFamilyShare) && config.AutoKickFamilyShare && IsFamilyShare(pSteamId)) {
+                    if (!HasPerm(pSteamId, PermissionWhitelistFamilyShare) && config.AutoKickFamilyShare && IsFamilyShare(pSteamId))
+                    {
                         Interface.CallHook("OnSAFamilyShareKick", pSteamId);
                         KickPlayer(isaPlayer?.steamid, GetMsg("Family Share Kick"), "C");
                     }
 
                     LogDebug("Check for too many vac bans");
-                    if (!HasPerm(pSteamId, PermissionWhitelistVacCeilingKick) && HasReachedVacCeiling(isaPlayer)) {
+                    if (!HasPerm(pSteamId, PermissionWhitelistVacCeilingKick) && HasReachedVacCeiling(isaPlayer))
+                    {
                         Interface.CallHook("OnSATooManyVacKick", pSteamId, isaPlayer?.steamNumberOfVACBans);
                         KickPlayer(isaPlayer?.steamid, GetMsg("VAC Ceiling Kick"), "C");
                     }
 
                     LogDebug("Check for too many game bans");
-                    if (!HasPerm(pSteamId, PermissionWhitelistGameBanCeilingKick) && HasReachedGameBanCeiling(isaPlayer)) {
+                    if (!HasPerm(pSteamId, PermissionWhitelistGameBanCeilingKick) && HasReachedGameBanCeiling(isaPlayer))
+                    {
                         Interface.CallHook("OnSATooManyGameBansKick", pSteamId, isaPlayer.steamNumberOfGameBans);
                         KickPlayer(isaPlayer?.steamid, GetMsg("Too Many Previous Game Bans"), "C");
                     }
 
-                    /*LogDebug("Check for bloody/a4tech owner");
-                    if (!HasPerm(pSteamId, PermissionWhitelistHardwareOwnsBloody) && (OwnsBloody(isaPlayer) || HasGroup(pSteamId, GroupBloody))) {
-                        Interface.CallHook("OnSABloodyKick", pSteamId);
-                        KickPlayer(isaPlayer?.steamid, GetMsg("Kick Bloody"), "C");
-                    }*/
+                    LogDebug("Check for players with too many server bans");
+                    if (!HasPerm(pSteamId, PermissionWhitelistServerCeilingKick) && HasReachedServerCeiling(isaPlayer))
+                    {
+                        Interface.CallHook("OnSATooManyServerBans", pSteamId, config.AutoKickCeiling, ServerBanCount(isaPlayer) + ServerBanCount(isaPlayer.lender));
+                        KickPlayer(isaPlayer?.steamid, GetMsg("Too Many Previous Bans"), "C");
+                    }
 
-                    LogDebug("Check for players with too many bans");
-                    if (!HasPerm(pSteamId, PermissionWhitelistServerCeilingKick) && HasReachedServerCeiling(isaPlayer)) {
-                        Interface.CallHook("OnSATooManyBans", pSteamId, config.AutoKickCeiling, ServerBanCount(isaPlayer) + ServerBanCount(isaPlayer.lender));
+                    if (!HasPerm(PermissionWhitelistTotalBanCeiling, pSteamId) && HasReachedTotalBanCeiling(isaPlayer))
+                    {
+                        Interface.CallHook("OnSATooManyBans", pSteamId, config.AutoKickCeiling, TotalBans(isaPlayer.lender));
                         KickPlayer(isaPlayer?.steamid, GetMsg("Too Many Previous Bans"), "C");
                     }
 
                     LogDebug("Check for players with a private profile");
-                    if (!HasPerm(pSteamId, PermissionWhitelistSteamProfile) && config.AutoKick_KickPrivateProfile && isaPlayer.communityvisibilitystate == 1) {
+                    if (!HasPerm(pSteamId, PermissionWhitelistSteamProfile) && config.AutoKick_KickPrivateProfile && isaPlayer.communityvisibilitystate == 1)
+                    {
                         Interface.CallHook("OnSAProfilePrivate", pSteamId, isaPlayer.communityvisibilitystate);
                         KickPlayer(isaPlayer?.steamid, GetMsg("Profile Private"), "C");
                     }
 
                     LogDebug("Check for a hidden steam level");
-                    if (!HasPerm(pSteamId, PermissionWhitelistSteamProfile) && isaPlayer.steamlevel == -1 && config.AutoKick_KickHiddenLevel) {
+                    if (!HasPerm(pSteamId, PermissionWhitelistSteamProfile) && isaPlayer.steamlevel == -1 && config.AutoKick_KickHiddenLevel)
+                    {
                         Interface.CallHook("OnSASteamLevelHidden", pSteamId);
                         KickPlayer(isaPlayer?.steamid, GetMsg("Steam Level Hidden"), "C");
                     }
 
                     LogDebug("Check for low level steam account");
                     Puts($"Player {isaPlayer.steamid} is at steam level {isaPlayer.steamlevel}");
-                    if (!HasPerm(pSteamId, PermissionWhitelistSteamProfile) && isaPlayer.steamlevel < config.AutoKick_MinSteamProfileLevel && isaPlayer.steamlevel >= 0) {
+                    if (!HasPerm(pSteamId, PermissionWhitelistSteamProfile) && isaPlayer.steamlevel < config.AutoKick_MinSteamProfileLevel && isaPlayer.steamlevel >= 0)
+                    {
                         Interface.CallHook("OnSAProfileLevelLow", pSteamId, config.AutoKick_MinSteamProfileLevel, isaPlayer.steamlevel);
                         KickPlayer(isaPlayer?.steamid, GetMsg("Profile Low Level", new Dictionary<string, string> { ["level"] = config.AutoKick_MinSteamProfileLevel.ToString() }), "C");
                     }
 
                     LogDebug("Check for VPN");
                     Puts($"IP/CACHE| ID:{id} ADD:{address} RATING:{isaPlayer.ipRating} AGE: {isaPlayer.ipLastCheck}");
-                    if (config.AutoKickOn && config.AutoKick_BadIp && !HasPerm(id, PermissionWhitelistBadIPKick) && config.AutoKick_BadIp) {
-                        if (IsBadIp(isaPlayer)) {
+                    if (config.AutoKickOn && config.AutoKick_BadIp && !HasPerm(id, PermissionWhitelistBadIPKick) && config.AutoKick_BadIp)
+                    {
+                        if (IsBadIp(isaPlayer))
+                        {
                             if (isaPlayer.ipInfo.proxy == "yes")
                                 KickPlayer(id, GetMsg("Reason: Proxy IP"), "C");
                             else
@@ -473,14 +570,17 @@ namespace Oxide.Plugins
 
                     GetPlayerReport(isaPlayer, connected);
                 }, this, RequestMethod.POST, headers);
-            } catch (ArgumentNullException ice) {
+            }
+            catch (ArgumentNullException ice)
+            {
                 Puts("An ArgumentNullException occured. Please notify the developer along with the below information: ");
                 Puts(ice.Message);
                 return;
             }
         }
 
-        void KickIfBanned(ISAPlayer isaPlayer) {
+        void KickIfBanned(ISAPlayer isaPlayer)
+        {
             if (isaPlayer == null) return;
             IPlayer iPlayer = covalence.Players.FindPlayer(isaPlayer.steamid);
             if (iPlayer != null && iPlayer.IsAdmin && config.IgnoreAdmins) return;
@@ -490,32 +590,42 @@ namespace Oxide.Plugins
             LogDebug("KIB 2");
             ISABan lban = IsBanned(isaPlayer?.lender?.steamid);
             LogDebug("KIB 3");
-            if (ban != null) {
+            if (ban != null)
+            {
                 KickPlayer(isaPlayer?.steamid, ban.reason, "U");
             }
             if (lban != null) KickPlayer(isaPlayer?.steamid, GetMsg("Lender Banned"), "U");
         }
 
-        void AddBan(IPlayer player, ISABan thisBan, bool doNative = true) {
+        void AddBan(IPlayer player, ISABan thisBan, bool doNative = true)
+        {
             if (config.IgnoreAdmins && player.IsAdmin) return;
             if (thisBan == null) return;
             string reason = Uri.EscapeDataString(thisBan.reason);
 
             webrequest.Enqueue($"{api_hostname}/api/v1/plugin/player/{player.Id}/addban",
-                $"ip={player?.Address}&reason={reason}&dateTime={thisBan.created}&dateUntil={thisBan.banUntil}", (code, response) => {
-                    if (code > 204) {
-                        if (code == 500) {
+                $"ip={player?.Address}&reason={reason}&dateTime={thisBan.created}&dateUntil={thisBan.banUntil}", (code, response) =>
+                {
+                    if (code > 204)
+                    {
+                        if (code == 500)
+                        {
                             timer.Once(5, () => AddBan(player, thisBan, doNative = true));
-                        } else {
+                        }
+                        else
+                        {
                             Puts(GetMsg("No Response From API", new Dictionary<string, string> { ["code"] = code.ToString(), ["response"] = response }));
                         }
                         return;
                     }
                     // ISABan thisBan = new ISABan { serverName = server.Name, date = dateTime, reason = banreason, serverIp = thisServerIp, banUntil = dateBanUntil };
-                    if (IsPlayerCached(player.Id)) {
+                    if (IsPlayerCached(player.Id))
+                    {
                         LogDebug($"{player.Id} has ban cached, now updating.");
                         AddPlayerData(player.Id, thisBan);
-                    } else {
+                    }
+                    else
+                    {
                         LogDebug($"{player.Id} had no ban data cached, now creating.");
                         ISAPlayer newPlayer = new ISAPlayer(player);
                         newPlayer.bans.Add(thisBan);
@@ -524,22 +634,29 @@ namespace Oxide.Plugins
                 }, this, RequestMethod.POST, headers);
         }
 
-        void AddBan(string playerId, ISABan thisBan) {
-            if (thisBan == null) {
+        void AddBan(string playerId, ISABan thisBan)
+        {
+            if (thisBan == null)
+            {
                 Puts($"This ban is null");
                 return;
             }
 
             string reason = Uri.EscapeDataString(thisBan.reason);
-            try {
-                webrequest.Enqueue($"{api_hostname}/api/v1/plugin/player/{playerId}/addban", $"reason={reason}&dateTime={thisBan.created}&dateUntil={thisBan.banUntil}", (code, response) => {
+            try
+            {
+                webrequest.Enqueue($"{api_hostname}/api/v1/plugin/player/{playerId}/addban", $"reason={reason}&dateTime={thisBan.created}&dateUntil={thisBan.banUntil}", (code, response) =>
+                {
 
                     if (code > 204) { Puts(GetMsg("No Response From API", new Dictionary<string, string> { ["code"] = code.ToString(), ["response"] = response })); return; }
                     // ISABan thisBan = new ISABan { serverName = server.Name, date = dateTime, reason = banreason, serverIp = thisServerIp, banUntil = dateBanUntil };
-                    if (IsPlayerCached(playerId)) {
+                    if (IsPlayerCached(playerId))
+                    {
                         LogDebug($"{playerId} has ban cached, now updating.");
                         AddPlayerData(playerId, thisBan);
-                    } else {
+                    }
+                    else
+                    {
                         LogDebug($"{playerId} had no ban data cached, now creating.");
                         ISAPlayer newPlayer = new ISAPlayer(playerId);
                         newPlayer.bans.Add(thisBan);
@@ -547,7 +664,9 @@ namespace Oxide.Plugins
                     }
                     SaveData();
                 }, this, RequestMethod.POST, headers);
-            } catch (Exception ice) {
+            }
+            catch (Exception ice)
+            {
                 Puts("An ArgumentNullException occured. Please notify the developer along with the below information: ");
                 Puts(ice.Message);
                 return;
@@ -558,19 +677,17 @@ namespace Oxide.Plugins
 
         #region Commands
         [Command("sa.clb", "getreport")]
-        void SCmdCheckLocalBans(IPlayer player, string command, string[] args) {
+        void SCmdCheckLocalBans(IPlayer player, string command, string[] args)
+        {
             CheckLocalBans();
         }
-        [Command("unban", "playerunban", "sa.unban"), Permission(PermissionToUnBan)]
-        void SCmdUnban(IPlayer player, string command, string[] args) {
-            Puts("Someone called SCmdUnban");
-            Puts($"IsAdmin?: {player.IsAdmin}");
-            Puts($"IsConnected?: {player.IsConnected}");
-            Puts($"IsServer?: {player.IsServer}");
-            Puts($"Address?: {player.Address}");
-            NativeUnban(args[0]);
 
-            if (args == null || (args.Length > 2 || args.Length < 1)) {
+        [Command("unban", "playerunban", "sa.unban"), Permission(PermissionToUnBan)]
+        void SCmdUnban(IPlayer player, string command, string[] args)
+        {
+
+            if (args == null || (args.Length > 2 || args.Length < 1))
+            {
                 SendReplyWithIcon(player, GetMsg("UnBan Syntax"));
                 return;
             }
@@ -579,121 +696,286 @@ namespace Oxide.Plugins
             SaUnban(args[0], player, reason);
         }
 
-        void SilentBan(IPlayer iPlayer, TimeSpan timeSpan, string reason) {
+        void SilentBan(ulong steamId, TimeSpan timeSpan, string reason, IPlayer enforcer = null)
+        {
             Unsubscribe(nameof(OnUserBanned));
-            iPlayer.Ban(reason, timeSpan);
+
+            var username = covalence.Players.FindPlayerById(steamId.ToString())?.Name ?? "";
+
+            NativeBan(steamId, reason, Convert.ToInt64(timeSpan.TotalSeconds), username, enforcer);
+
             Subscribe(nameof(OnUserBanned));
         }
 
-        bool SilentUnban(IPlayer iPlayer) {
-            bool unbanned = false;
-            if (iPlayer != null && iPlayer.IsBanned) {
-                iPlayer.Unban();
-                unbanned = true;
-            }
-            return unbanned;
-        }
-
-        void NativeUnban(string playerId) {
-            ulong playerIdLong = 0;
-            if (!ulong.TryParse(playerId, out playerIdLong)) {
-                Puts(string.Format("This doesn't appear to be a 64bit steamid: {0}", playerId));
-                return;
-            }
-
+        void SilentUnban(string playerId, IPlayer player)
+        {
             Unsubscribe(nameof(OnUserUnbanned));
-            IPlayer iPlayer = covalence.Players.FindPlayer(playerId);
-            if (iPlayer != null || !SilentUnban(iPlayer)) {
-                FallbackNative(playerIdLong);
-            }
+            NativeUnban(playerId, player);
             Subscribe(nameof(OnUserUnbanned));
         }
 
-        void FallbackNative(ulong playerIdLong) {
-            ServerUsers.User user = ServerUsers.Get(playerIdLong);
-            if (user == null || user.@group != ServerUsers.UserGroup.Banned) {
+        void NativeBan(ulong playerId, string reason, long duration = 0, string playerUsername = "unnamed", IPlayer player = null)
+        {
+
+            if (!playerId.IsSteamId())
+            {
+                player?.Reply(string.Concat("This doesn't appear to be a 64bit steamid: ", playerId));
                 return;
             }
+
+            ServerUsers.User user = ServerUsers.Get(playerId);
+
+            if (user != null && user.@group == ServerUsers.UserGroup.Banned)
+            {
+                player?.Reply(string.Concat("User ", playerId, " is already banned"));
+                return;
+            }
+
+            string str3 = "";
+            BasePlayer basePlayer = BasePlayer.FindByID(playerId);
+            string durationSuffix = (duration > (long)0 ? string.Concat(" for ", duration.FormatSecondsLong()) : "");
+            if (basePlayer != null && basePlayer.IsConnected)
+            {
+                playerUsername = basePlayer.displayName;
+                if (basePlayer.IsConnected && basePlayer.net.connection.ownerid != 0 && basePlayer.net.connection.ownerid != basePlayer.net.connection.userid)
+                {
+                    str3 = string.Concat(str3, string.Format(" and also banned ownerid {0}", basePlayer.net.connection.ownerid));
+                    ServerUsers.Set(basePlayer.net.connection.ownerid, ServerUsers.UserGroup.Banned, basePlayer.displayName, reason, duration);
+                }
+                Chat.Broadcast(string.Concat(new string[] { "Kickbanning ", basePlayer.displayName, durationSuffix, " (", reason, ")" }), "SERVER", "#eee", (ulong)0);
+                //Net.sv.Kick(basePlayer.net.connection, string.Concat("Banned", str, ": ", str2), false);
+            }
+
+            ServerUsers.Set(playerId, ServerUsers.UserGroup.Banned, playerUsername, reason, (long)(DateTime.Now.AddSeconds(duration) - Epoch).TotalSeconds);
+            player?.Reply(string.Format("Banned User{0}: {1} - \"{2}\" for \"{3}\"{4}", new object[] { durationSuffix, playerId, playerUsername, reason, str3 }));
+        }
+        /*
+                private static bool TryGetBanExpiry(ConsoleSystem.Arg arg, int n, out long expiry, out string durationSuffix)
+                {
+                    expiry = arg.GetTimestamp(n, (long)-1);
+                    durationSuffix = null;
+                    int current = Epoch.Current;
+                    if (expiry > (long)0 && expiry <= (long)current)
+                    {
+                        arg.ReplyWith("Expiry time is in the past");
+                        return false;
+                    }
+                    durationSuffix = (expiry > (long)0 ? string.Concat(" for ", (expiry - (long)current).FormatSecondsLong()) : "");
+                    return true;
+                }
+
+
+                public static void banid(ConsoleSystem.Arg arg)
+                {
+                    long num;
+                    string str;
+                    ulong num1 = arg.GetUInt64(0, (ulong)0);
+                    string str1 = arg.GetString(1, "unnamed");
+                    string str2 = arg.GetString(2, "no reason");
+                    if (num1 < 70000000000000000L)
+                    {
+                        arg.ReplyWith(string.Concat("This doesn't appear to be a 64bit steamid: ", num1));
+                        return;
+                    }
+                    ServerUsers.User user = ServerUsers.Get(num1);
+                    if (user != null && user.@group == ServerUsers.UserGroup.Banned)
+                    {
+                        arg.ReplyWith(string.Concat("User ", num1, " is already banned"));
+                        return;
+                    }
+                    if (!Admin.TryGetBanExpiry(arg, 3, out num, out str))
+                    {
+                        return;
+                    }
+                    string str3 = "";
+                    BasePlayer basePlayer = BasePlayer.FindByID(num1);
+                    if (basePlayer != null && basePlayer.IsConnected)
+                    {
+                        str1 = basePlayer.displayName;
+                        if (basePlayer.IsConnected && basePlayer.net.connection.ownerid != 0 && basePlayer.net.connection.ownerid != basePlayer.net.connection.userid)
+                        {
+                            str3 = string.Concat(str3, string.Format(" and also banned ownerid {0}", basePlayer.net.connection.ownerid));
+                            ServerUsers.Set(basePlayer.net.connection.ownerid, ServerUsers.UserGroup.Banned, basePlayer.displayName, arg.GetString(1, string.Format("Family share owner of {0}", basePlayer.net.connection.userid)), num);
+                        }
+                        Chat.Broadcast(string.Concat(new string[] { "Kickbanning ", basePlayer.displayName, str, " (", str2, ")" }), "SERVER", "#eee", (ulong)0);
+                        Net.sv.Kick(basePlayer.net.connection, string.Concat("Banned", str, ": ", str2), false);
+                    }
+                    ServerUsers.Set(num1, ServerUsers.UserGroup.Banned, str1, str2, num);
+                    arg.ReplyWith(string.Format("Banned User{0}: {1} - \"{2}\" for \"{3}\"{4}", new object[] { str, num1, str1, str2, str3 }));
+                }
+        */
+        bool NativeUnban(string playerId, IPlayer player = null)
+        {
+            ulong playerIdLong = 0;
+
+            if (!ulong.TryParse(playerId, out playerIdLong))
+            {
+                var msg = string.Format("This doesn't appear to be a 64bit steamid: {0}", playerId);
+
+                if (player == null)
+                {
+                    Puts(msg);
+                }
+                else
+                {
+                    player.Reply(msg);
+                }
+                return false;
+            }
+
+            ServerUsers.User user = ServerUsers.Get(playerIdLong);
+            if (user == null || user.@group != ServerUsers.UserGroup.Banned)
+            {
+                player?.Reply(string.Format("User {0} isn't banned", playerId));
+                return false;
+            }
             ServerUsers.Remove(playerIdLong);
+            player?.Reply($"Unbanned User: {playerId}");
+            return true;
+
         }
 
-        void SaUnban(string playerId, IPlayer player = null, string reason = null) {
+        void SaUnban(string playerId, IPlayer player = null, string reason = null)
+        {
 
             IPlayer iPlayer = players.FindPlayer(playerId);
-            NativeUnban(playerId);
 
-            if (iPlayer == null) {
+            SilentUnban(playerId, player);
+
+            if (iPlayer == null)
+            {
                 GetMsg("Player Not Found", new Dictionary<string, string> { ["player"] = playerId }); return;
             }
 
             RemoveBans(iPlayer.Id);
-            LogDebug($"Player {iPlayer?.Name} ({iPlayer.Id}) was unbanned by {player.Name} ({player.Id})");
+            LogDebug($"Player {iPlayer?.Name} ({iPlayer.Id}) was unbanned by {player?.Name} ({player?.Id})");
 
             // Add ember support.
-            if (Ember != null) {
+            if (Ember != null)
+            {
                 Ember?.Call("Unban", playerId, Player.FindById(player?.Id));
             }
             //
 
-            webrequest.Enqueue($"{api_hostname}/api/v1/plugin/player/ban/pardon/{iPlayer.Id}", $"", (code, response) => {
-                if (code > 204 || response == null) {
+            webrequest.Enqueue($"{api_hostname}/api/v1/plugin/player/ban/pardon/{iPlayer.Id}", $"", (code, response) =>
+            {
+                if (code > 204 || response == null)
+                {
                     Puts(GetMsg("No Response From API", new Dictionary<string, string> { ["code"] = code.ToString(), ["response"] = response }));
                     return;
                 }
-                if (code <= 204) {
+                if (code <= 204)
+                {
                     if (config.RconBroadcast)
-                        RCon.Broadcast(RCon.LogType.Chat, new Chat.ChatEntry {
-                            Message = $"Player was unbanned by {player?.Name} ({player.Id})",
+                        RCon.Broadcast(RCon.LogType.Chat, new Chat.ChatEntry
+                        {
+                            Message = $"Player was unbanned by {player?.Name} ({player?.Id})",
                             UserId = iPlayer.Id,
                             Username = iPlayer?.Name ?? "",
                             Time = Facepunch.Math.Epoch.Current
                         });
 
-                    if (player != null && config.RconBroadcast) {
-                        RCon.Broadcast(RCon.LogType.Chat, new Chat.ChatEntry {
+                    if (player != null && config.RconBroadcast)
+                    {
+                        RCon.Broadcast(RCon.LogType.Chat, new Chat.ChatEntry
+                        {
                             Message = $"Player { iPlayer?.Name } ({ iPlayer.Id }) was unbanned",
                             UserId = player?.Id,
                             Username = player?.Name ?? "",
                             Time = Facepunch.Math.Epoch.Current
                         });
                     }
-                    if (player != null && !player.IsServer) {
+                    if (player != null && !player.IsServer)
+                    {
                         SendReplyWithIcon(player, $"Player { iPlayer?.Name } ({ iPlayer.Id }) was unbanned");
                     }
                 }
             }, this, RequestMethod.POST, headers);
             string msgClean = "";
 
-            if (reason.IsNullOrEmpty()) {
+            if (reason.IsNullOrEmpty())
+            {
                 msgClean = GetMsg("Player Now Unbanned Clean - NoReason", new Dictionary<string, string> { ["player"] = iPlayer.Name });
-            } else {
+            }
+            else
+            {
                 msgClean = GetMsg("Player Now Unbanned Clean - Reason", new Dictionary<string, string> { ["player"] = iPlayer.Name, ["reason"] = reason });
             }
 
-            if (config.DiscordBanReport) {
-                DiscordSend(playerId, iPlayer.Name, new EmbedFieldList() {
+            if (config.DiscordBanReport)
+            {
+                DiscordSend(playerId, iPlayer.Name, new EmbedFieldList()
+                {
                     name = "Player Unbanned",
                     value = msgClean,
                     inline = true
                 }, 3066993, true);
             }
         }
+        //banid 76561198007433923 "Pho3niX90" "Some reason" 1953394942
+        [Command("banid"), Permission(PermissionToBan)]
+        void SCmdBanId(IPlayer player, string command, string[] args)
+        {
+            /*foreach(var ar in args) {
+                Puts(ar.ToString());
+            }*/
+            /*
+            [0] steam64id
+            [1] username
+            [2] reason
+            [3] length
+            */
+            if (args.Length > 0)
+            {
+                var playerId = args[0];
+                var reason = "No reason provided.";
+                var length = "100y";
+
+                //RustAdminSupport
+                if (args.Length >= 3)
+                {
+                    reason = args[2];
+                    if (args.Length > 3)
+                    {
+                        length = args[3];
+                    }
+                }
+
+                API_BanPlayer(player, playerId, reason, length, true);
+            }
+        }
+
 
         [Command("ban", "playerban", "sa.ban"), Permission(PermissionToBan)]
-        void SCmdBan(IPlayer player, string command, string[] args) {
+        void SCmdBan(IPlayer player, string command, string[] args)
+        {
+
             int argsLength = args == null ? 0 : args.Length;
+            if (argsLength >= 0 && argsLength < 2)
+            {
+                SendReplyWithIcon(player, GetMsg("Ban Syntax"));
+                return;
+            }
+
+            var fPlayer = players.FindPlayer(args[0].IsSteamId().ToString());
+            if(fPlayer == null)
+            {
+                SendReplyWithIcon(player, GetMsg("Ban Syntax"));
+                return;
+            }
             /***
              * Length 2: player, reason
              * Length 3: player, reason, time
              * Length 4: playerSteamId, reason, time, ignoreSearch
              ***/
-            Puts(args.Length.ToString());
-            if (args == null || (argsLength > 4)) {
+
+            if (args == null || (argsLength > 4))
+            {
                 SendReplyWithIcon(player, GetMsg("Ban Syntax"));
                 return;
             }
 
-            var playerId = args[0];
+            var playerId = fPlayer.Id;
             var reason = argsLength < 2 ? "No reason provided." : args[1];
             var length = args.Length > 2 ? args[2].ToUpper() : "100Y";
             var ignoreSearch = false;
@@ -701,26 +983,28 @@ namespace Oxide.Plugins
             if (args.Length > 3)
                 bool.TryParse(args[3], out ignoreSearch);
 
-            try {
+            try
+            {
                 API_BanPlayer(player, playerId, reason, length, ignoreSearch);
-            } catch (Exception) {
+            }
+            catch (Exception)
+            {
                 SendReplyWithIcon(player, GetMsg("Ban Syntax"));
             }
         }
 
         [Command("clanban"), Permission(PermissionToBan)]
-        void SCmdClanBan(IPlayer player, string command, string[] args) {
+        void SCmdClanBan(IPlayer player, string command, string[] args)
+        {
             int argsLength = args == null ? 0 : args.Length;
-            if (Clans == null || !Clans.IsLoaded) {
-                SendReplyWithIcon(player, "Clans is either not installed, or loaded.");
-                return;
-            }
+
             /***
              * Length 2: player, reason
              * Length 3: player, reason, time
              * Length 4: playerSteamId, reason, time, ignoreSearch
              ***/
-            if (args == null || (argsLength < 2 || argsLength > 4)) {
+            if (args == null || (argsLength < 2 || argsLength > 4))
+            {
                 SendReplyWithIcon(player, GetMsg("Ban Syntax"));
                 return;
             }
@@ -735,7 +1019,8 @@ namespace Oxide.Plugins
             IPlayer iPlayer = null;
             IEnumerable<IPlayer> playersFound = players.FindPlayers(playerId);
             int playersFoundCount = playersFound.Count();
-            switch (playersFoundCount) {
+            switch (playersFoundCount)
+            {
                 case 0:
                     errMsg = GetMsg("Player Not Found", new Dictionary<string, string> { ["player"] = playerId });
                     break;
@@ -754,41 +1039,54 @@ namespace Oxide.Plugins
             ulong playerIdU = ulong.Parse(iPlayer.Id);
 
             List<ulong> teamMembers = new List<ulong>();
-            if (config.ClanBanTeams) {
+
+            if (config.ClanBanTeams)
+            {
                 teamMembers = GetTeamMembers(playerIdU);
             }
 
-            var clanMembers = GetClan(playerId);
-            if (clanMembers != null && clanMembers.Count() > 0) {
-                teamMembers.AddRange(clanMembers);
+            if (Clans != null && Clans.IsLoaded)
+            {
+                var clanMembers = GetClan(playerId);
+                if (clanMembers != null && clanMembers.Count() > 0)
+                {
+                    teamMembers.AddRange(clanMembers);
+                }
             }
 
             teamMembers = teamMembers.Distinct().ToList();
             teamMembers?.Remove(ulong.Parse(playerId));
 
-            try {
+            try
+            {
                 ignoreSearch = bool.Parse(args[3]);
-            } catch (Exception) {
+            }
+            catch (Exception)
+            {
 
             }
 
             API_BanPlayer(player, playerId, reason, length, ignoreSearch);
 
-            if (teamMembers.Count() > 0) {
+            if (teamMembers.Count() > 0)
+            {
                 var clanBanReason = config.ClanBanPrefix.Replace("{reason}", reason).Replace("{playerId}", playerId);
 
-                foreach (var member in teamMembers) {
+                foreach (var member in teamMembers)
+                {
                     API_BanPlayer(player, member.ToString(), clanBanReason, length, ignoreSearch);
                 }
             }
         }
 
         [Command("sa.cp")]
-        void SCmdCheckPlayer(IPlayer player, string command, string[] args) {
+        void SCmdCheckPlayer(IPlayer player, string command, string[] args)
+        {
             string playerArg = (args.Length == 0) ? player.Id : args[0];
 
             IPlayer playerToCheck = players.FindPlayer(playerArg.Trim());
-            if (playerToCheck == null) {
+            if (playerToCheck == null)
+            {
                 SendReplyWithIcon(player, GetMsg("Player Not Found", new Dictionary<string, string> { ["player"] = playerArg }));
                 return;
             }
@@ -802,21 +1100,41 @@ namespace Oxide.Plugins
 
         #region Ban System
 
-        string BanMinutes(DateTime ban) {
+        string BanMinutes(DateTime ban)
+        {
             return ((int)Math.Round((ban - DateTime.UtcNow).TotalMinutes)).ToString();
         }
-        DateTime _BanUntil(string banLength) {
+        DateTime _BanUntil(string banLength)
+        {
             int digit = int.Parse(new string(banLength.Where(char.IsDigit).ToArray()));
             string del = new string(banLength.Where(char.IsLetter).ToArray());
-            if (digit <= 0) {
+            if (digit <= 0)
+            {
                 digit = 100;
             }
 
             DateTime now = DateTime.UtcNow;
-            //string dateTime = now.ToString(DATE_FORMAT);
-            DateTime dateBanUntil;
 
-            switch (del.ToUpper()) {
+            /*
+             * Fix for bans.cfg going blank.
+             * Issue: When server restarts, the bans.cfg is empty. The reason is that facepunch stores the bans in this file, verbatim, and rebans everyone when the server is restart (bans are kept in memory). Once the server restarted, SA couldn't convert the unix timestamp to a length, and errored out, causing the file to go blank on next save (since there are no bans in memory).
+             */
+            DateTime dateBanUntil;
+            if (banLength.Length >= 10)
+            {
+                //already epoch?
+                long lBanLength;
+                if (long.TryParse(banLength, out lBanLength))
+                {
+                    return ConvertUnixToDateTime(lBanLength);
+                }
+            }
+
+            switch (del.ToUpper())
+            {
+                case "S":
+                    dateBanUntil = now.AddSeconds(digit);
+                    break;
                 case "MI":
                     dateBanUntil = now.AddMinutes(digit);
                     break;
@@ -825,6 +1143,9 @@ namespace Oxide.Plugins
                     break;
                 case "D":
                     dateBanUntil = now.AddDays(digit);
+                    break;
+                case "W":
+                    dateBanUntil = now.AddDays(digit * 7);
                     break;
                 case "M":
                     dateBanUntil = now.AddMonths(digit);
@@ -839,7 +1160,8 @@ namespace Oxide.Plugins
             return dateBanUntil;
         }
 
-        string BanFor(string banLength) {
+        string BanFor(string banLength)
+        {
             int digit = int.Parse(new string(banLength.Where(char.IsDigit).ToArray()));
             string del = new string(banLength.Where(char.IsLetter).ToArray());
 
@@ -848,7 +1170,8 @@ namespace Oxide.Plugins
             //string dateTime = now.ToString(DATE_FORMAT);
             string dateBanUntil;
 
-            switch (del.ToUpper()) {
+            switch (del.ToUpper())
+            {
                 case "MI":
                     dateBanUntil = digit + " Minutes";
                     break;
@@ -871,14 +1194,17 @@ namespace Oxide.Plugins
             return dateBanUntil;
         }
 
-        void RemoveBans(string id) {
-            if (_playerData.ContainsKey(id) && ServerBanCount(_playerData[id]) > 0) {
+        void RemoveBans(string id)
+        {
+            if (_playerData.ContainsKey(id) && ServerBanCount(_playerData[id]) > 0)
+            {
                 _playerData[id].bans.RemoveAll(x => x.serverIp == config.ServerIp || x.adminSteamId.Equals(config.OwnerSteamId));
                 SaveData();
             }
         }
 
-        bool BanPlayer(string steamid, ISABan ban) {
+        bool BanPlayer(string steamid, ISABan ban)
+        {
             AddBan(steamid, ban);
             KickPlayer(steamid, ban.reason, "U");
             return true;
@@ -887,7 +1213,8 @@ namespace Oxide.Plugins
 
         #region IEnumerators
 
-        void CheckOnlineUsers() {
+        void CheckOnlineUsers()
+        {
             // todo, improve by changing to single call.
             IEnumerable<IPlayer> allPlayers = players.Connected;
 
@@ -896,8 +1223,10 @@ namespace Oxide.Plugins
             List<string> playerCalls = new List<string>();
 
             int page = 0;
-            for (int i = 0; i < allPlayersCount; i++) {
-                if (i % 50 == 0) {
+            for (int i = 0; i < allPlayersCount; i++)
+            {
+                if (i % 50 == 0)
+                {
                     page++;
                 }
                 playerCalls[page] += allPlayers.ElementAt(i);
@@ -906,21 +1235,26 @@ namespace Oxide.Plugins
             int allPlayersCounter = 0;
             float waitTime = 5f;
             if (allPlayersCount > 0)
-                timer.Repeat(waitTime, allPlayersCount, () => {
+                timer.Repeat(waitTime, allPlayersCount, () =>
+                {
                     LogDebug("Will now inspect all online users, time etimation: " + (allPlayersCount * waitTime) + " seconds");
                     LogDebug($"Inpecting online user {allPlayersCounter + 1} of {allPlayersCount} for infractions");
-                    try {
+                    try
+                    {
                         IPlayer player = allPlayers.ElementAt(allPlayersCounter);
                         if (player != null) GetPlayerBans(player);
                         if (allPlayersCounter < allPlayersCount) LogDebug("Inspection completed.");
                         allPlayersCounter++;
-                    } catch (ArgumentOutOfRangeException) {
+                    }
+                    catch (ArgumentOutOfRangeException)
+                    {
                         allPlayersCounter++;
                     }
                 });
         }
 
-        void CheckLocalBans() {
+        void CheckLocalBans()
+        {
 
             IEnumerable<ServerUsers.User> bannedUsers = ServerUsers.GetAll(ServerUsers.UserGroup.Banned);
             int BannedUsersCount = bannedUsers.Count();
@@ -928,27 +1262,25 @@ namespace Oxide.Plugins
             float waitTime = 1f;
 
             if (BannedUsersCount > 0)
-                timer.Repeat(waitTime, BannedUsersCount, () => {
+                timer.Repeat(waitTime, BannedUsersCount, () =>
+                {
                     ServerUsers.User usr = bannedUsers.ElementAt(BannedUsersCounter);
                     LogDebug($"Checking local user ban {BannedUsersCounter + 1} of {BannedUsersCount}");
-                    if (IsBanned(usr.steamid.ToString(specifier, culture)) == null && !usr.IsExpired) {
-                        try {
+                    if (IsBanned(usr.steamid.ToString(specifier, culture)) == null && !usr.IsExpired)
+                    {
+                        try
+                        {
                             IPlayer player = covalence.Players.FindPlayer(usr.steamid.ToString(specifier, culture));
                             DateTime expireDate = ConvertUnixToDateTime(usr.expiry);
-                            if (expireDate.Year <= 1970) {
+                            if (expireDate.Year <= 1970)
+                            {
                                 expireDate = expireDate.AddYears(100);
                             }
                             Puts($"Adding ban for {((player == null) ? usr.steamid.ToString() : player.Name)} with reason `{usr.notes}`, and expiry {expireDate.ToString(DATE_FORMAT)} to server armour.");
-                            if (player != null) {
-                                AddBan(player, new ISABan {
-                                    serverName = server.Name,
-                                    serverIp = config.ServerIp,
-                                    reason = usr.notes,
-                                    created = DateTime.Now.ToString(DATE_FORMAT),
-                                    banUntil = expireDate.ToString(DATE_FORMAT)
-                                });
-                            } else {
-                                AddBan(usr.steamid.ToString(), new ISABan {
+                            if (player != null)
+                            {
+                                AddBan(player, new ISABan
+                                {
                                     serverName = server.Name,
                                     serverIp = config.ServerIp,
                                     reason = usr.notes,
@@ -956,7 +1288,20 @@ namespace Oxide.Plugins
                                     banUntil = expireDate.ToString(DATE_FORMAT)
                                 });
                             }
-                        } catch (ArgumentOutOfRangeException) {
+                            else
+                            {
+                                AddBan(usr.steamid.ToString(), new ISABan
+                                {
+                                    serverName = server.Name,
+                                    serverIp = config.ServerIp,
+                                    reason = usr.notes,
+                                    created = DateTime.Now.ToString(DATE_FORMAT),
+                                    banUntil = expireDate.ToString(DATE_FORMAT)
+                                });
+                            }
+                        }
+                        catch (ArgumentOutOfRangeException)
+                        {
                             BannedUsersCounter++;
                         }
                     }
@@ -968,11 +1313,13 @@ namespace Oxide.Plugins
         #endregion
 
         #region Data Handling
-        string GetFamilyShareLenderSteamId(string steamid) {
+        string GetFamilyShareLenderSteamId(string steamid)
+        {
             return GetPlayerCache(steamid)?.lender?.steamid;
         }
 
-        bool IsPlayerDirty(string steamid) {
+        bool IsPlayerDirty(string steamid)
+        {
             if (steamid.IsNullOrEmpty()) return false;
             ISAPlayer isaPlayer = GetPlayerCache(steamid);
             return isaPlayer != null && IsPlayerCached(steamid) && (ServerBanCount(isaPlayer) > 0 || isaPlayer?.steamCommunityBanned > 0 || isaPlayer?.steamNumberOfGameBans > 0 || isaPlayer?.steamVACBanned > 0);
@@ -981,7 +1328,8 @@ namespace Oxide.Plugins
         bool IsPlayerCached(string steamid) { return _playerData != null && _playerData.Count() > 0 && _playerData.ContainsKey(steamid); }
         void AddPlayerCached(ISAPlayer isaplayer) => _playerData.Add(isaplayer.steamid, isaplayer);
         void AddPlayerCached(IPlayer iplayer, ISAPlayer isaplayer) => _playerData.Add(iplayer.Id, isaplayer);
-        ISAPlayer GetPlayerCache(string steamid) {
+        ISAPlayer GetPlayerCache(string steamid)
+        {
             return !steamid.IsNullOrEmpty() && IsPlayerCached(steamid) ? _playerData[steamid] : null;
         }
         List<ISABan> GetPlayerBanData(string steamid) => _playerData[steamid].bans;
@@ -989,38 +1337,46 @@ namespace Oxide.Plugins
         void UpdatePlayerData(ISAPlayer isaplayer) => _playerData[isaplayer.steamid] = isaplayer;
         void AddPlayerData(string id, ISABan isaban) => _playerData[id].bans.Add(isaban);
 
-        bool IsCacheValid(string id) {
+        bool IsCacheValid(string id)
+        {
             if (!_playerData.ContainsKey(id)) return false;
             return minutesAgo((uint)_playerData[id].cacheTimestamp) < cacheLifetime;
         }
 
-        bool dateIsPast(DateTime to) {
+        bool dateIsPast(DateTime to)
+        {
             return DateTime.UtcNow > to;
         }
 
-        double minutesAgo(uint to) {
+        double minutesAgo(uint to)
+        {
             return Math.Round((_time.GetUnixTimestamp() - to) / 60.0);
         }
 
-        void GetPlayerReport(IPlayer player) {
+        void GetPlayerReport(IPlayer player)
+        {
             ISAPlayer isaPlayer = GetPlayerCache(player.Id);
             if (isaPlayer != null) GetPlayerReport(isaPlayer, player.IsConnected);
         }
 
-        void GetPlayerReport(IPlayer player, IPlayer cmdplayer) {
+        void GetPlayerReport(IPlayer player, IPlayer cmdplayer)
+        {
             ISAPlayer isaPlayer = GetPlayerCache(player.Id);
             if (isaPlayer != null) GetPlayerReport(isaPlayer, player.IsConnected, true, cmdplayer);
         }
 
-        void GetPlayerReport(IPlayer player, bool isCommand = false) {
+        void GetPlayerReport(IPlayer player, bool isCommand = false)
+        {
             ISAPlayer isaPlayer = GetPlayerCache(player.Id);
             if (isaPlayer != null) GetPlayerReport(isaPlayer, player.IsConnected, isCommand);
         }
 
-        void GetPlayerReport(ISAPlayer isaPlayer, bool isConnected = true, bool isCommand = false, IPlayer cmdPlayer = null) {
+        void GetPlayerReport(ISAPlayer isaPlayer, bool isConnected = true, bool isCommand = false, IPlayer cmdPlayer = null)
+        {
             if (isaPlayer == null) return;
             Dictionary<string, string> data =
-                       new Dictionary<string, string> {
+                       new Dictionary<string, string>
+                       {
                            ["status"] = IsPlayerDirty(isaPlayer.steamid) ? "dirty" : "clean",
                            ["steamid"] = isaPlayer.steamid,
                            ["username"] = isaPlayer.personaname,
@@ -1031,26 +1387,32 @@ namespace Oxide.Plugins
                            ["FamShare"] = IsFamilyShare(isaPlayer.steamid).ToString() + (IsFamilyShare(isaPlayer.steamid) ? IsLenderDirty(isaPlayer.steamid) ? "DIRTY" : "CLEAN" : "")
                        };
 
-            if (IsPlayerDirty(isaPlayer.steamid) || isCommand) {
+            if (IsPlayerDirty(isaPlayer.steamid) || isCommand)
+            {
                 string report = GetMsg("User Dirty MSG", data);
-                if (config.BroadcastPlayerBanReport && isConnected && isCommand && !(config.BroadcastPlayerBanReportVacDays > isaPlayer.steamDaysSinceLastBan)) {
+                if (config.BroadcastPlayerBanReport && isConnected && isCommand && !(config.BroadcastPlayerBanReportVacDays > isaPlayer.steamDaysSinceLastBan))
+                {
                     BroadcastWithIcon(report.Replace(isaPlayer.steamid + ":", string.Empty).Replace(isaPlayer.steamid, string.Empty));
                 }
-                if (isCommand) {
+                if (isCommand)
+                {
                     SendReplyWithIcon(cmdPlayer, report.Replace(isaPlayer.steamid + ":", string.Empty).Replace(isaPlayer.steamid, string.Empty));
                 }
             }
 
-            if ((config.DiscordOnlySendDirtyReports && IsPlayerDirty(isaPlayer.steamid)) || !config.DiscordOnlySendDirtyReports) {
+            if ((config.DiscordOnlySendDirtyReports && IsPlayerDirty(isaPlayer.steamid)) || !config.DiscordOnlySendDirtyReports)
+            {
                 IPlayer iPlayer = players.FindPlayer(isaPlayer.steamid);
-                DiscordSend(iPlayer.Id, iPlayer.Name, new EmbedFieldList() {
+                DiscordSend(iPlayer.Id, iPlayer.Name, new EmbedFieldList()
+                {
                     name = "Report",
                     value = GetMsg("User Dirty DISCORD MSG", data),
                     inline = true
                 });
 
                 if (config.RconBroadcast)
-                    RCon.Broadcast(RCon.LogType.Chat, new Chat.ChatEntry {
+                    RCon.Broadcast(RCon.LogType.Chat, new Chat.ChatEntry
+                    {
                         Message = GetMsg("User Dirty DISCORD MSG", data),
                         UserId = isaPlayer.steamid,
                         Username = isaPlayer.personaname,
@@ -1060,23 +1422,28 @@ namespace Oxide.Plugins
             }
         }
 
-        private void LogDebug(string txt) {
+        private void LogDebug(string txt)
+        {
             if (config.Debug || debug) Puts(txt);
         }
 
-        void LoadData() {
+        void LoadData()
+        {
             Dictionary<string, ISAPlayer> playerData = Interface.Oxide.DataFileSystem.ReadObject<Dictionary<string, ISAPlayer>>($"ServerArmour/playerData");
-            if (playerData != null) {
+            if (playerData != null)
+            {
                 _playerData = playerData;
             }
         }
 
-        void SaveData() {
+        void SaveData()
+        {
             _playerData = _playerData.ToDictionary(pair => pair.Key, pair => pair.Value);
             Interface.Oxide.DataFileSystem.WriteObject($"ServerArmour/playerData", _playerData, true);
         }
 
-        string ServerGetString() {
+        string ServerGetString()
+        {
             string aname = Uri.EscapeDataString(config.ServerAdminName);
             string aemail = Uri.EscapeDataString(config.ServerAdminEmail);
             string owner = Uri.EscapeDataString(config.OwnerSteamId);
@@ -1084,35 +1451,43 @@ namespace Oxide.Plugins
             string qport = Uri.EscapeDataString(config.ServerQPort);
             string rport = Uri.EscapeDataString(config.ServerRPort);
             string sname = Uri.EscapeDataString(server.Name);
-            return $"sip={config.ServerIp}&gport={gport}&qport={qport}&rport={rport}&ownerid={owner}&port={server.Port}&an={aname}&ae={aemail}&adminIds={adminIds}&gameId={covalence.ClientAppId}&gameName={covalence.Game}&v={this.Version}&sname={sname}";
+            string sip = !config.ServerIp.IsNullOrEmpty() && !config.ServerIp.Equals("0.0.0.0") ? config.ServerIp : covalence.Server.Address.ToString();
+            //Puts(sip);
+            return $"sip={sip}&gport={gport}&qport={qport}&rport={rport}&ownerid={owner}&port={server.Port}&an={aname}&ae={aemail}&adminIds={adminIds}&gameId={covalence.ClientAppId}&gameName={covalence.Game}&v={this.Version}&sname={sname}";
         }
         #endregion
 
         #region Kicking 
 
-        void KickPlayer(string steamid, string reason, string type) {
+        void KickPlayer(string steamid, string reason, string type)
+        {
             IPlayer player = players.FindPlayerById(steamid);
             if (player == null || (player.IsAdmin && config.IgnoreAdmins)) return;
 
-            if (player.IsConnected) {
+            if (player.IsConnected)
+            {
                 player?.Kick(reason);
                 Puts($"Player {player?.Name} was kicked for `{reason}`");
 
-                if (config.DiscordKickReport) {
-                    DiscordSend(player.Id, player.Name, new EmbedFieldList() {
+                if (config.DiscordKickReport)
+                {
+                    DiscordSend(player.Id, player.Name, new EmbedFieldList()
+                    {
                         name = "Player Kicked",
                         value = reason,
                         inline = true
                     }, 13459797);
                 }
 
-                if (type.Equals("D") && config.BroadcastKicks) {
+                if (type.Equals("D") && config.BroadcastKicks)
+                {
                     BroadcastWithIcon(GetMsg("Player Kicked", new Dictionary<string, string> { ["player"] = player.Name, ["reason"] = reason }));
                 }
             }
         }
 
-        bool IsBadIp(ISAPlayer isaPlayer) {
+        bool IsBadIp(ISAPlayer isaPlayer)
+        {
             if (isaPlayer.ipInfo == null) return false;
 
             return (config.AutoKick_BadIp
@@ -1120,20 +1495,24 @@ namespace Oxide.Plugins
                 && !(config.AutoKick_IgnoreNvidia && isaPlayer.ipInfo.isCloudComputing);
         }
 
-        bool ContainsMyBan(string steamid) {
+        bool ContainsMyBan(string steamid)
+        {
             return IsBanned(steamid) != null;
         }
 
-        ISABan IsBanned(string steamid) {
+        ISABan IsBanned(string steamid)
+        {
             LogDebug("----------- is player banned?");
             if (steamid == null || steamid.Equals("0")) return null;
             LogDebug("is player cached?");
             if (!IsPlayerCached(steamid)) return null;
             LogDebug("player is cached!");
-            try {
+            try
+            {
                 ISAPlayer isaPlayer = GetPlayerCache(steamid);
 
-                if (!config.OwnerSteamId.IsNullOrEmpty() && config.OwnerSteamId.StartsWith("7656") && config.AutoKick_NetworkBan) {
+                if (!config.OwnerSteamId.IsNullOrEmpty() && config.OwnerSteamId.StartsWith("7656") && config.AutoKick_NetworkBan)
+                {
                     LogDebug("Check ban!");
                     return isaPlayer?.bans?.Count() > 0 ? isaPlayer?.bans?.FirstOrDefault(x => (x.serverIp.Equals(config.ServerIp)
                         || x.serverIp.Equals(covalence.Server.Address.ToString())
@@ -1149,8 +1528,11 @@ namespace Oxide.Plugins
                     isaPlayer?.bans?.FirstOrDefault(x => x.serverIp.Equals(config.ServerIp)
                     && !dateIsPast(x.banUntillDateTime())) : null;
 
-            } catch (InvalidOperationException ioe) {
-                if (_playerData.ContainsKey(steamid)) {
+            }
+            catch (InvalidOperationException ioe)
+            {
+                if (_playerData.ContainsKey(steamid))
+                {
                     _playerData.Remove(steamid);
                 }
                 Puts(ioe.Message);
@@ -1158,54 +1540,83 @@ namespace Oxide.Plugins
             }
         }
 
-        bool IsLenderDirty(string steamid) {
+        bool IsLenderDirty(string steamid)
+        {
             if (steamid.IsNullOrEmpty()) return false;
             string lendersteamid = GetFamilyShareLenderSteamId(steamid);
             return !lendersteamid.IsNullOrEmpty() && lendersteamid != "0" ? IsPlayerDirty(lendersteamid) : false;
         }
 
-        int ServerBanCount(ISAPlayer player) {
+        int ServerBanCount(ISAPlayer player)
+        {
             if (player == null) return 0;
-            try {
+            try
+            {
                 return player.bans.Count();
-            } catch (NullReferenceException) {
+            }
+            catch (NullReferenceException)
+            {
                 return 0;
             }
         }
 
-        bool HasReachedVacCeiling(ISAPlayer isaPlayer) {
+        int TotalBans(ISAPlayer isaPlayer)
+        {
+            int banCounts = 0;
+            banCounts += isaPlayer.steamNumberOfVACBans;
+            banCounts += isaPlayer.steamNumberOfGameBans;
+            banCounts += ServerBanCount(isaPlayer);
+            return banCounts;
+        }
+
+        bool HasReachedVacCeiling(ISAPlayer isaPlayer)
+        {
             return config.AutoKickOn && config.AutoVacBanCeiling >= 0 && config.AutoVacBanCeiling < (isaPlayer.steamNumberOfVACBans + (isaPlayer.lender != null ? isaPlayer.lender.steamNumberOfVACBans : 0));
         }
 
-        bool HasReachedGameBanCeiling(ISAPlayer isaPlayer) {
+        bool HasReachedGameBanCeiling(ISAPlayer isaPlayer)
+        {
             return config.AutoKickOn && config.AutoGameBanCeiling >= 0 && config.AutoGameBanCeiling < (isaPlayer.steamNumberOfGameBans + isaPlayer.lender?.steamNumberOfGameBans);
         }
 
-        /*bool OwnsBloody(ISAPlayer isaPlayer) {
-            return config.AutoKickOn && config.AutoKick_Hardware_Bloody && isaPlayer.bloodyScriptsCount > 0;
-        }*/
+        bool HasReachedTotalBanCeiling(ISAPlayer isaPlayer)
+        {
+            int banCounts = TotalBans(isaPlayer);
 
-        bool HasReachedServerCeiling(ISAPlayer isaPlayer) {
+            bool kick = config.AutoKickOn && config.EnableTotalBanKick && config.AutoTotalBanCeiling >= 0 && banCounts > config.AutoTotalBanCeiling;
+            if (kick)
+            {
+                Puts($"Player ${isaPlayer.steamid} had {banCounts} total bans, it's more than the limit set of {config.AutoTotalBanCeiling}. Kicking player");
+            }
+            return kick;
+        }
+
+        bool HasReachedServerCeiling(ISAPlayer isaPlayer)
+        {
             return config.AutoKickOn && config.AutoKickCeiling < (ServerBanCount(isaPlayer) + ServerBanCount(isaPlayer?.lender));
         }
 
         bool IsFamilyShare(string steamid) => !GetFamilyShare(steamid).IsNullOrEmpty();
 
-        string GetFamilyShare(string steamid) {
+        string GetFamilyShare(string steamid)
+        {
             if (steamid.IsNullOrEmpty() || steamid?.Length != 17) return null;
             var playerConn = BasePlayer.Find(steamid)?.Connection;
-            if (playerConn == null) {
+            if (playerConn == null)
+            {
                 return null;
             }
             return !playerConn.ownerid.ToString().Equals(steamid) ? playerConn.ownerid.ToString() : null;
         }
 
-        bool IsProfilePrivate(string steamid) {
+        bool IsProfilePrivate(string steamid)
+        {
             ISAPlayer player = GetPlayerCache(steamid);
             return player.communityvisibilitystate == 1;
         }
 
-        int GetProfileLevel(string steamid) {
+        int GetProfileLevel(string steamid)
+        {
             ISAPlayer player = GetPlayerCache(steamid);
             return (int)player.steamlevel;
         }
@@ -1227,7 +1638,8 @@ namespace Oxide.Plugins
         private bool API_GetIsProfilePrivate(string steamid) => IsProfilePrivate(steamid);
         private int API_GetProfileLevel(string steamid) => GetProfileLevel(steamid);
 
-        private void API_BanPlayer(IPlayer player, string playerNameId, string reason, string length = null, bool ignoreSearch = false) {
+        private void API_BanPlayer(IPlayer player, string playerNameId, string reason, string length = null, bool ignoreSearch = false)
+        {
 
             /***
              * Length 2: player, reason
@@ -1243,13 +1655,17 @@ namespace Oxide.Plugins
             /***
              * If time specified, default to 100 years
              ***/
-            string lengthOfBan = !length.IsNullOrEmpty() ? length : "100Y";
+            string lengthOfBan = !length.IsNullOrEmpty() && !length.Equals("-1") ? length : "100Y";
             string dateBanUntil = _BanUntil(lengthOfBan).ToString(DATE_FORMAT);
 
-            if (ignoreSearch) {
-                try {
+            if (ignoreSearch)
+            {
+                try
+                {
                     banSteamId = ulong.Parse(banPlayer);
-                } catch (Exception) {
+                }
+                catch (Exception)
+                {
                     SendReplyWithIcon(player, GetMsg("Ban Syntax"));
                     return;
                 }
@@ -1258,50 +1674,56 @@ namespace Oxide.Plugins
             string errMsg = "";
             IPlayer iPlayer = null;
 
-            if (!ignoreSearch) {
-                IEnumerable<IPlayer> playersFound = players.FindPlayers(banPlayer);
-                int playersFoundCount = playersFound.Count();
-                switch (playersFoundCount) {
-                    case 0:
-                        errMsg = GetMsg("Player Not Found", new Dictionary<string, string> { ["player"] = banPlayer });
-                        break;
-                    case 1:
-                        iPlayer = players.FindPlayer(banPlayer);
-                        break;
-                    default:
-                        List<string> playersFoundNames = new List<string>();
-                        for (int i = 0; i < playersFoundCount; i++) playersFoundNames.Add(playersFound.ElementAt(i).Name);
-                        string playersFoundNamesString = String.Join(", ", playersFoundNames.ToArray());
-                        errMsg = GetMsg("Multiple Players Found", new Dictionary<string, string> { ["players"] = playersFoundNamesString });
-                        break;
-                }
+            IEnumerable<IPlayer> playersFound = players.FindPlayers(banPlayer);
+            int playersFoundCount = playersFound.Count();
+            switch (playersFoundCount)
+            {
+                case 0:
+                    errMsg = GetMsg("Player Not Found", new Dictionary<string, string> { ["player"] = banPlayer });
+                    break;
+                case 1:
+                    iPlayer = players.FindPlayer(banPlayer);
+                    break;
+                default:
+                    List<string> playersFoundNames = new List<string>();
+                    for (int i = 0; i < playersFoundCount; i++) playersFoundNames.Add(playersFound.ElementAt(i).Name);
+                    string playersFoundNamesString = String.Join(", ", playersFoundNames.ToArray());
+                    errMsg = GetMsg("Multiple Players Found", new Dictionary<string, string> { ["players"] = playersFoundNamesString });
+                    break;
             }
 
-            string playerId = ignoreSearch ? banSteamId.ToString() : iPlayer?.Id;
-            string playerName = ignoreSearch ? banSteamId.ToString() : iPlayer?.Name;
+
+            string playerId = iPlayer?.Id ?? banSteamId.ToString();
+            string playerName = iPlayer?.Name ?? banSteamId.ToString();
 
             if ((!ignoreSearch && iPlayer == null) || !errMsg.Equals("")) { SendReplyWithIcon(player, errMsg); return; }
 
             ISAPlayer isaPlayer;
 
-            if (!ignoreSearch) {
-                if (!IsPlayerCached(playerId)) {
+            if (!ignoreSearch)
+            {
+                if (!IsPlayerCached(playerId))
+                {
                     isaPlayer = new ISAPlayer(iPlayer);
                     AddPlayerCached(isaPlayer);
-                } else {
+                }
+                else
+                {
                     isaPlayer = GetPlayerCache(banPlayer);
                 }
             }
 
 
             if (BanPlayer(playerId,
-                new ISABan {
+                new ISABan
+                {
                     serverName = server.Name,
                     serverIp = config.ServerIp,
                     reason = banReason,
                     created = dateTime,
                     banUntil = dateBanUntil
-                })) {
+                }))
+            {
                 string msg;
                 string banLengthText = lengthOfBan.Equals("100y") ? GetMsg("Permanent") : BanFor(lengthOfBan);
 
@@ -1312,32 +1734,50 @@ namespace Oxide.Plugins
                 // Add ember support.
                 if (Ember != null)
                     Ember?.Call("Ban", playerId, BanMinutes(_BanUntil(lengthOfBan)), banReason, true, config.OwnerSteamId, Player.FindById(player.Id));
-                //
 
-                if (config.RconBroadcast)
-                    RCon.Broadcast(RCon.LogType.Chat, new Chat.ChatEntry {
-                        Message = msgClean,
-                        UserId = playerId,
-                        Username = playerName,
-                        Time = Facepunch.Math.Epoch.Current
-                    });
+                // fix to ignore init rebans from rust
+                if (serverStarted && apiConnected)
+                {
+                    if (config.RconBroadcast)
+                        RCon.Broadcast(RCon.LogType.Chat, new Chat.ChatEntry
+                        {
+                            Message = msgClean,
+                            UserId = playerId,
+                            Username = playerName,
+                            Time = Facepunch.Math.Epoch.Current
+                        });
 
-                if (config.BroadcastNewBans) {
-                    BroadcastWithIcon(msg);
-                } else {
-                    SendReplyWithIcon(player, msg);
+                    if (config.BroadcastNewBans)
+                    {
+                        BroadcastWithIcon(msg);
+                    }
+                    else
+                    {
+                        SendReplyWithIcon(player, msg);
+                    }
+
+                    if (config.DiscordBanReport)
+                    {
+                        DiscordSend(playerId, playerName, new EmbedFieldList()
+                        {
+                            name = "Player Banned",
+                            value = msgClean,
+                            inline = true
+                        }, 13459797, true);
+                    }
                 }
 
-                if (config.DiscordBanReport) {
-                    DiscordSend(playerId, playerName, new EmbedFieldList() {
-                        name = "Player Banned",
-                        value = msgClean,
-                        inline = true
-                    }, 13459797, true);
+                try
+                {
+                    SilentBan(ulong.Parse(playerId), TimeSpan.FromMinutes((_BanUntil(lengthOfBan) - DateTime.Now).TotalMinutes), banReason, player);
                 }
-                try {
-                    SilentBan(BasePlayer.Find(playerId)?.IPlayer, TimeSpan.FromMinutes((_BanUntil(lengthOfBan) - DateTime.Now).TotalMinutes), banReason);
-                } catch (Exception) {
+                catch (Exception e)
+                {
+                    Puts("Silent Ban Failed.");
+                    Puts(e.Message);
+                }
+                finally
+                {
                     Subscribe(nameof(OnUserBanned));
                 }
             }
@@ -1345,14 +1785,17 @@ namespace Oxide.Plugins
         #endregion
 
         #region Localization
-        string GetMsg(string msg, Dictionary<string, string> rpls = null) {
+        string GetMsg(string msg, Dictionary<string, string> rpls = null)
+        {
             string message = lang.GetMessage(msg, this);
             if (rpls != null) foreach (var rpl in rpls) message = message.Replace($"{{{rpl.Key}}}", rpl.Value);
             return message;
         }
 
-        protected override void LoadDefaultMessages() {
-            lang.RegisterMessages(new Dictionary<string, string> {
+        protected override void LoadDefaultMessages()
+        {
+            lang.RegisterMessages(new Dictionary<string, string>
+            {
                 ["Protected MSG"] = "Server protected by [#008080ff]ServerArmour[/#]",
                 ["User Dirty MSG"] = "[#008080ff]Server Armour Report:\n {steamid}:{username}[/#] is {status}.\n [#ff0000ff]Server Bans:[/#] {serverBanCount}\n [#ff0000ff]Game Bans:[/#] {NumberOfGameBans}\n [#ff0000ff]Vac Bans:[/#] {NumberOfVACBans}\n [#ff0000ff]Economy Banned:[/#] {EconomyBan}\n [#ff0000ff]Family Share:[/#] {FamShare}",
                 ["User Dirty DISCORD MSG"] = "**Server Bans:** {serverBanCount}\n **Game Bans:** {NumberOfGameBans}\n **Vac Bans:** {NumberOfVACBans}\n **Economy Banned:** {EconomyBan}\n **Family Share:** {FamShare}",
@@ -1368,7 +1811,7 @@ namespace Oxide.Plugins
                 ["Reason: Proxy IP"] = "VPN & Proxy's not allowed.",
                 ["Player Not Found"] = "Player wasn't found",
                 ["Multiple Players Found"] = "Multiple players found with that name ({players}), please try something more unique like a steamid",
-                ["Ban Syntax"] = "sa.ban <playerNameOrID> \"<reason>\" length (example: 1h for 1 hour, 1m for 1 month etc)",
+                ["Ban Syntax"] = "[#ff0000]ban <playerNameOrID> \"the reason\" <length>[/#]\nexample: ban \"some user\" \"cheating\" 1y\n length examples: 1h for 1 hour, 1m for 1 month etc",
                 ["UnBan Syntax"] = "sa.unban <playerNameOrID> <reason>",
                 ["No Response From API"] = "Couldn't get an answer from ServerArmour.com! Error: {code} {response}",
                 ["Player Not Banned"] = "Player not banned",
@@ -1380,7 +1823,6 @@ namespace Oxide.Plugins
                 ["Family Share Kick"] = "Family share accounts are not allowed on this server.",
                 ["Too Many Previous Bans"] = "You have too many previous bans (other servers included). Appeal in discord",
                 ["Too Many Previous Game Bans"] = "You have too many previous game bans. Appeal in discord",
-                ["Kick Bloody"] = "You own a bloody/a4 tech device. Appeal in discord",
                 ["VAC Ceiling Kick"] = "You have too many VAC bans. Appeal in discord",
                 ["Player Kicked"] = "[#ff0000]{player} Kicked[/#] - Reason\n{reason}",
                 ["Profile Private"] = "Your Steam Profile is not allowed to be private on this server.",
@@ -1395,51 +1837,60 @@ namespace Oxide.Plugins
 
         #region Plugins methods
         string GetChatTag() => "[#008080ff][Server Armour]:[/#] ";
-        void RegisterTag() {
+        void RegisterTag()
+        {
             if (BetterChat != null && config.BetterChatDirtyPlayerTag != null && config.BetterChatDirtyPlayerTag.Length > 0)
                 BetterChat?.Call("API_RegisterThirdPartyTitle", new object[] { this, new Func<IPlayer, string>(GetTag) });
         }
 
-        string GetTag(IPlayer player) {
-            if (BetterChat != null && IsPlayerDirty(player.Id) && config.BetterChatDirtyPlayerTag.Length > 0) {
+        string GetTag(IPlayer player)
+        {
+            if (BetterChat != null && IsPlayerDirty(player.Id) && config.BetterChatDirtyPlayerTag.Length > 0)
+            {
                 return $"[#FFA500][{config.BetterChatDirtyPlayerTag}][/#]";
-            } else {
+            }
+            else
+            {
                 return string.Empty;
             }
         }
         #endregion
 
         #region Helpers 
-        void SendReplyWithIcon(IPlayer player, string format, params object[] args) {
+        void SendReplyWithIcon(IPlayer player, string format, params object[] args)
+        {
             int cnt = 0;
             string msg = GetMsg(format);
-            foreach (var arg in args) {
+            foreach (var arg in args)
+            {
                 msg = msg.Replace("{" + cnt + "}", arg.ToString());
                 cnt++;
             }
 
-            if (!player.IsServer && player.IsConnected) {
+            if (!player.IsServer && player.IsConnected)
+            {
                 BasePlayer bPlayer = player.Object as BasePlayer;
                 bPlayer?.SendConsoleCommand("chat.add", 2, ServerArmourId, FixColors(msg));
-            } else {
+            }
+            else
+            {
                 player?.Reply(msg);
             }
         }
-        void BroadcastWithIcon(string format, params object[] args) {
-            foreach (var player in BasePlayer.activePlayerList) {
+        void BroadcastWithIcon(string format, params object[] args)
+        {
+            foreach (var player in BasePlayer.activePlayerList)
+            {
                 SendReplyWithIcon(player.IPlayer, format, args);
             }
         }
 
         string FixColors(string msg) => msg.Replace("[/#]", "</color>").Replace("[", "<color=").Replace("]", ">");
 
-        void AddGroup(string group) {
-            if (!permission.GroupExists(group)) permission.CreateGroup(group, "Bloody Mouse Owners", 0);
-        }
-
         void AssignGroup(string id, string group) => permission.AddUserGroup(id, group);
         bool HasGroup(string id, string group) => permission.UserHasGroup(id, group);
-        void RegPerm(string perm) {
+        void RegPerm(string perm)
+        {
             if (!permission.PermissionExists(perm)) permission.RegisterPermission(perm, this);
         }
 
@@ -1447,29 +1898,36 @@ namespace Oxide.Plugins
         void GrantPerm(string id, string perm) => permission.GrantUserPermission(id, perm, this);
 
         private static readonly DateTime Epoch = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc);
-        private static uint ConvertToTimestamp(string value) {
+        private static uint ConvertToTimestamp(string value)
+        {
             return ConvertToTimestamp(ConverToDateTime(value));
         }
 
-        private static uint ConvertToTimestamp(DateTime value) {
+        private static uint ConvertToTimestamp(DateTime value)
+        {
             TimeSpan elapsedTime = value - Epoch;
             return (uint)elapsedTime.TotalSeconds;
         }
 
-        private static DateTime ConverToDateTime(string stringDate) {
+        private static DateTime ConverToDateTime(string stringDate)
+        {
             DateTime time;
-            try {
+            try
+            {
                 time = DateTime.ParseExact(stringDate, DATE_FORMAT, null);
-            } catch (Exception) {
+            }
+            catch (Exception)
+            {
                 time = DateTime.ParseExact(stringDate.Replace("T", " ").Replace(".000Z", ""), DATE_FORMAT2, null);
             }
             _instance.Puts(time.ToString(DATE_FORMAT));
             return time;
         }
 
-        private static DateTime ConvertUnixToDateTime(long unixTimeStamp) {
+        private static DateTime ConvertUnixToDateTime(long unixTimeStamp)
+        {
             // Unix timestamp is seconds past epoch
-            System.DateTime dtDateTime = new DateTime(1970, 1, 1, 0, 0, 0, 0, System.DateTimeKind.Utc);
+            System.DateTime dtDateTime = Epoch;
             dtDateTime = dtDateTime.AddSeconds(unixTimeStamp).ToLocalTime();
             return dtDateTime;
         }
@@ -1494,29 +1952,13 @@ namespace Oxide.Plugins
             public int steamVACBanned { get; set; }
             public int steamNumberOfVACBans { get; set; }
             public int steamDaysSinceLastBan { get; set; }
-            public string lastServerBan { get; set; }
             public int steamNumberOfGameBans { get; set; }
             public string steamEconomyBan { get; set; }
-            public string steamBansLastCheckUTC { get; set; }
-            public string created { get; set; }
-            public string lastSeen { get; set; }
-            public string lastBan { get; set; }
-            public int rustadminBanCount { get; set; }
-            public string rustadminLastCheck { get; set; }
             public float ipRating { get; set; }
-            public string country { get; set; }
             public string ipLastCheck { get; set; }
-            public int bloodyScriptsCount { get; set; }
             public int communityvisibilitystate { get; set; }
-            public int? profilestate { get; set; }
             public string personaname { get; set; }
-            public string avatar { get; set; }
-            public string personastateflags { get; set; }
-            public float avgProb { get; set; }
-            public int aimbotViolations { get; set; }
-            public int? steamDaysOld { get; set; }
             public long? twitterBanId { get; set; }
-            public string twitterBanDate { get; set; }
 
             public uint? cacheTimestamp { get; set; }
 
@@ -1526,31 +1968,35 @@ namespace Oxide.Plugins
 
             public IPInfo ipInfo { get; set; }
 
-            public ISAPlayer() {
+            public ISAPlayer()
+            {
             }
-            public ISAPlayer(ulong steamId) {
+            public ISAPlayer(ulong steamId)
+            {
                 steamid = steamId.ToString();
                 personaname = "";
             }
-            public ISAPlayer(IPlayer bPlayer) {
+            public ISAPlayer(IPlayer bPlayer)
+            {
                 CreatePlayer(bPlayer);
             }
-            public ISAPlayer(string id) {
+            public ISAPlayer(string id)
+            {
                 CreatePlayer(id);
             }
 
-            public ISAPlayer CreatePlayer(IPlayer bPlayer) {
+            public ISAPlayer CreatePlayer(IPlayer bPlayer)
+            {
                 steamid = bPlayer.Id;
-                bloodyScriptsCount = 0;
                 personaname = bPlayer.Name;
                 cacheTimestamp = new Time().GetUnixTimestamp();
                 lastConnected = new Time().GetUnixTimestamp();
                 bans = new List<ISABan>();
                 return this;
             }
-            public ISAPlayer CreatePlayer(string id) {
+            public ISAPlayer CreatePlayer(string id)
+            {
                 steamid = id;
-                bloodyScriptsCount = 0;
                 personaname = "";
                 cacheTimestamp = new Time().GetUnixTimestamp();
                 lastConnected = new Time().GetUnixTimestamp();
@@ -1598,14 +2044,19 @@ namespace Oxide.Plugins
             public string banUntil;
 #pragma warning restore 0649
 
-            public uint GetUnixBanUntill() {
+            public uint GetUnixBanUntill()
+            {
                 return ConvertToTimestamp(banUntil);
             }
-            public DateTime banUntillDateTime() {
+            public DateTime banUntillDateTime()
+            {
                 DateTime t;
-                try {
+                try
+                {
                     t = DateTime.ParseExact(banUntil, DATE_FORMAT, null);
-                } catch (Exception) {
+                }
+                catch (Exception)
+                {
                     t = DateTime.ParseExact(banUntil.Replace("T", " ").Replace(".000Z", ""), DATE_FORMAT2, null);
                 }
                 return t;
@@ -1616,8 +2067,10 @@ namespace Oxide.Plugins
 
         #region Arkan
 
-        private void API_ArkanOnNoRecoilViolation(BasePlayer player, int NRViolationsNum, string jString) {
-            if (jString != null) {
+        private void API_ArkanOnNoRecoilViolation(BasePlayer player, int NRViolationsNum, string jString)
+        {
+            if (jString != null)
+            {
                 JObject aObject = JObject.Parse(jString);
 
                 string shotsCnt = aObject.GetValue("ShotsCnt").ToString();
@@ -1629,8 +2082,10 @@ namespace Oxide.Plugins
 
                 webrequest.Enqueue($"{api_hostname}/api/v1/plugin/player/{player.UserIDString}/addarkan/nr",
                     $"vp={violationProbability}&sc={shotsCnt}&ammo={ammoShortName}&weapon={weaponShortName}&attach={attachments}&snrs={suspiciousNoRecoilShots}",
-                    (code, response) => {
-                        if (code > 204 || response == null) {
+                    (code, response) =>
+                    {
+                        if (code > 204 || response == null)
+                        {
                             Puts(GetMsg("No Response From API", new Dictionary<string, string> { ["code"] = code.ToString(), ["response"] = response }));
                             return;
                         }
@@ -1638,8 +2093,10 @@ namespace Oxide.Plugins
             }
         }
 
-        private void API_ArkanOnAimbotViolation(BasePlayer player, int AIMViolationsNum, string jString) {
-            if (jString != null) {
+        private void API_ArkanOnAimbotViolation(BasePlayer player, int AIMViolationsNum, string jString)
+        {
+            if (jString != null)
+            {
                 JObject aObject = JObject.Parse(jString);
                 string attachments = String.Join(", ", aObject.GetValue("attachments").Select(jv => (string)jv).ToArray());
                 string ammoShortName = aObject.GetValue("ammoShortName").ToString();
@@ -1650,8 +2107,10 @@ namespace Oxide.Plugins
                 string hitInfoProjectileDistance = aObject.GetValue("hitInfoProjectileDistance").ToString();
 
                 webrequest.Enqueue($"{api_hostname}/api/v1/plugin/player/{player.UserIDString}/addarkan/aim",
-                    $"attach={attachments}&ammo={ammoShortName}&weapon={weaponShortName}&dmg={damage}&bp={bodypart}&distance={hitInfoProjectileDistance}&hits={hitsData}", (code, response) => {
-                        if (code > 204 || response == null) {
+                    $"attach={attachments}&ammo={ammoShortName}&weapon={weaponShortName}&dmg={damage}&bp={bodypart}&distance={hitInfoProjectileDistance}&hits={hitsData}", (code, response) =>
+                    {
+                        if (code > 204 || response == null)
+                        {
                             Puts(GetMsg("No Response From API", new Dictionary<string, string> { ["code"] = code.ToString(), ["response"] = response }));
                             return;
                         }
@@ -1662,7 +2121,7 @@ namespace Oxide.Plugins
         #endregion
 
         #region Clan/Team Helpers
-        List<ulong> GetTeamMembers(ulong userid) => RelationshipManager.Instance.FindPlayersTeam(userid)?.members;
+        List<ulong> GetTeamMembers(ulong userid) => RelationshipManager.ServerInstance.FindPlayersTeam(userid)?.members;
         string GetClanTag(string userid) => Clans?.Call<string>("GetClanOf", userid);
         List<ulong> GetClan(string userid) => Clans?.Call<JObject>("GetClan", GetClanTag(userid))?.GetValue("members").ToObject<List<ulong>>();
         #endregion
@@ -1679,9 +2138,13 @@ namespace Oxide.Plugins
             public bool Debug = false;
             public bool ShowProtectedMsg = true;
             public bool AutoKickOn = true;
+            public bool EnableTotalBanKick = false;
+
             public int AutoKickCeiling = 3;
             public int AutoVacBanCeiling = 1;
             public int AutoGameBanCeiling = 2;
+            public int AutoTotalBanCeiling = 30;
+
             public int DissallowVacBanDays = 90;
             public int BroadcastPlayerBanReportVacDays = 120;
 
@@ -1696,13 +2159,12 @@ namespace Oxide.Plugins
             public string ServerAdminEmail = string.Empty;
             public string ServerApiKey = string.Empty;
 
-            //public bool AutoKick_Hardware_Bloody = true;
             public bool AutoKick_KickHiddenLevel = false;
             public int AutoKick_MinSteamProfileLevel = -1;
             public bool AutoKick_KickPrivateProfile = false;
             public bool AutoKick_KickWeirdSteam64 = true;
 
-            public bool AutoKick_KickTwitterGameBanned = true;
+            public bool AutoKick_KickTwitterGameBanned = false;
             public bool AutoKick_BadIp = true;
             public bool AutoKick_BadIp_IgnoreComputing = true;
 
@@ -1725,7 +2187,8 @@ namespace Oxide.Plugins
 
             // Plugin reference
             private ServerArmour plugin;
-            public SAConfig(ServerArmour plugin) {
+            public SAConfig(ServerArmour plugin)
+            {
                 this.plugin = plugin;
                 /**
                  * Load all saved config values
@@ -1758,6 +2221,8 @@ namespace Oxide.Plugins
                 GetConfig(ref AutoKickOn, "Auto Kick", "Enabled");
                 GetConfig(ref AutoKick_NetworkBan, "Auto Kick", "Bans on your network");
                 GetConfig(ref AutoKickCeiling, "Auto Kick", "Max allowed previous bans");
+                GetConfig(ref AutoTotalBanCeiling, "Auto Kick", "Max allowed total bans (server + game + vac)");
+                GetConfig(ref EnableTotalBanKick, "Auto Kick", "Enable Total bans (server + game + vac) kick");
 
                 GetConfig(ref AutoKick_BadIp, "Auto Kick", "VPN", "Enabled");
                 GetConfig(ref AutoKick_IgnoreNvidia, "Auto Kick", "VPN", "Ignore nVidia Cloud Gaming");
@@ -1788,18 +2253,14 @@ namespace Oxide.Plugins
                 plugin.SaveConfig();
             }
 
-            private void GetConfig<T>(ref T variable, params string[] path) {
+            private void GetConfig<T>(ref T variable, params string[] path)
+            {
                 if (path.Length == 0) return;
 
-                if (plugin.Config.Get(path) == null) {
+                if (plugin.Config.Get(path) == null)
+                {
                     SetConfig(ref variable, path);
                     plugin.PrintWarning($"Added new field to config: {string.Join("/", path)}");
-                }
-
-                string serverAddress = plugin.covalence.Server.Address.ToString();
-                if (path[path.Length - 1].Equals("Your Server IP") && string.IsNullOrEmpty(ServerIp) && !string.IsNullOrEmpty(serverAddress) && !serverAddress.Equals("0.0.0.0")) {
-                    ServerIp = serverAddress;
-                    SetConfig(ref variable, path);
                 }
 
                 variable = (T)Convert.ChangeType(plugin.Config.Get(path), typeof(T));
@@ -1809,12 +2270,16 @@ namespace Oxide.Plugins
         }
 
         protected override void LoadDefaultConfig() => PrintWarning("Generating new configuration file.");
-        protected override void LoadConfig() {
+        protected override void LoadConfig()
+        {
             base.LoadConfig();
 
-            try {
+            try
+            {
                 config = new SAConfig(this);
-            } catch (InvalidCastException) {
+            }
+            catch (InvalidCastException)
+            {
                 PrintError("Your config seems to be corrupted. If you are upgrading from 0.5.*, please backup your config, delete it, reload, and repopulate the new config file.");
                 Interface.Oxide.UnloadPlugin(Name);
             }
@@ -1829,7 +2294,8 @@ namespace Oxide.Plugins
         /// </summary>
         /// <param name="steamId"></param>
         /// <returns></returns>
-        private string GenerateAuthCode(ulong steamId) {
+        private string GenerateAuthCode(ulong steamId)
+        {
             // Let's check if the player already has a code. 
             if (_codes.ContainsKey(steamId))
                 return _codes[steamId];
@@ -1837,7 +2303,8 @@ namespace Oxide.Plugins
             // Lets generate the first code, in hopes it's original.
             string code = _GenerateCode();
 
-            while (CodeExistsAndValid(code)) { // Lets make sure it's original.
+            while (CodeExistsAndValid(code))
+            { // Lets make sure it's original.
                 code = _GenerateCode(); // If not, let's generate a new one. 
             }
 
@@ -1849,10 +2316,12 @@ namespace Oxide.Plugins
         /// Generates a random code.
         /// </summary>
         /// <returns></returns>
-        private string _GenerateCode() {
+        private string _GenerateCode()
+        {
             var code = "";
             var rnd = new System.Random();
-            for (var i = 0; i < 4; i++) {
+            for (var i = 0; i < 4; i++)
+            {
                 code += rnd.Next(10).ToString();
             }
             return code;
@@ -1866,19 +2335,26 @@ namespace Oxide.Plugins
         bool CodeExistsAndValid(string code) => !code.IsNullOrEmpty() && _codes.Values.Contains(code);
 
         [Command("sa.auth.check")]
-        void cmdCheckCode(IPlayer player, string command, string[] args) {
+        void cmdCheckCode(IPlayer player, string command, string[] args)
+        {
             if (!player.IsServer) return;
             ulong steamId = 0;
 
-            if (ulong.TryParse(args[0], out steamId)) {
-                if (_codes.ContainsKey(steamId)) {
+            if (ulong.TryParse(args[0], out steamId))
+            {
+                if (_codes.ContainsKey(steamId))
+                {
                     // success
                     SendReplyWithIcon(player, _codes[steamId]);
-                } else {
+                }
+                else
+                {
                     // no key found
                     SendReplyWithIcon(player, $"null");
                 }
-            } else {
+            }
+            else
+            {
                 SendReplyWithIcon(player, $"null");
                 // no steamid provided.
             }
@@ -1890,13 +2366,17 @@ namespace Oxide.Plugins
         /// <param name="args"></param>
         /// <returns></returns>
         [Command("sa.auth")]
-        void cmdAuthGen(IPlayer player, string command, string[] args) {
+        void cmdAuthGen(IPlayer player, string command, string[] args)
+        {
             if (player.IsServer) return;
             ulong steamId = ulong.Parse(player.Id);
             string code = "";
-            if (_codes.ContainsKey(steamId)) {
+            if (_codes.ContainsKey(steamId))
+            {
                 code = _codes[steamId];
-            } else {
+            }
+            else
+            {
                 code = GenerateAuthCode(steamId);
             }
             SendReplyWithIcon(player, $"Your auth code is <color=#d8b300>{code}</color>");
