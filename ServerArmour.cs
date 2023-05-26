@@ -1321,7 +1321,7 @@ namespace Oxide.Plugins
 
         void GetPlayerReport(ISAPlayer isaPlayer, bool isConnected = true, bool isCommand = false, IPlayer cmdPlayer = null)
         {
-            if (isaPlayer == null) return;
+            if (isaPlayer == null || isaPlayer.steamid == null) return;
             Dictionary<string, string> data =
                        new Dictionary<string, string>
                        {
