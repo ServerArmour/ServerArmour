@@ -34,7 +34,7 @@ using static Facepunch.RCon;
  */
 namespace Oxide.Plugins
 {
-    [Info("Server Armour", "Pho3niX90", "0.8.1")]
+    [Info("Server Armour", "Pho3niX90", "0.8.2")]
     [Description("Protect your server! Auto ban known hackers, scripters and griefer accounts, and notify server owners of threats.")]
     class ServerArmour : CovalencePlugin
     {
@@ -1321,6 +1321,7 @@ namespace Oxide.Plugins
 
         void GetPlayerReport(ISAPlayer isaPlayer, bool isConnected = true, bool isCommand = false, IPlayer cmdPlayer = null)
         {
+            Puts("DEBUG: Player report started");
             if (isaPlayer == null || isaPlayer.steamid == null) return;
             Dictionary<string, string> data =
                        new Dictionary<string, string>
@@ -1334,15 +1335,20 @@ namespace Oxide.Plugins
                            ["EconomyBan"] = (!isaPlayer.steamEconomyBan.Equals("none")).ToString()
                        };
 
+            Puts("DEBUG: Checking player status");
             if (IsPlayerDirty(isaPlayer.steamid) || isCommand)
             {
+                Puts("DEBUG:Getting report");
                 string report = GetMsg("User Dirty MSG", data);
+                Puts("DEBUG: Checking if should broadcast");
                 if (config.BroadcastPlayerBanReport && isConnected && isCommand && !(config.BroadcastPlayerBanReportVacDays > isaPlayer.steamDaysSinceLastBan))
                 {
+                    Puts("DEBUG: Broadcasting");
                     BroadcastWithIcon(report.Replace(isaPlayer.steamid + ":", string.Empty).Replace(isaPlayer.steamid, string.Empty));
                 }
                 if (isCommand)
                 {
+                    Puts("DEBUG: Replying to command");
                     SendReplyWithIcon(cmdPlayer, report.Replace(isaPlayer.steamid + ":", string.Empty).Replace(isaPlayer.steamid, string.Empty));
                 }
             }
@@ -1350,6 +1356,7 @@ namespace Oxide.Plugins
             if ((config.DiscordOnlySendDirtyReports && IsPlayerDirty(isaPlayer.steamid)) || !config.DiscordOnlySendDirtyReports)
             {
                 IPlayer iPlayer = players.FindPlayer(isaPlayer.steamid);
+                Puts($"DEBUG: Sending to discord.");
                 DiscordSend(iPlayer.Id, iPlayer.Name, new EmbedFieldList()
                 {
                     name = "Report",
@@ -1357,6 +1364,7 @@ namespace Oxide.Plugins
                     inline = true
                 });
 
+                Puts($"DEBUG: Broadcasting via RCON {config.RconBroadcast}");
                 if (config.RconBroadcast)
                     RCon.Broadcast(RCon.LogType.Chat, new Chat.ChatEntry
                     {
@@ -1498,7 +1506,7 @@ namespace Oxide.Plugins
 
         int ServerBanCount(ISAPlayer player)
         {
-            if (player == null) return 0;
+            if (player == null || player.bans == null) return 0;
             try
             {
                 return player.bans.Count();
