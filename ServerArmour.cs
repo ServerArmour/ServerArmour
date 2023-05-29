@@ -408,7 +408,6 @@ namespace Oxide.Plugins
                     LogDebug("Getting player from API");
                     ISAPlayer isaPlayer = null;
 
-
                     try
                     {
                         isaPlayer = JsonConvert.DeserializeObject<ISAPlayer>(response);
@@ -1323,10 +1322,13 @@ namespace Oxide.Plugins
 
         void GetPlayerReport(ISAPlayer isaPlayer, bool isConnected = true, bool isCommand = false, IPlayer cmdPlayer = null)
         {
-            Puts("DEBUG: Player report started");
-            Puts("DEBUG: Player object", isaPlayer == null ? "null" : isaPlayer.ToString());
-            Puts("DEBUG: IsPlayerDirty", IsPlayerDirty(isaPlayer.steamid));
-            Puts("DEBUG: BanCount", ServerBanCount(isaPlayer));
+            Puts($"DEBUG: Player report started");
+            Puts($"DEBUG: {isaPlayer.steamNumberOfGameBans}\n {isaPlayer.steamNumberOfVACBans}\n {isaPlayer.steamDaysSinceLastBan}\n {isaPlayer.steamEconomyBan}");
+            Puts($"DEBUG: IsPlayerDirty {IsPlayerDirty(isaPlayer.steamid)}");
+            Puts($"DEBUG: BanCount {ServerBanCount(isaPlayer)}");
+            Puts($"DEBUG: Player object");
+            Puts(isaPlayer.ToString()); 
+
             if (isaPlayer == null || isaPlayer.steamid == null) return;
             Dictionary<string, string> data =
                        new Dictionary<string, string>
