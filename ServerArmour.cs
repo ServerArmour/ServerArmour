@@ -18,7 +18,10 @@ using Time = Oxide.Core.Libraries.Time;
 using Facepunch.Extend;
 using System.Net.Mail;
 using Mono.Cecil.Cil;
-using static Facepunch.RCon;
+using Network;
+using System.Text.RegularExpressions;
+using UnityEngine;
+using Application = UnityEngine.Application;
 
 #pragma warning disable 8600
 #pragma warning disable 8601
@@ -34,7 +37,7 @@ using static Facepunch.RCon;
  */
 namespace Oxide.Plugins
 {
-    [Info("Server Armour", "Pho3niX90", "0.8.1")]
+    [Info("Server Armour", "Pho3niX90", "0.8.2")]
     [Description("Protect your server! Auto ban known hackers, scripters and griefer accounts, and notify server owners of threats.")]
     class ServerArmour : CovalencePlugin
     {
@@ -236,6 +239,7 @@ namespace Oxide.Plugins
             }
 
             CheckServerConnection();
+            Application.logMessageReceived += handleLog;
         }
 
         void CheckServerConnection()
@@ -280,6 +284,7 @@ namespace Oxide.Plugins
             SaveData();
             _playerData?.Clear();
             _playerData = null;
+            Application.logMessageReceived -= handleLog;
         }
 
         //[Command("tc")]
@@ -408,7 +413,6 @@ namespace Oxide.Plugins
                     LogDebug("Getting player from API");
                     ISAPlayer isaPlayer = null;
 
-
                     try
                     {
                         isaPlayer = JsonConvert.DeserializeObject<ISAPlayer>(response);
@@ -456,25 +460,25 @@ namespace Oxide.Plugins
                     //string lSteamId = GetFamilyShare(isaPlayer.steamid);
                     //
 
-                    LogDebug("Check for a twitter game ban");
-                    if (config.AutoKick_KickTwitterGameBanned && !HasPerm(pSteamId, PermissionWhitelistTwitterBan))
-                    {
-                        if (isaPlayer.twitterBanId > 0)
-                        {
-                            KickPlayer(isaPlayer?.steamid, $"https://twitter.com/rusthackreport/status/{isaPlayer.twitterBanId}", "C");
-                        }
-                    }
+                    //LogDebug("Check for a twitter game ban");
+                    //if (config.AutoKick_KickTwitterGameBanned && !HasPerm(pSteamId, PermissionWhitelistTwitterBan))
+                    //{
+                    //    if (isaPlayer.twitterBanId > 0)
+                    //    {
+                    //        KickPlayer(isaPlayer?.steamid, $"https://twitter.com/rusthackreport/status/{isaPlayer.twitterBanId}", "C");
+                    //    }
+                    //}
 
                     LogDebug("Check for a recent vac");
                     bool pRecentVac = (isaPlayer.steamNumberOfVACBans > 0 || isaPlayer.steamDaysSinceLastBan > 0)
                     && isaPlayer.steamDaysSinceLastBan < config.DissallowVacBanDays; //check main player
 
-                    bool lRecentVac = (isaPlayer.lender?.steamNumberOfVACBans > 0 || isaPlayer.lender?.steamDaysSinceLastBan > 0)
-                    && isaPlayer.lender?.steamDaysSinceLastBan < config.DissallowVacBanDays; //check the lender player
+                    //bool lRecentVac = (isaPlayer.lender?.steamNumberOfVACBans > 0 || isaPlayer.lender?.steamDaysSinceLastBan > 0)
+                    //&& isaPlayer.lender?.steamDaysSinceLastBan < config.DissallowVacBanDays; //check the lender player
 
-                    if (config.AutoKickOn && !HasPerm(pSteamId, PermissionWhitelistRecentVacKick) && (pRecentVac || lRecentVac))
+                    if (config.AutoKickOn && !HasPerm(pSteamId, PermissionWhitelistRecentVacKick) && pRecentVac)
                     {
-                        int vacLast = pRecentVac ? isaPlayer.steamDaysSinceLastBan : isaPlayer.lender.steamDaysSinceLastBan;
+                        int vacLast = isaPlayer.steamDaysSinceLastBan;
                         int until = config.DissallowVacBanDays - vacLast;
 
                         Interface.CallHook("OnSARecentVacKick", vacLast, until);
@@ -499,17 +503,17 @@ namespace Oxide.Plugins
                     }
 
                     LogDebug("Check for players with too many server bans");
-                    if (!HasPerm(pSteamId, PermissionWhitelistServerCeilingKick) && HasReachedServerCeiling(isaPlayer))
-                    {
-                        Interface.CallHook("OnSATooManyServerBans", pSteamId, config.AutoKickCeiling, ServerBanCount(isaPlayer) + ServerBanCount(isaPlayer.lender));
-                        KickPlayer(isaPlayer?.steamid, GetMsg("Too Many Previous Bans"), "C");
-                    }
+                    //if (!HasPerm(pSteamId, PermissionWhitelistServerCeilingKick) && HasReachedServerCeiling(isaPlayer))
+                    //{
+                    //    Interface.CallHook("OnSATooManyServerBans", pSteamId, config.AutoKickCeiling, ServerBanCount(isaPlayer) + ServerBanCount(isaPlayer.lender));
+                    //    KickPlayer(isaPlayer?.steamid, GetMsg("Too Many Previous Bans"), "C");
+                    //}
 
-                    if (!HasPerm(PermissionWhitelistTotalBanCeiling, pSteamId) && HasReachedTotalBanCeiling(isaPlayer))
-                    {
-                        Interface.CallHook("OnSATooManyBans", pSteamId, config.AutoKickCeiling, TotalBans(isaPlayer.lender));
-                        KickPlayer(isaPlayer?.steamid, GetMsg("Too Many Previous Bans"), "C");
-                    }
+                    //if (!HasPerm(PermissionWhitelistTotalBanCeiling, pSteamId) && HasReachedTotalBanCeiling(isaPlayer))
+                    //{
+                    //    Interface.CallHook("OnSATooManyBans", pSteamId, config.AutoKickCeiling, TotalBans(isaPlayer.lender));
+                    //    KickPlayer(isaPlayer?.steamid, GetMsg("Too Many Previous Bans"), "C");
+                    //}
 
                     LogDebug("Check for players with a private profile");
                     if (!HasPerm(pSteamId, PermissionWhitelistSteamProfile) && config.AutoKick_KickPrivateProfile && isaPlayer.communityvisibilitystate == 1)
@@ -525,7 +529,6 @@ namespace Oxide.Plugins
                         KickPlayer(isaPlayer?.steamid, GetMsg("Steam Level Hidden"), "C");
                     }
 
-                    LogDebug("Check for low level steam account");
                     Puts($"Player {isaPlayer.steamid} is at steam level {isaPlayer.steamlevel}");
                     if (!HasPerm(pSteamId, PermissionWhitelistSteamProfile) && isaPlayer.steamlevel < config.AutoKick_MinSteamProfileLevel && isaPlayer.steamlevel >= 0)
                     {
@@ -533,7 +536,6 @@ namespace Oxide.Plugins
                         KickPlayer(isaPlayer?.steamid, GetMsg("Profile Low Level", new Dictionary<string, string> { ["level"] = config.AutoKick_MinSteamProfileLevel.ToString() }), "C");
                     }
 
-                    LogDebug("Check for VPN");
                     Puts($"IP/CACHE| ID:{id} ADD:{address} RATING:{isaPlayer?.ipInfo?.rating} AGE: {isaPlayer.ipInfo?.lastcheck}");
                     if (config.AutoKickOn && config.AutoKick_BadIp && !HasPerm(id, PermissionWhitelistBadIPKick) && config.AutoKick_BadIp)
                     {
@@ -562,8 +564,6 @@ namespace Oxide.Plugins
             LogDebug("KIB 1");
             ISABan ban = IsBanned(isaPlayer?.steamid);
             LogDebug("KIB 2");
-            ISABan lban = IsBanned(isaPlayer?.lender?.steamid);
-            LogDebug("KIB 3");
             if (ban != null)
             {
                 if (!ban.steamid.ToString().Equals(isaPlayer.steamid))
@@ -575,7 +575,6 @@ namespace Oxide.Plugins
                     KickPlayer(isaPlayer?.steamid, ban.reason, "U");
                 }
             }
-            if (lban != null) KickPlayer(isaPlayer?.steamid, GetMsg("Lender Banned"), "U");
         }
 
         void AddBan(ISABan thisBan, bool doNative = true)
@@ -1268,9 +1267,16 @@ namespace Oxide.Plugins
         #region Data Handling
         bool IsPlayerDirty(string steamid)
         {
-            if (steamid.IsNullOrEmpty()) return false;
-            ISAPlayer isaPlayer = GetPlayerCache(steamid);
-            return isaPlayer != null && IsPlayerCached(steamid) && (ServerBanCount(isaPlayer) > 0 || isaPlayer?.steamCommunityBanned > 0 || isaPlayer?.steamNumberOfGameBans > 0 || isaPlayer?.steamVACBanned > 0);
+            try
+            {
+                if (steamid.IsNullOrEmpty()) return false;
+                ISAPlayer isaPlayer = GetPlayerCache(steamid);
+                return isaPlayer != null && IsPlayerCached(steamid) && (ServerBanCount(isaPlayer) > 0 || isaPlayer?.steamCommunityBanned > 0 || isaPlayer?.steamNumberOfGameBans > 0 || isaPlayer?.steamVACBanned > 0);
+            }
+            catch (NullReferenceException nre)
+            {
+                return false;
+            }
         }
 
         bool IsPlayerCached(string steamid) { return _playerData != null && _playerData.Count() > 0 && _playerData.ContainsKey(steamid); }
@@ -1321,57 +1327,75 @@ namespace Oxide.Plugins
 
         void GetPlayerReport(ISAPlayer isaPlayer, bool isConnected = true, bool isCommand = false, IPlayer cmdPlayer = null)
         {
-            if (isaPlayer == null || isaPlayer.steamid == null) return;
-            Dictionary<string, string> data =
-                       new Dictionary<string, string>
-                       {
-                           ["status"] = IsPlayerDirty(isaPlayer.steamid) ? "dirty" : "clean",
-                           ["steamid"] = isaPlayer.steamid,
-                           ["username"] = isaPlayer.personaname,
-                           ["serverBanCount"] = ServerBanCount(isaPlayer).ToString(),
-                           ["NumberOfGameBans"] = isaPlayer.steamNumberOfGameBans.ToString(),
-                           ["NumberOfVACBans"] = isaPlayer.steamNumberOfVACBans.ToString() + (isaPlayer.steamNumberOfVACBans > 0 ? $" Last({isaPlayer.steamDaysSinceLastBan}) days ago" : ""),
-                           ["EconomyBan"] = (!isaPlayer.steamEconomyBan.Equals("none")).ToString()
-                       };
-
-            if (IsPlayerDirty(isaPlayer.steamid) || isCommand)
+            try
             {
-                string report = GetMsg("User Dirty MSG", data);
-                if (config.BroadcastPlayerBanReport && isConnected && isCommand && !(config.BroadcastPlayerBanReportVacDays > isaPlayer.steamDaysSinceLastBan))
-                {
-                    BroadcastWithIcon(report.Replace(isaPlayer.steamid + ":", string.Empty).Replace(isaPlayer.steamid, string.Empty));
-                }
-                if (isCommand)
-                {
-                    SendReplyWithIcon(cmdPlayer, report.Replace(isaPlayer.steamid + ":", string.Empty).Replace(isaPlayer.steamid, string.Empty));
-                }
-            }
+                LogDebug($"Player report started");
+                LogDebug($"ngb:{isaPlayer.steamNumberOfGameBans} nov:{isaPlayer.steamNumberOfVACBans} dslb:{isaPlayer.steamDaysSinceLastBan} seb:{isaPlayer.steamEconomyBan}");
+                LogDebug($"IsPlayerDirty {IsPlayerDirty(isaPlayer.steamid)}");
+                LogDebug($"BanCount {ServerBanCount(isaPlayer)}");
+                LogDebug($"Player object persona:{isaPlayer.personaname}, steamId: {isaPlayer.steamid}");
 
-            if ((config.DiscordOnlySendDirtyReports && IsPlayerDirty(isaPlayer.steamid)) || !config.DiscordOnlySendDirtyReports)
-            {
-                IPlayer iPlayer = players.FindPlayer(isaPlayer.steamid);
-                DiscordSend(iPlayer.Id, iPlayer.Name, new EmbedFieldList()
-                {
-                    name = "Report",
-                    value = GetMsg("User Dirty DISCORD MSG", data),
-                    inline = true
-                });
+                if (isaPlayer == null || isaPlayer.steamid == null) return;
+                Dictionary<string, string> data =
+                           new Dictionary<string, string>
+                           {
+                               ["status"] = IsPlayerDirty(isaPlayer.steamid) ? "dirty" : "clean",
+                               ["steamid"] = isaPlayer.steamid,
+                               ["username"] = isaPlayer.personaname ?? "N/A",
+                               ["serverBanCount"] = ServerBanCount(isaPlayer).ToString(),
+                               ["NumberOfGameBans"] = isaPlayer.steamNumberOfGameBans.ToString(),
+                               ["NumberOfVACBans"] = isaPlayer.steamNumberOfVACBans.ToString() + (isaPlayer.steamNumberOfVACBans > 0 ? $" Last({isaPlayer.steamDaysSinceLastBan}) days ago" : ""),
+                               ["EconomyBan"] = (!isaPlayer.steamEconomyBan?.Equals("none")).ToString()
+                           };
 
-                if (config.RconBroadcast)
-                    RCon.Broadcast(RCon.LogType.Chat, new Chat.ChatEntry
+                LogDebug("Checking player status");
+                if (IsPlayerDirty(isaPlayer.steamid) || isCommand)
+                {
+                    LogDebug("Getting report");
+                    string report = GetMsg("User Dirty MSG", data);
+                    LogDebug("Checking if should broadcast");
+                    if (config.BroadcastPlayerBanReport && isConnected && isCommand && !(config.BroadcastPlayerBanReportVacDays > isaPlayer.steamDaysSinceLastBan))
                     {
-                        Message = GetMsg("User Dirty DISCORD MSG", data),
-                        UserId = isaPlayer.steamid,
-                        Username = isaPlayer.personaname,
-                        Time = Facepunch.Math.Epoch.Current
+                        LogDebug("Broadcasting");
+                        BroadcastWithIcon(report.Replace(isaPlayer.steamid + ":", string.Empty).Replace(isaPlayer.steamid, string.Empty));
+                    }
+                    if (isCommand)
+                    {
+                        LogDebug("Replying to command");
+                        SendReplyWithIcon(cmdPlayer, report.Replace(isaPlayer.steamid + ":", string.Empty).Replace(isaPlayer.steamid, string.Empty));
+                    }
+                }
+
+                if ((config.DiscordOnlySendDirtyReports && IsPlayerDirty(isaPlayer.steamid)) || !config.DiscordOnlySendDirtyReports)
+                {
+                    IPlayer iPlayer = players.FindPlayer(isaPlayer.steamid);
+                    LogDebug($"Sending to discord.");
+                    DiscordSend(iPlayer.Id, iPlayer.Name, new EmbedFieldList()
+                    {
+                        name = "Report",
+                        value = GetMsg("User Dirty DISCORD MSG", data),
+                        inline = true
                     });
 
+                    LogDebug($"Broadcasting via RCON {config.RconBroadcast}");
+                    if (config.RconBroadcast)
+                        RCon.Broadcast(RCon.LogType.Chat, new Chat.ChatEntry
+                        {
+                            Message = GetMsg("User Dirty DISCORD MSG", data),
+                            UserId = isaPlayer.steamid,
+                            Username = isaPlayer.personaname,
+                            Time = Facepunch.Math.Epoch.Current
+                        });
+
+                }
             }
+            catch (Exception e) { }
+
         }
 
         private void LogDebug(string txt)
         {
-            if (config.Debug || debug) Puts(txt);
+            if (config.Debug || debug) Puts($"DEBUG: {txt}");
         }
 
         void LoadData()
@@ -1444,7 +1468,8 @@ namespace Oxide.Plugins
                 return (config.AutoKick_BadIp
                     && isaPlayer.ipInfo.type?.ToLower() == "vpn" || isaPlayer.ipInfo.type?.ToLower() == "proxy" || isaPlayer.ipInfo?.proxy == "yes")
                     && !(config.AutoKick_IgnoreNvidia && isaPlayer.ipInfo.isCloudComputing);
-            } catch (Exception e)
+            }
+            catch (Exception e)
             {
                 Puts($"An error occured with the proxy check. Please report this to the developer. with the previous trailing logs", isaPlayer.ipInfo.ToString());
                 return false;
@@ -1498,9 +1523,9 @@ namespace Oxide.Plugins
 
         int ServerBanCount(ISAPlayer player)
         {
-            if (player == null) return 0;
             try
             {
+                if (player == null || player.bans == null) return 0;
                 return player.bans.Count();
             }
             catch (NullReferenceException)
@@ -1521,13 +1546,13 @@ namespace Oxide.Plugins
         bool HasReachedVacCeiling(ISAPlayer isaPlayer)
         {
             if (isaPlayer == null) return false;
-            return config.AutoKickOn && config.AutoVacBanCeiling >= 0 && config.AutoVacBanCeiling < (isaPlayer.steamNumberOfVACBans + (isaPlayer.lender != null ? isaPlayer.lender.steamNumberOfVACBans : 0));
+            return config.AutoKickOn && config.AutoVacBanCeiling >= 0 && config.AutoVacBanCeiling < (isaPlayer.steamNumberOfVACBans);
         }
 
         bool HasReachedGameBanCeiling(ISAPlayer isaPlayer)
         {
             if (isaPlayer == null) return false;
-            return config.AutoKickOn && config.AutoGameBanCeiling >= 0 && config.AutoGameBanCeiling < (isaPlayer.steamNumberOfGameBans + isaPlayer.lender?.steamNumberOfGameBans);
+            return config.AutoKickOn && config.AutoGameBanCeiling >= 0 && config.AutoGameBanCeiling < isaPlayer.steamNumberOfGameBans;
         }
 
         bool HasReachedTotalBanCeiling(ISAPlayer isaPlayer)
@@ -1546,7 +1571,7 @@ namespace Oxide.Plugins
         bool HasReachedServerCeiling(ISAPlayer isaPlayer)
         {
             if (isaPlayer == null) return false;
-            return config.AutoKickOn && config.AutoKickCeiling < (ServerBanCount(isaPlayer) + ServerBanCount(isaPlayer?.lender));
+            return config.AutoKickOn && config.AutoKickCeiling < (ServerBanCount(isaPlayer));
         }
 
         bool IsProfilePrivate(string steamid)
@@ -1795,6 +1820,33 @@ namespace Oxide.Plugins
         }
         #endregion
 
+        #region Log Helpers
+        private void handleLog(string message, string stackTrace, LogType type)
+        {
+            if (!type.Equals(LogType.Warning))
+                return;
+
+            var meshLog = new Regex(@"(^assets.*prefab).*?position (.*) on").Match(message);
+            if (!meshLog.Success || meshLog.Groups.Count < 3) return;
+
+            var offendingPrefab = meshLog.Groups[1].ToString();
+            var offendingPrefabPos = meshLog.Groups[2].ToString().ToVector3();
+
+            var entities = new List<BaseEntity>();
+            Vis.Entities(offendingPrefabPos, 5f, entities);
+
+            if (entities.Count < 1) return;
+
+            foreach (var entity in entities)
+            {
+                if (entity.PrefabName == offendingPrefab && !entity.IsDestroyed)
+                {
+                    entity.Kill();
+                }
+            }
+        }
+        #endregion
+
         #region Helpers 
         void SendReplyWithIcon(IPlayer player, string format, params object[] args)
         {
@@ -1895,13 +1947,13 @@ namespace Oxide.Plugins
             public string steamEconomyBan { get; set; }
             public int communityvisibilitystate { get; set; }
             public string personaname { get; set; }
-            public long? twitterBanId { get; set; }
+            //public long? twitterBanId { get; set; }
 
             public uint? cacheTimestamp { get; set; }
 
             public uint? lastConnected { get; set; }
             public List<ISABan> bans { get; set; }
-            public ISAPlayer lender { get; set; }
+            //public ISAPlayer lender { get; set; }
 
             public IPInfo ipInfo { get; set; }
 
