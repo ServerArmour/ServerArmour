@@ -1323,11 +1323,10 @@ namespace Oxide.Plugins
         void GetPlayerReport(ISAPlayer isaPlayer, bool isConnected = true, bool isCommand = false, IPlayer cmdPlayer = null)
         {
             Puts($"DEBUG: Player report started");
-            Puts($"DEBUG: {isaPlayer.steamNumberOfGameBans}\n {isaPlayer.steamNumberOfVACBans}\n {isaPlayer.steamDaysSinceLastBan}\n {isaPlayer.steamEconomyBan}");
+            Puts($"DEBUG: ngb:{isaPlayer.steamNumberOfGameBans} nov:{isaPlayer.steamNumberOfVACBans} dslb:{isaPlayer.steamDaysSinceLastBan} seb:{isaPlayer.steamEconomyBan}");
             Puts($"DEBUG: IsPlayerDirty {IsPlayerDirty(isaPlayer.steamid)}");
             Puts($"DEBUG: BanCount {ServerBanCount(isaPlayer)}");
-            Puts($"DEBUG: Player object");
-            Puts(isaPlayer.ToString()); 
+            Puts($"DEBUG: Player object persona:{isaPlayer.personaname}, steamId: {isaPlayer.steamid}");
 
             if (isaPlayer == null || isaPlayer.steamid == null) return;
             Dictionary<string, string> data =
@@ -1335,11 +1334,11 @@ namespace Oxide.Plugins
                        {
                            ["status"] = IsPlayerDirty(isaPlayer.steamid) ? "dirty" : "clean",
                            ["steamid"] = isaPlayer.steamid,
-                           ["username"] = isaPlayer.personaname,
+                           ["username"] = isaPlayer.personaname ?? "N/A",
                            ["serverBanCount"] = ServerBanCount(isaPlayer).ToString(),
                            ["NumberOfGameBans"] = isaPlayer.steamNumberOfGameBans.ToString(),
                            ["NumberOfVACBans"] = isaPlayer.steamNumberOfVACBans.ToString() + (isaPlayer.steamNumberOfVACBans > 0 ? $" Last({isaPlayer.steamDaysSinceLastBan}) days ago" : ""),
-                           ["EconomyBan"] = (!isaPlayer.steamEconomyBan.Equals("none")).ToString()
+                           ["EconomyBan"] = (!isaPlayer.steamEconomyBan?.Equals("none")).ToString()
                        };
 
             Puts("DEBUG: Checking player status");
