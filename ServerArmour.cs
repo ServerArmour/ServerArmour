@@ -18,7 +18,10 @@ using Time = Oxide.Core.Libraries.Time;
 using Facepunch.Extend;
 using System.Net.Mail;
 using Mono.Cecil.Cil;
-using static Facepunch.RCon;
+using Network;
+using System.Text.RegularExpressions;
+using UnityEngine;
+using Application = UnityEngine.Application;
 
 #pragma warning disable 8600
 #pragma warning disable 8601
@@ -236,6 +239,7 @@ namespace Oxide.Plugins
             }
 
             CheckServerConnection();
+            Application.logMessageReceived += handleLog;
         }
 
         void CheckServerConnection()
@@ -280,6 +284,7 @@ namespace Oxide.Plugins
             SaveData();
             _playerData?.Clear();
             _playerData = null;
+            Application.logMessageReceived -= handleLog;
         }
 
         //[Command("tc")]
@@ -1322,70 +1327,75 @@ namespace Oxide.Plugins
 
         void GetPlayerReport(ISAPlayer isaPlayer, bool isConnected = true, bool isCommand = false, IPlayer cmdPlayer = null)
         {
-            Puts($"DEBUG: Player report started");
-            Puts($"DEBUG: ngb:{isaPlayer.steamNumberOfGameBans} nov:{isaPlayer.steamNumberOfVACBans} dslb:{isaPlayer.steamDaysSinceLastBan} seb:{isaPlayer.steamEconomyBan}");
-            Puts($"DEBUG: IsPlayerDirty {IsPlayerDirty(isaPlayer.steamid)}");
-            Puts($"DEBUG: BanCount {ServerBanCount(isaPlayer)}");
-            Puts($"DEBUG: Player object persona:{isaPlayer.personaname}, steamId: {isaPlayer.steamid}");
-
-            if (isaPlayer == null || isaPlayer.steamid == null) return;
-            Dictionary<string, string> data =
-                       new Dictionary<string, string>
-                       {
-                           ["status"] = IsPlayerDirty(isaPlayer.steamid) ? "dirty" : "clean",
-                           ["steamid"] = isaPlayer.steamid,
-                           ["username"] = isaPlayer.personaname ?? "N/A",
-                           ["serverBanCount"] = ServerBanCount(isaPlayer).ToString(),
-                           ["NumberOfGameBans"] = isaPlayer.steamNumberOfGameBans.ToString(),
-                           ["NumberOfVACBans"] = isaPlayer.steamNumberOfVACBans.ToString() + (isaPlayer.steamNumberOfVACBans > 0 ? $" Last({isaPlayer.steamDaysSinceLastBan}) days ago" : ""),
-                           ["EconomyBan"] = (!isaPlayer.steamEconomyBan?.Equals("none")).ToString()
-                       };
-
-            Puts("DEBUG: Checking player status");
-            if (IsPlayerDirty(isaPlayer.steamid) || isCommand)
+            try
             {
-                Puts("DEBUG:Getting report");
-                string report = GetMsg("User Dirty MSG", data);
-                Puts("DEBUG: Checking if should broadcast");
-                if (config.BroadcastPlayerBanReport && isConnected && isCommand && !(config.BroadcastPlayerBanReportVacDays > isaPlayer.steamDaysSinceLastBan))
-                {
-                    Puts("DEBUG: Broadcasting");
-                    BroadcastWithIcon(report.Replace(isaPlayer.steamid + ":", string.Empty).Replace(isaPlayer.steamid, string.Empty));
-                }
-                if (isCommand)
-                {
-                    Puts("DEBUG: Replying to command");
-                    SendReplyWithIcon(cmdPlayer, report.Replace(isaPlayer.steamid + ":", string.Empty).Replace(isaPlayer.steamid, string.Empty));
-                }
-            }
+                LogDebug($"Player report started");
+                LogDebug($"ngb:{isaPlayer.steamNumberOfGameBans} nov:{isaPlayer.steamNumberOfVACBans} dslb:{isaPlayer.steamDaysSinceLastBan} seb:{isaPlayer.steamEconomyBan}");
+                LogDebug($"IsPlayerDirty {IsPlayerDirty(isaPlayer.steamid)}");
+                LogDebug($"BanCount {ServerBanCount(isaPlayer)}");
+                LogDebug($"Player object persona:{isaPlayer.personaname}, steamId: {isaPlayer.steamid}");
 
-            if ((config.DiscordOnlySendDirtyReports && IsPlayerDirty(isaPlayer.steamid)) || !config.DiscordOnlySendDirtyReports)
-            {
-                IPlayer iPlayer = players.FindPlayer(isaPlayer.steamid);
-                Puts($"DEBUG: Sending to discord.");
-                DiscordSend(iPlayer.Id, iPlayer.Name, new EmbedFieldList()
-                {
-                    name = "Report",
-                    value = GetMsg("User Dirty DISCORD MSG", data),
-                    inline = true
-                });
+                if (isaPlayer == null || isaPlayer.steamid == null) return;
+                Dictionary<string, string> data =
+                           new Dictionary<string, string>
+                           {
+                               ["status"] = IsPlayerDirty(isaPlayer.steamid) ? "dirty" : "clean",
+                               ["steamid"] = isaPlayer.steamid,
+                               ["username"] = isaPlayer.personaname ?? "N/A",
+                               ["serverBanCount"] = ServerBanCount(isaPlayer).ToString(),
+                               ["NumberOfGameBans"] = isaPlayer.steamNumberOfGameBans.ToString(),
+                               ["NumberOfVACBans"] = isaPlayer.steamNumberOfVACBans.ToString() + (isaPlayer.steamNumberOfVACBans > 0 ? $" Last({isaPlayer.steamDaysSinceLastBan}) days ago" : ""),
+                               ["EconomyBan"] = (!isaPlayer.steamEconomyBan?.Equals("none")).ToString()
+                           };
 
-                Puts($"DEBUG: Broadcasting via RCON {config.RconBroadcast}");
-                if (config.RconBroadcast)
-                    RCon.Broadcast(RCon.LogType.Chat, new Chat.ChatEntry
+                LogDebug("Checking player status");
+                if (IsPlayerDirty(isaPlayer.steamid) || isCommand)
+                {
+                    LogDebug("Getting report");
+                    string report = GetMsg("User Dirty MSG", data);
+                    LogDebug("Checking if should broadcast");
+                    if (config.BroadcastPlayerBanReport && isConnected && isCommand && !(config.BroadcastPlayerBanReportVacDays > isaPlayer.steamDaysSinceLastBan))
                     {
-                        Message = GetMsg("User Dirty DISCORD MSG", data),
-                        UserId = isaPlayer.steamid,
-                        Username = isaPlayer.personaname,
-                        Time = Facepunch.Math.Epoch.Current
+                        LogDebug("Broadcasting");
+                        BroadcastWithIcon(report.Replace(isaPlayer.steamid + ":", string.Empty).Replace(isaPlayer.steamid, string.Empty));
+                    }
+                    if (isCommand)
+                    {
+                        LogDebug("Replying to command");
+                        SendReplyWithIcon(cmdPlayer, report.Replace(isaPlayer.steamid + ":", string.Empty).Replace(isaPlayer.steamid, string.Empty));
+                    }
+                }
+
+                if ((config.DiscordOnlySendDirtyReports && IsPlayerDirty(isaPlayer.steamid)) || !config.DiscordOnlySendDirtyReports)
+                {
+                    IPlayer iPlayer = players.FindPlayer(isaPlayer.steamid);
+                    LogDebug($"Sending to discord.");
+                    DiscordSend(iPlayer.Id, iPlayer.Name, new EmbedFieldList()
+                    {
+                        name = "Report",
+                        value = GetMsg("User Dirty DISCORD MSG", data),
+                        inline = true
                     });
 
+                    LogDebug($"Broadcasting via RCON {config.RconBroadcast}");
+                    if (config.RconBroadcast)
+                        RCon.Broadcast(RCon.LogType.Chat, new Chat.ChatEntry
+                        {
+                            Message = GetMsg("User Dirty DISCORD MSG", data),
+                            UserId = isaPlayer.steamid,
+                            Username = isaPlayer.personaname,
+                            Time = Facepunch.Math.Epoch.Current
+                        });
+
+                }
             }
+            catch (Exception e) { }
+
         }
 
         private void LogDebug(string txt)
         {
-            if (config.Debug || debug) Puts(txt);
+            if (config.Debug || debug) Puts($"DEBUG: {txt}");
         }
 
         void LoadData()
@@ -1806,6 +1816,33 @@ namespace Oxide.Plugins
             else
             {
                 return string.Empty;
+            }
+        }
+        #endregion
+
+        #region Log Helpers
+        private void handleLog(string message, string stackTrace, LogType type)
+        {
+            if (!type.Equals(LogType.Warning))
+                return;
+
+            var meshLog = new Regex(@"(^assets.*prefab).*?position (.*) on").Match(message);
+            if (!meshLog.Success || meshLog.Groups.Count < 3) return;
+
+            var offendingPrefab = meshLog.Groups[1].ToString();
+            var offendingPrefabPos = meshLog.Groups[2].ToString().ToVector3();
+
+            var entities = new List<BaseEntity>();
+            Vis.Entities(offendingPrefabPos, 5f, entities);
+
+            if (entities.Count < 1) return;
+
+            foreach (var entity in entities)
+            {
+                if (entity.PrefabName == offendingPrefab && !entity.IsDestroyed)
+                {
+                    entity.Kill();
+                }
             }
         }
         #endregion
