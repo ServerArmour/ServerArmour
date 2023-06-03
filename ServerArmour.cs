@@ -35,7 +35,7 @@ using Application = UnityEngine.Application;
  */
 namespace Oxide.Plugins
 {
-    [Info("Server Armour", "Pho3niX90", "0.8.3")]
+    [Info("Server Armour", "Pho3niX90", "0.8.4")]
     [Description("Protect your server! Auto ban known hackers, scripters and griefer accounts, and notify server owners of threats.")]
     class ServerArmour : CovalencePlugin
     {
