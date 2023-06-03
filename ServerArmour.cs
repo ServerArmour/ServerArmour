@@ -17,7 +17,6 @@ using Oxide.Game.Rust.Libraries;
 using Time = Oxide.Core.Libraries.Time;
 using Facepunch.Extend;
 using System.Net.Mail;
-using Mono.Cecil.Cil;
 using Network;
 using System.Text.RegularExpressions;
 using UnityEngine;
@@ -37,7 +36,7 @@ using Application = UnityEngine.Application;
  */
 namespace Oxide.Plugins
 {
-    [Info("Server Armour", "Pho3niX90", "0.8.2")]
+    [Info("Server Armour", "Pho3niX90", "0.8.3")]
     [Description("Protect your server! Auto ban known hackers, scripters and griefer accounts, and notify server owners of threats.")]
     class ServerArmour : CovalencePlugin
     {
@@ -1366,7 +1365,7 @@ namespace Oxide.Plugins
                     }
                 }
 
-                if ((config.DiscordOnlySendDirtyReports && IsPlayerDirty(isaPlayer.steamid)) || !config.DiscordOnlySendDirtyReports)
+                if (config.DiscordJoinReports && ((config.DiscordOnlySendDirtyReports && IsPlayerDirty(isaPlayer.steamid)) || !config.DiscordOnlySendDirtyReports))
                 {
                     IPlayer iPlayer = players.FindPlayer(isaPlayer.steamid);
                     LogDebug($"Sending to discord.");
@@ -2178,6 +2177,7 @@ namespace Oxide.Plugins
             public string DiscordBanWebhookURL = "https://support.discordapp.com/hc/en-us/articles/228383668-Intro-to-Webhooks";
             public bool DiscordQuickConnect = true;
             public bool DiscordOnlySendDirtyReports = true;
+            public bool DiscordJoinReports = true;
             public bool DiscordKickReport = true;
             public bool DiscordBanReport = true;
             public bool DiscordNotifyGameBan = true;
@@ -2252,6 +2252,7 @@ namespace Oxide.Plugins
                 GetConfig(ref DiscordWebhookURL, "Discord", "Webhook URL");
                 GetConfig(ref DiscordBanWebhookURL, "Discord", "Bans Webhook URL");
                 GetConfig(ref DiscordQuickConnect, "Discord", "Show Quick Connect On report");
+                GetConfig(ref DiscordJoinReports, "Discord", "Send Join Player Reports");
                 GetConfig(ref DiscordOnlySendDirtyReports, "Discord", "Send Only Dirty Player Reports");
                 GetConfig(ref DiscordNotifyGameBan, "Discord", "Notify when a player has received a game ban");
                 GetConfig(ref DiscordKickReport, "Discord", "Send Kick Report");
