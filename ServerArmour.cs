@@ -16,7 +16,6 @@ using WebSocketSharp;
 using Oxide.Game.Rust.Libraries;
 using Time = Oxide.Core.Libraries.Time;
 using Facepunch.Extend;
-using System.Net.Mail;
 using Network;
 using System.Text.RegularExpressions;
 using UnityEngine;
