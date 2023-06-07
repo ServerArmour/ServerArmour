@@ -47,6 +47,7 @@ namespace Oxide.Plugins
         //StringComparison defaultCompare = StringComparison.InvariantCultureIgnoreCase;
         const string DATE_FORMAT = "yyyy/MM/dd HH:mm";
         const string DATE_FORMAT2 = "yyyy-MM-dd HH:mm:ss";
+        Regex logRegex = new Regex(@"(^assets.*prefab).*?position (.*) on");
         ulong ServerArmourId = 76561199060671869L;
 
         bool debug = false;
@@ -55,8 +56,6 @@ namespace Oxide.Plugins
 
         private Dictionary<string, string> headers;
         string adminIds = "";
-
-        private static ServerArmour _instance;
         #endregion
 
         #region Libraries
@@ -148,7 +147,6 @@ namespace Oxide.Plugins
         #region Hooks
         void OnServerInitialized(bool first)
         {
-            _instance = this;
             LoadData();
 
             if (first)
@@ -327,16 +325,6 @@ namespace Oxide.Plugins
         void OnUserUnbanned(string name, string id, string ipAddress)
         {
             SaUnban(id);
-        }
-
-        /// <summary>
-        /// Processes commands on an interval basis, this is only needed for servers that do not have RCON enabled (not yet implemented).
-        /// </summary>
-        /// <param name="playerId"></param>
-        void APIActions(string playerId)
-        {
-            // do webcall
-            //process instructions.
         }
 
         void OnUserBanned(string name, string id, string ipAddress, string reason)
@@ -690,61 +678,7 @@ namespace Oxide.Plugins
             if (serverStarted)
                 player?.Reply(string.Format("Banned User{0}: {1} - \"{2}\" for \"{3}\"{4}", new object[] { durationSuffix, playerId, playerUsername, reason, str3 }));
         }
-        /*
-                private static bool TryGetBanExpiry(ConsoleSystem.Arg arg, int n, out long expiry, out string durationSuffix)
-                {
-                    expiry = arg.GetTimestamp(n, (long)-1);
-                    durationSuffix = null;
-                    int current = Epoch.Current;
-                    if (expiry > (long)0 && expiry <= (long)current)
-                    {
-                        arg.ReplyWith("Expiry time is in the past");
-                        return false;
-                    }
-                    durationSuffix = (expiry > (long)0 ? string.Concat(" for ", (expiry - (long)current).FormatSecondsLong()) : "");
-                    return true;
-                }
 
-
-                public static void banid(ConsoleSystem.Arg arg)
-                {
-                    long num;
-                    string str;
-                    ulong num1 = arg.GetUInt64(0, (ulong)0);
-                    string str1 = arg.GetString(1, "unnamed");
-                    string str2 = arg.GetString(2, "no reason");
-                    if (num1 < 70000000000000000L)
-                    {
-                        arg.ReplyWith(string.Concat("This doesn't appear to be a 64bit steamid: ", num1));
-                        return;
-                    }
-                    ServerUsers.User user = ServerUsers.Get(num1);
-                    if (user != null && user.@group == ServerUsers.UserGroup.Banned)
-                    {
-                        arg.ReplyWith(string.Concat("User ", num1, " is already banned"));
-                        return;
-                    }
-                    if (!Admin.TryGetBanExpiry(arg, 3, out num, out str))
-                    {
-                        return;
-                    }
-                    string str3 = "";
-                    BasePlayer basePlayer = BasePlayer.FindByID(num1);
-                    if (basePlayer != null && basePlayer.IsConnected)
-                    {
-                        str1 = basePlayer.displayName;
-                        if (basePlayer.IsConnected && basePlayer.net.connection.ownerid != 0 && basePlayer.net.connection.ownerid != basePlayer.net.connection.userid)
-                        {
-                            str3 = string.Concat(str3, string.Format(" and also banned ownerid {0}", basePlayer.net.connection.ownerid));
-                            ServerUsers.Set(basePlayer.net.connection.ownerid, ServerUsers.UserGroup.Banned, basePlayer.displayName, arg.GetString(1, string.Format("Family share owner of {0}", basePlayer.net.connection.userid)), num);
-                        }
-                        Chat.Broadcast(string.Concat(new string[] { "Kickbanning ", basePlayer.displayName, str, " (", str2, ")" }), "SERVER", "#eee", (ulong)0);
-                        Net.sv.Kick(basePlayer.net.connection, string.Concat("Banned", str, ": ", str2), false);
-                    }
-                    ServerUsers.Set(num1, ServerUsers.UserGroup.Banned, str1, str2, num);
-                    arg.ReplyWith(string.Format("Banned User{0}: {1} - \"{2}\" for \"{3}\"{4}", new object[] { str, num1, str1, str2, str3 }));
-                }
-        */
         bool NativeUnban(string playerId, IPlayer admin = null)
         {
             ulong playerIdLong = 0;
@@ -1813,7 +1747,6 @@ namespace Oxide.Plugins
         #endregion
 
         #region Log Helpers
-        Regex logRegex = new Regex(@"(^assets.*prefab).*?position (.*) on");
         private void HandleLog(string message, string stackTrace, LogType type)
         {
             if (!type.Equals(LogType.Warning))
@@ -1904,14 +1837,13 @@ namespace Oxide.Plugins
             {
                 time = DateTime.ParseExact(stringDate.Replace("T", " ").Replace(".000Z", ""), DATE_FORMAT2, null);
             }
-            _instance.Puts(time.ToString(DATE_FORMAT));
             return time;
         }
 
         private static DateTime ConvertUnixToDateTime(long unixTimeStamp)
         {
             // Unix timestamp is seconds past epoch
-            System.DateTime dtDateTime = Epoch;
+            DateTime dtDateTime = Epoch;
             dtDateTime = dtDateTime.AddSeconds(unixTimeStamp).ToLocalTime();
             return dtDateTime;
         }
