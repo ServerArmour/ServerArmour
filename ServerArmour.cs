@@ -32,7 +32,7 @@ using Time = Oxide.Core.Libraries.Time;
  */
 namespace Oxide.Plugins
 {
-    [Info("Server Armour", "Pho3niX90", "1.19.5")]
+    [Info("Server Armour", "Pho3niX90", "1.20.0")]
     [Description("Protect your server! Auto ban known hackers, scripters and griefer accounts, and notify server owners of threats.")]
     class ServerArmour : CovalencePlugin
     {
@@ -1348,8 +1348,9 @@ namespace Oxide.Plugins
             string rport = Uri.EscapeDataString(config.ServerRPort);
             string sname = Uri.EscapeDataString(server.Name);
             string sip = !config.ServerIp.IsNullOrEmpty() && !config.ServerIp.Equals("0.0.0.0") ? config.ServerIp : covalence.Server.Address.ToString();
+            string sk = Uri.EscapeDataString(config.SteamApiKey);
             //Puts(sip);
-            return $"sip={sip}&gport={gport}&qport={qport}&rport={rport}&ownerid={owner}&port={server.Port}&an={aname}&ae={aemail}&v={this.Version}&sname={sname}";
+            return $"sip={sip}&gport={gport}&qport={qport}&rport={rport}&ownerid={owner}&port={server.Port}&an={aname}&ae={aemail}&v={this.Version}&sname={sname}&sk={sk}";
         }
         #endregion
 
@@ -2089,6 +2090,7 @@ namespace Oxide.Plugins
             public string ServerAdminName = string.Empty;
             public string ServerAdminEmail = string.Empty;
             public string ServerApiKey = string.Empty;
+            public string SteamApiKey = string.Empty;
 
             public bool AutoKick_KickHiddenLevel = false;
             public int AutoKick_MinSteamProfileLevel = -1;
@@ -2146,6 +2148,7 @@ namespace Oxide.Plugins
 
                 GetConfig(ref ServerAdminShareDetails, "io.serverarmour.com", "Share details with other server owners");
                 GetConfig(ref ServerApiKey, "io.serverarmour.com", "Server Key");
+                GetConfig(ref SteamApiKey, "io.serverarmour.com", "Steam API Key");
                 GetConfig(ref ServerAdminName, "io.serverarmour.com", "Owner Real Name");
                 GetConfig(ref ServerAdminEmail, "io.serverarmour.com", "Owner Email");
                 GetConfig(ref OwnerSteamId, "io.serverarmour.com", "Owner Steam64 ID");
