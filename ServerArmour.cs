@@ -1,25 +1,22 @@
-using Newtonsoft.Json;
-
 using ConVar;
 using Facepunch;
+using Facepunch.Extend;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-
 using Oxide.Core;
 using Oxide.Core.Libraries;
 using Oxide.Core.Libraries.Covalence;
 using Oxide.Core.Plugins;
+using Oxide.Game.Rust.Libraries;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
-using WebSocketSharp;
-using Oxide.Game.Rust.Libraries;
-using Time = Oxide.Core.Libraries.Time;
-using Facepunch.Extend;
-using Network;
 using System.Text.RegularExpressions;
 using UnityEngine;
+using WebSocketSharp;
 using Application = UnityEngine.Application;
+using Time = Oxide.Core.Libraries.Time;
 
 #pragma warning disable 8600
 #pragma warning disable 8601
@@ -35,7 +32,7 @@ using Application = UnityEngine.Application;
  */
 namespace Oxide.Plugins
 {
-    [Info("Server Armour", "Pho3niX90", "0.8.4")]
+    [Info("Server Armour", "Pho3niX90", "1.19.5")]
     [Description("Protect your server! Auto ban known hackers, scripters and griefer accounts, and notify server owners of threats.")]
     class ServerArmour : CovalencePlugin
     {
@@ -46,13 +43,13 @@ namespace Oxide.Plugins
         private double cacheLifetime = 1; // minutes
         private SAConfig config;
         string specifier = "G";
-        bool debug = false;
         CultureInfo culture = CultureInfo.CreateSpecificCulture("en-US");
         //StringComparison defaultCompare = StringComparison.InvariantCultureIgnoreCase;
         const string DATE_FORMAT = "yyyy/MM/dd HH:mm";
         const string DATE_FORMAT2 = "yyyy-MM-dd HH:mm:ss";
         ulong ServerArmourId = 76561199060671869L;
 
+        bool debug = false;
         bool apiConnected = false;
         bool serverStarted = false;
 
@@ -85,8 +82,10 @@ namespace Oxide.Plugins
         #endregion
 
         #region Plugins
-        [PluginReference] Plugin DiscordApi, DiscordMessages, BetterChat, Ember, Clans;
 
+#pragma warning disable 0649
+        [PluginReference] Plugin DiscordApi, DiscordMessages, BetterChat, Ember, Clans;
+#pragma warning restore 0649
         void DiscordSend(string steamId, string name, EmbedFieldList report, int color = 39423, bool isBan = false)
         {
             string webHook;
@@ -140,7 +139,7 @@ namespace Oxide.Plugins
             }
             else
             {
-                LogWarning("No discord API plugin loaded, will not publish to hook!");
+                LogWarning("No discord API _plugin loaded, will not publish to hook!");
             }
         }
 
@@ -233,17 +232,17 @@ namespace Oxide.Plugins
 
             for (int i = 0, n = _admins.Length; i < n; i++)
             {
-                adminIds += $"{_admins[i].Substring(0, 17)}" + (i < _admins.Length - 1 ? "," : "");
+                adminIds += $"{_admins[i].Substring(0, 17)}" + (i < _admins.Length - 1 ? "," : string.Empty);
             }
 
             CheckServerConnection();
-            Application.logMessageReceived += handleLog;
+            Application.logMessageReceived += HandleLog;
         }
 
         void CheckServerConnection()
         {
             string body = ServerGetString();
-            doRequest("check_server", body, (code, response) =>
+            DoRequest("check_server", body, (code, response) =>
             {
                 JObject obj = null;
 
@@ -282,7 +281,7 @@ namespace Oxide.Plugins
             SaveData();
             _playerData?.Clear();
             _playerData = null;
-            Application.logMessageReceived -= handleLog;
+            Application.logMessageReceived -= HandleLog;
         }
 
         //[Command("tc")]
@@ -313,7 +312,7 @@ namespace Oxide.Plugins
         {
             if (apiConnected)
             {
-                _playerData = _playerData?.Where(pair => minutesAgo((uint)pair.Value.cacheTimestamp) < cacheLifetime)
+                _playerData = _playerData?.Where(pair => MinutesAgo((uint)pair.Value.cacheTimestamp) < cacheLifetime)
                                  .ToDictionary(pair => pair.Key,
                                                pair => pair.Value);
             }
@@ -375,7 +374,7 @@ namespace Oxide.Plugins
                 return;
             string messageClean = Uri.EscapeDataString(message);
             string subjectClean = Uri.EscapeDataString(subject);
-            doRequest(
+            DoRequest(
                 $"player/{reporter.UserIDString}/addf7",
                 $"target={targetId}&subject={subjectClean}&message={messageClean}", (c, s) => { });
         }
@@ -391,21 +390,21 @@ namespace Oxide.Plugins
         {
             if (player == null || player.Id == null) return;
             KickIfBanned(GetPlayerCache(player?.Id));
-            _webCheckPlayer(player.Id, player.Address, player.IsConnected);
+            WebCheckPlayer(player.Id, player.Address, player.IsConnected);
         }
 
         void GetPlayerBans(string playerId, string playerName)
         {
             KickIfBanned(GetPlayerCache(playerId));
-            _webCheckPlayer(playerId, "0.0.0.0", true);
+            WebCheckPlayer(playerId, "0.0.0.0", true);
         }
 
-        void _webCheckPlayer(string id, string address, bool connected)
+        void WebCheckPlayer(string id, string address, bool connected)
         {
             if (!serverStarted)
                 return;
 
-            doRequest($"player/{id}?bans=true&linked={config.AutoKick_ActiveBans}", $"ipAddress={address}",
+            DoRequest($"player/{id}?bans=true&linked={config.AutoKick_ActiveBans}", $"ipAddress={address}",
                 (code, response) =>
                 {
                     LogDebug("Getting player from API");
@@ -417,7 +416,7 @@ namespace Oxide.Plugins
                     }
                     catch (Exception)
                     {
-                        timer.Once(30, () => _webCheckPlayer(id, address, connected));
+                        timer.Once(30, () => WebCheckPlayer(id, address, connected));
                         return;
                     }
 
@@ -588,7 +587,7 @@ namespace Oxide.Plugins
             string reason = Uri.EscapeDataString(thisBan.reason);
             try
             {
-                doRequest($"player/{thisBan.steamid}/addban", $"reason={reason}&dateTime={thisBan.created}&dateUntil={thisBan.banUntil}", (code, response) =>
+                DoRequest($"player/{thisBan.steamid}/addban", $"reason={reason}&dateTime={thisBan.created}&dateUntil={thisBan.banUntil}", (code, response) =>
                 {
                     // ISABan thisBan = new ISABan { serverName = server.Name, date = dateTime, reason = banreason, serverIp = thisServerIp, banUntil = dateBanUntil };
                     if (IsPlayerCached(thisBan.steamid.ToString()))
@@ -801,7 +800,7 @@ namespace Oxide.Plugins
 
             if (serverStarted)
             {
-                doRequest($"player/ban/pardon/{iPlayer.Id}", $"", (code, response) =>
+                DoRequest($"player/ban/pardon/{iPlayer.Id}", $"", (code, response) =>
                 {
                     if (config.RconBroadcast)
                         RCon.Broadcast(RCon.LogType.Chat, new Chat.ChatEntry
@@ -997,14 +996,7 @@ namespace Oxide.Plugins
             teamMembers = teamMembers.Distinct().ToList();
             teamMembers?.Remove(ulong.Parse(playerId));
 
-            try
-            {
-                ignoreSearch = bool.Parse(args[3]);
-            }
-            catch (Exception)
-            {
-
-            }
+            bool.TryParse(args[3], out ignoreSearch);
 
             API_BanPlayer(player, playerId, reason, length, ignoreSearch);
 
@@ -1044,14 +1036,14 @@ namespace Oxide.Plugins
         {
             return ((int)Math.Round((ban - DateTime.UtcNow).TotalMinutes)).ToString();
         }
-        DateTime _BanUntil(string banLength)
+        DateTime BanUntil(string banLength)
         {
             int digit = 10;
             string del = "y";
 
             if (!banLength.ToLower().Equals("permanent"))
             {
-                digit = int.Parse(new string(banLength.Where(char.IsDigit).ToArray()));
+                int.TryParse(new string(banLength.Where(char.IsDigit).ToArray()), out digit);
                 del = new string(banLength.Where(char.IsLetter).ToArray());
             }
 
@@ -1271,7 +1263,7 @@ namespace Oxide.Plugins
                 ISAPlayer isaPlayer = GetPlayerCache(steamid);
                 return isaPlayer != null && IsPlayerCached(steamid) && (ServerBanCount(isaPlayer) > 0 || isaPlayer?.steamCommunityBanned > 0 || isaPlayer?.steamNumberOfGameBans > 0 || isaPlayer?.steamVACBanned > 0);
             }
-            catch (NullReferenceException nre)
+            catch (NullReferenceException)
             {
                 return false;
             }
@@ -1292,15 +1284,15 @@ namespace Oxide.Plugins
         bool IsCacheValid(string id)
         {
             if (!_playerData.ContainsKey(id)) return false;
-            return minutesAgo((uint)_playerData[id].cacheTimestamp) < cacheLifetime;
+            return MinutesAgo((uint)_playerData[id].cacheTimestamp) < cacheLifetime;
         }
 
-        bool dateIsPast(DateTime to)
+        bool DateIsPast(DateTime to)
         {
             return DateTime.UtcNow > to;
         }
 
-        double minutesAgo(uint to)
+        double MinutesAgo(uint to)
         {
             return Math.Round((_time.GetUnixTimestamp() - to) / 60.0);
         }
@@ -1387,7 +1379,7 @@ namespace Oxide.Plugins
 
                 }
             }
-            catch (Exception e) { }
+            catch (Exception) { }
 
         }
 
@@ -1467,7 +1459,7 @@ namespace Oxide.Plugins
                     && isaPlayer.ipInfo.type?.ToLower() == "vpn" || isaPlayer.ipInfo.type?.ToLower() == "proxy" || isaPlayer.ipInfo?.proxy == "yes")
                     && !(config.AutoKick_IgnoreNvidia && isaPlayer.ipInfo.isCloudComputing);
             }
-            catch (Exception e)
+            catch (Exception)
             {
                 Puts($"An error occured with the proxy check. Please report this to the developer. with the previous trailing logs", isaPlayer.ipInfo.ToString());
                 return false;
@@ -1496,7 +1488,7 @@ namespace Oxide.Plugins
                     return isaPlayer?.bans?.Count() > 0 ? isaPlayer?.bans?.FirstOrDefault(x => (x.serverIp.Equals(config.ServerIp)
                         || x.serverIp.Equals(covalence.Server.Address.ToString())
                         || (x.adminSteamId != null && x.adminSteamId.Contains(config.OwnerSteamId)))
-                        && !dateIsPast(x.banUntillDateTime())) : null;
+                        && !DateIsPast(x.BanUntillDateTime())) : null;
 
                 }
 
@@ -1505,7 +1497,7 @@ namespace Oxide.Plugins
 
                 return isaPlayer?.bans?.Count() > 0 ?
                     isaPlayer?.bans?.FirstOrDefault(x => x.serverIp.Equals(config.ServerIp)
-                    && !dateIsPast(x.banUntillDateTime())) : null;
+                    && !DateIsPast(x.BanUntillDateTime())) : null;
 
             }
             catch (InvalidOperationException ioe)
@@ -1616,15 +1608,11 @@ namespace Oxide.Plugins
              * If time not specified, default to 100 years
              ***/
             string lengthOfBan = !length.IsNullOrEmpty() && !length.Equals("-1") ? length : "permanent";
-            string dateBanUntil = _BanUntil(lengthOfBan).ToString(DATE_FORMAT);
+            string dateBanUntil = BanUntil(lengthOfBan).ToString(DATE_FORMAT);
 
             if (ignoreSearch)
             {
-                try
-                {
-                    banSteamId = ulong.Parse(banPlayer);
-                }
-                catch (Exception)
+                if (!ulong.TryParse(banPlayer, out banSteamId))
                 {
                     SendReplyWithIcon(player, GetMsg("Ban Syntax"));
                     return;
@@ -1652,6 +1640,12 @@ namespace Oxide.Plugins
                     string playersFoundNamesString = String.Join(", ", playersFoundNames.ToArray());
                     errMsg = GetMsg("Multiple Players Found", new Dictionary<string, string> { ["players"] = playersFoundNamesString });
                     break;
+            }
+
+            if (iPlayer.IsAdmin)
+            {
+                Puts($"You cannot ban a admin! Issued by {player?.Id ?? player?.Name}");
+                return;
             }
 
 
@@ -1698,7 +1692,7 @@ namespace Oxide.Plugins
                 {
                     // Add ember support.
                     if (Ember != null)
-                        Ember?.Call("Ban", playerId, BanMinutes(_BanUntil(lengthOfBan)), banReason, true, config.OwnerSteamId, Player.FindById(player.Id));
+                        Ember?.Call("Ban", playerId, BanMinutes(BanUntil(lengthOfBan)), banReason, true, config.OwnerSteamId, Player.FindById(player.Id));
 
                     if (config.RconBroadcast)
                         RCon.Broadcast(RCon.LogType.Chat, new Chat.ChatEntry
@@ -1731,7 +1725,7 @@ namespace Oxide.Plugins
 
                 try
                 {
-                    SilentBan(ulong.Parse(playerId), TimeSpan.FromMinutes((_BanUntil(lengthOfBan) - DateTime.Now).TotalMinutes), banReason, player);
+                    SilentBan(ulong.Parse(playerId), TimeSpan.FromMinutes((BanUntil(lengthOfBan) - DateTime.Now).TotalMinutes), banReason, player);
                 }
                 catch (Exception e)
                 {
@@ -1819,12 +1813,13 @@ namespace Oxide.Plugins
         #endregion
 
         #region Log Helpers
-        private void handleLog(string message, string stackTrace, LogType type)
+        Regex logRegex = new Regex(@"(^assets.*prefab).*?position (.*) on");
+        private void HandleLog(string message, string stackTrace, LogType type)
         {
             if (!type.Equals(LogType.Warning))
                 return;
 
-            var meshLog = new Regex(@"(^assets.*prefab).*?position (.*) on").Match(message);
+            var meshLog = logRegex.Match(message);
             if (!meshLog.Success || meshLog.Groups.Count < 3) return;
 
             var offendingPrefab = meshLog.Groups[1].ToString();
@@ -2035,7 +2030,7 @@ namespace Oxide.Plugins
             {
                 return ConvertToTimestamp(banUntil);
             }
-            public DateTime banUntillDateTime()
+            public DateTime BanUntillDateTime()
             {
                 DateTime t;
                 try
@@ -2070,7 +2065,7 @@ namespace Oxide.Plugins
                 string attachments = String.Join(", ", aObject.GetValue("attachments").Select(jv => (string)jv).ToArray());
                 string suspiciousNoRecoilShots = aObject.GetValue("suspiciousNoRecoilShots").ToString();
 
-                doRequest($"player/{player.UserIDString}/addarkan/nr",
+                DoRequest($"player/{player.UserIDString}/addarkan/nr",
                     $"vp={violationProbability}&sc={shotsCnt}&ammo={ammoShortName}&weapon={weaponShortName}&attach={attachments}&snrs={suspiciousNoRecoilShots}", (c, r) => { });
             }
         }
@@ -2091,7 +2086,7 @@ namespace Oxide.Plugins
                 string hitsData = aObject.GetValue("hitsData").ToString();
                 string hitInfoProjectileDistance = aObject.GetValue("hitInfoProjectileDistance").ToString();
 
-                doRequest($"player/{player.UserIDString}/addarkan/aim",
+                DoRequest($"player/{player.UserIDString}/addarkan/aim",
                     $"attach={attachments}&ammo={ammoShortName}&weapon={weaponShortName}&dmg={damage}&bp={bodypart}&distance={hitInfoProjectileDistance}&hits={hitsData}", (c, r) => { });
             }
         }
@@ -2099,9 +2094,9 @@ namespace Oxide.Plugins
         #endregion
 
         #region webrequest
-        private void doRequest(string url, string body, Action<int, string> callback, int retryInSeconds = 0)
+        private void DoRequest(string url, string body, Action<int, string> callback, int retryInSeconds = 0)
         {
-            webrequest.Enqueue($"{api_hostname}/api/v1/plugin/{url}", body, (code, response) =>
+            webrequest.Enqueue($"{api_hostname}/api/v1/_plugin/{url}", body, (code, response) =>
             {
                 if (code < 299)
                 {
@@ -2118,7 +2113,7 @@ namespace Oxide.Plugins
                         break;
                 }
                 if (retryInSeconds > 0)
-                    timer.Once(retryInSeconds, () => doRequest(url, body, callback));
+                    timer.Once(retryInSeconds, () => DoRequest(url, body, callback));
 
             }, this, RequestMethod.POST, headers);
         }
@@ -2192,10 +2187,10 @@ namespace Oxide.Plugins
             public bool IgnoreAdmins = true;
 
             // Plugin reference
-            private ServerArmour plugin;
+            private ServerArmour _plugin;
             public SAConfig(ServerArmour plugin)
             {
-                this.plugin = plugin;
+                this._plugin = plugin;
                 /**
                  * Load all saved config values
                  * */
@@ -2267,16 +2262,16 @@ namespace Oxide.Plugins
             {
                 if (path.Length == 0) return;
 
-                if (plugin.Config.Get(path) == null)
+                if (_plugin.Config.Get(path) == null)
                 {
                     SetConfig(ref variable, path);
-                    plugin.PrintWarning($"Added new field to config: {string.Join("/", path)}");
+                    _plugin.PrintWarning($"Added new field to config: {string.Join("/", path)}");
                 }
 
-                variable = (T)Convert.ChangeType(plugin.Config.Get(path), typeof(T));
+                variable = (T)Convert.ChangeType(_plugin.Config.Get(path), typeof(T));
             }
 
-            public void SetConfig<T>(ref T variable, params string[] path) => plugin.Config.Set(path.Concat(new object[] { variable }).ToArray());
+            public void SetConfig<T>(ref T variable, params string[] path) => _plugin.Config.Set(path.Concat(new object[] { variable }).ToArray());
         }
 
         protected override void LoadDefaultConfig() => PrintWarning("Generating new configuration file.");
@@ -2297,100 +2292,6 @@ namespace Oxide.Plugins
         #endregion
 
         #region BOT Helpers
-        Dictionary<ulong, string> _codes = new Dictionary<ulong, string>();
-
-        /// <summary>
-        /// Get's an authentication code for the steam64Id
-        /// </summary>
-        /// <param name="steamId"></param>
-        /// <returns></returns>
-        private string GenerateAuthCode(ulong steamId)
-        {
-            // Let's check if the player already has a code. 
-            if (_codes.ContainsKey(steamId))
-                return _codes[steamId];
-
-            // Lets generate the first code, in hopes it's original.
-            string code = _GenerateCode();
-
-            while (CodeExistsAndValid(code))
-            { // Lets make sure it's original.
-                code = _GenerateCode(); // If not, let's generate a new one. 
-            }
-
-            _codes.Add(steamId, code); // Original code was found, let's save it for the player. 
-            return code;
-        }
-
-        /// <summary>
-        /// Generates a random code.
-        /// </summary>
-        /// <returns></returns>
-        private string _GenerateCode()
-        {
-            var code = "";
-            var rnd = new System.Random();
-            for (var i = 0; i < 4; i++)
-            {
-                code += rnd.Next(10).ToString();
-            }
-            return code;
-        }
-
-        /// <summary>
-        /// Checks if the code was already assigned to a player. 
-        /// </summary>
-        /// <param name="code"></param>
-        /// <returns></returns>
-        bool CodeExistsAndValid(string code) => !code.IsNullOrEmpty() && _codes.Values.Contains(code);
-
-        [Command("sa.auth.check")]
-        void cmdCheckCode(IPlayer player, string command, string[] args)
-        {
-            if (!player.IsServer) return;
-            ulong steamId = 0;
-
-            if (ulong.TryParse(args[0], out steamId))
-            {
-                if (_codes.ContainsKey(steamId))
-                {
-                    // success
-                    SendReplyWithIcon(player, _codes[steamId]);
-                }
-                else
-                {
-                    // no key found
-                    SendReplyWithIcon(player, $"null");
-                }
-            }
-            else
-            {
-                SendReplyWithIcon(player, $"null");
-                // no steamid provided.
-            }
-        }
-
-        /// <summary>
-        /// Gives an auth code to the connected player, and saves it for later authing..
-        /// </summary>
-        /// <param name="args"></param>
-        /// <returns></returns>
-        [Command("sa.auth")]
-        void cmdAuthGen(IPlayer player, string command, string[] args)
-        {
-            if (player.IsServer) return;
-            ulong steamId = ulong.Parse(player.Id);
-            string code = "";
-            if (_codes.ContainsKey(steamId))
-            {
-                code = _codes[steamId];
-            }
-            else
-            {
-                code = GenerateAuthCode(steamId);
-            }
-            SendReplyWithIcon(player, $"Your auth code is <color=#d8b300>{code}</color>");
-        }
 
         #endregion
     }
