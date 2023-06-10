@@ -359,3 +359,4 @@ MigrationBackup/
 /.idea/misc.xml
 /AutoDemoRecord.cs
 /StashWarning.cs
+/EspDetection.cs
