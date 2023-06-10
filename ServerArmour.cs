@@ -32,7 +32,7 @@ using Time = Oxide.Core.Libraries.Time;
  */
 namespace Oxide.Plugins
 {
-    [Info("Server Armour", "Pho3niX90", "1.20.0")]
+    [Info("Server Armour", "Pho3niX90", "1.22.2")]
     [Description("Protect your server! Auto ban known hackers, scripters and griefer accounts, and notify server owners of threats.")]
     class ServerArmour : CovalencePlugin
     {
@@ -172,8 +172,8 @@ namespace Oxide.Plugins
             if (string.IsNullOrEmpty(config.ServerGPort))
             {
                 config.ServerGPort = server.Port.ToString();
+                SaveConfig();
             }
-            SaveConfig();
             Puts($"Server IP is {config.ServerIp} / {server.Address}");
             Puts($"Server Port is {server.Port}");
 
