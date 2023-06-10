@@ -32,7 +32,7 @@ using Time = Oxide.Core.Libraries.Time;
  */
 namespace Oxide.Plugins
 {
-    [Info("Server Armour", "Pho3niX90", "1.22.2")]
+    [Info("Server Armour", "Pho3niX90", "1.22.3")]
     [Description("Protect your server! Auto ban known hackers, scripters and griefer accounts, and notify server owners of threats.")]
     class ServerArmour : CovalencePlugin
     {
@@ -270,6 +270,10 @@ namespace Oxide.Plugins
                         return;
                     }
                     Puts("Server Armour has initialized.");
+                } else
+                {
+                    timer.Once(5, CheckServerConnection);
+                    return;
                 }
             });
         }
@@ -2029,7 +2033,7 @@ namespace Oxide.Plugins
         #region webrequest
         private void DoRequest(string url, string body, Action<int, string> callback, int retryInSeconds = 0)
         {
-            webrequest.Enqueue($"{api_hostname}/api/v1/_plugin/{url}", body, (code, response) =>
+            webrequest.Enqueue($"{api_hostname}/api/v1/plugin/{url}", body, (code, response) =>
             {
                 if (code < 299)
                 {
