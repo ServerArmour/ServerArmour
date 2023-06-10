@@ -17,6 +17,11 @@ This tool is a combination of wealth of information regarding players, from thei
 ## Discord: nd54sKX
 You can add the Server Armour bot to your discord by following this link:
 
+## Steam API Key
+A new config field has been added since version 1, "Steam API Key", whilst this is not necassary to work, it does provide you with a small docker container for your servers to check and reference information. Since the influx of servers we are not able to keep up with the information from our steam keys alone, and some information is cached. 
+
+This also gives you basic premium on the website. 
+
 [Add the ServerArmour discord bot to your discord.](https://discord.com/api/oauth2/authorize?client_id=781921686202220575&permissions=281373767&scope=bot)
 ## Permissions
 ```
@@ -117,6 +122,7 @@ serverarmour.whitelist.familyshare
     "Owner Real Name": "", // your name, the owner
     "Owner Steam64 ID": "", // the owners steam64id
     "Server Key": "", // Get this from the website
+    "Steam API Key": "" // This is your steam api key, not needed, but if provided, will give you more accurate and up to date information.
     "Share details with other server owners": true, // For future use, so that other server admins can send you emails for evidence etc, or discuss a ban.
     "Submit Arkan Data": true // if arkan data can be submitted to the cloud server, for analysis. 
   },
