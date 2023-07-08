@@ -32,7 +32,7 @@ using Time = Oxide.Core.Libraries.Time;
  */
 namespace Oxide.Plugins
 {
-    [Info("Server Armour", "Pho3niX90", "1.22.3")]
+    [Info("Server Armour", "Pho3niX90", "2.14.17")]
     [Description("Protect your server! Auto ban known hackers, scripters and griefer accounts, and notify server owners of threats.")]
     class ServerArmour : CovalencePlugin
     {
@@ -48,7 +48,7 @@ namespace Oxide.Plugins
         const string DATE_FORMAT = "yyyy/MM/dd HH:mm";
         const string DATE_FORMAT2 = "yyyy-MM-dd HH:mm:ss";
         Regex logRegex = new Regex(@"(^assets.*prefab).*?position (.*) on");
-        ulong ServerArmourId = 76561199060671869L;
+        ulong ServerArmourId = 76561199044451528L;
 
         bool debug = false;
         bool apiConnected = false;
@@ -56,6 +56,7 @@ namespace Oxide.Plugins
 
         private Dictionary<string, string> headers;
         string adminIds = "";
+        Timer updateTimer;
         #endregion
 
         #region Libraries
@@ -175,7 +176,13 @@ namespace Oxide.Plugins
                 SaveConfig();
             }
             Puts($"Server IP is {config.ServerIp} / {server.Address}");
-            Puts($"Server Port is {server.Port}");
+
+
+            string ServerGPort = ConVar.Server.port.ToString();
+            string ServerQPort = ConVar.Server.queryport > 0 ? ConVar.Server.queryport.ToString() : ConVar.Server.port.ToString();
+            string ServerRPort = Facepunch.RCon.Port.ToString();
+
+            Puts($"Server Ports are \nGame Port: {ServerGPort}\nQuery Port:{ServerQPort}\nRCON Port: {ServerRPort}");
 
             RegPerm(PermissionToBan);
             RegPerm(PermissionToUnBan);
@@ -262,6 +269,8 @@ namespace Oxide.Plugins
                     {
                         apiConnected = true;
                         Puts("connected to SA API");
+                        ServerStatusUpdate();
+                        updateTimer = timer.Every(3 * 60, ServerStatusUpdate);
                     }
                     else
                     {
@@ -270,7 +279,8 @@ namespace Oxide.Plugins
                         return;
                     }
                     Puts("Server Armour has initialized.");
-                } else
+                }
+                else
                 {
                     timer.Once(5, CheckServerConnection);
                     return;
@@ -284,6 +294,8 @@ namespace Oxide.Plugins
             _playerData?.Clear();
             _playerData = null;
             Application.logMessageReceived -= HandleLog;
+            if (updateTimer != null && !updateTimer.Destroyed)
+                updateTimer.Destroy();
         }
 
         //[Command("tc")]
@@ -1353,8 +1365,21 @@ namespace Oxide.Plugins
             string sname = Uri.EscapeDataString(server.Name);
             string sip = !config.ServerIp.IsNullOrEmpty() && !config.ServerIp.Equals("0.0.0.0") ? config.ServerIp : covalence.Server.Address.ToString();
             string sk = Uri.EscapeDataString(config.SteamApiKey);
-            //Puts(sip);
-            return $"sip={sip}&gport={gport}&qport={qport}&rport={rport}&ownerid={owner}&port={server.Port}&an={aname}&ae={aemail}&v={this.Version}&sname={sname}&sk={sk}";
+
+            string fps = Uri.EscapeDataString(Performance.report.frameRate.ToString());
+            string fpsa = Uri.EscapeDataString(Performance.report.frameRateAverage.ToString());
+            string mp = Uri.EscapeDataString(Admin.ServerInfo().MaxPlayers.ToString());
+            string cp = Uri.EscapeDataString(Admin.ServerInfo().Players.ToString());
+            string qp = Uri.EscapeDataString(Admin.ServerInfo().Queued.ToString());
+            return $"sip={sip}&gport={gport}&qport={qport}&rport={rport}&ownerid={owner}&port={server.Port}" +
+                $"&an={aname}&ae={aemail}&v={this.Version}&sname={sname}&sk={sk}&fps={fps}&fpsa={fpsa}&cp={cp}&qp={qp}&mp={mp}";
+        }
+        #endregion
+
+        #region Server Directory Methods
+        private void ServerStatusUpdate()
+        {
+            DoRequest("status", ServerGetString(), (c, r) => { });
         }
         #endregion
 
@@ -2069,8 +2094,8 @@ namespace Oxide.Plugins
             // Config default vars
             public string ServerIp = "";
             public string ServerGPort = ConVar.Server.port.ToString();
-            public string ServerQPort = ConVar.Server.queryport.ToString();
-            public string ServerRPort = "";
+            public string ServerQPort = ConVar.Server.queryport > 0 ? ConVar.Server.queryport.ToString() : ConVar.Server.port.ToString();
+            public string ServerRPort = Facepunch.RCon.Port.ToString();
             public bool Debug = false;
             public bool ShowProtectedMsg = true;
             public bool AutoKickOn = true;
