@@ -173,8 +173,8 @@ namespace Oxide.Plugins
             if (string.IsNullOrEmpty(config.ServerGPort))
             {
                 config.ServerGPort = server.Port.ToString();
+                SaveConfig();
             }
-            SaveConfig();
             Puts($"Server IP is {config.ServerIp} / {server.Address}");
 
 
