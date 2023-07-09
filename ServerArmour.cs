@@ -32,7 +32,7 @@ using Time = Oxide.Core.Libraries.Time;
  */
 namespace Oxide.Plugins
 {
-    [Info("Server Armour", "Pho3niX90", "2.14.17")]
+    [Info("Server Armour", "Pho3niX90", "2.23.2")]
     [Description("Protect your server! Auto ban known hackers, scripters and griefer accounts, and notify server owners of threats.")]
     class ServerArmour : CovalencePlugin
     {
@@ -175,7 +175,7 @@ namespace Oxide.Plugins
                 config.ServerGPort = server.Port.ToString();
                 SaveConfig();
             }
-            Puts($"Server IP is {config.ServerIp} / {server.Address}");
+            Puts($"Server IP is {covalence.Server.Address} / {server.Address}");
 
 
             string ServerGPort = ConVar.Server.port.ToString();
@@ -1353,9 +1353,11 @@ namespace Oxide.Plugins
             Interface.Oxide.DataFileSystem.WriteObject($"ServerArmour/playerData", _playerData, true);
         }
 
+        /***
+         * WARNING: Modifying any data below to falsify information (online players, fps) will get your push rights revoked permanently, without notice. And possibly blacklisted from the servers directory.  
+         */
         string ServerGetString()
         {
-
             string aname = Uri.EscapeDataString(config.ServerAdminName);
             string aemail = Uri.EscapeDataString(config.ServerAdminEmail);
             string owner = Uri.EscapeDataString(config.OwnerSteamId);
@@ -1364,6 +1366,7 @@ namespace Oxide.Plugins
             string rport = Uri.EscapeDataString(config.ServerRPort);
             string sname = Uri.EscapeDataString(server.Name);
             string sip = !config.ServerIp.IsNullOrEmpty() && !config.ServerIp.Equals("0.0.0.0") ? config.ServerIp : covalence.Server.Address.ToString();
+            string sipcov = covalence.Server.Address.ToString();
             string sk = Uri.EscapeDataString(config.SteamApiKey);
 
             string fps = Uri.EscapeDataString(Performance.report.frameRate.ToString());
@@ -1371,7 +1374,7 @@ namespace Oxide.Plugins
             string mp = Uri.EscapeDataString(Admin.ServerInfo().MaxPlayers.ToString());
             string cp = Uri.EscapeDataString(Admin.ServerInfo().Players.ToString());
             string qp = Uri.EscapeDataString(Admin.ServerInfo().Queued.ToString());
-            return $"sip={sip}&gport={gport}&qport={qport}&rport={rport}&ownerid={owner}&port={server.Port}" +
+            return $"sip={sip}&sipcov={sipcov}&gport={gport}&qport={qport}&rport={rport}&ownerid={owner}&port={server.Port}" +
                 $"&an={aname}&ae={aemail}&v={this.Version}&sname={sname}&sk={sk}&fps={fps}&fpsa={fpsa}&cp={cp}&qp={qp}&mp={mp}";
         }
         #endregion
@@ -2007,6 +2010,22 @@ namespace Oxide.Plugins
             }
         }
 
+        #endregion
+
+        #region ESP Detection
+        private void API_EspDetected(string jString)
+        {
+            JObject aObject = JObject.Parse(jString);
+            DoRequest($"player/{aObject.GetValue("steamId")}/addesp", aObject.ToString(), (c, r) => { });
+        }
+        #endregion
+
+        #region Stash Warning System
+        private void API_StashFoundTrigger(string jString)
+        {
+            JObject aObject = JObject.Parse(jString);
+            DoRequest($"player/{aObject.GetValue("steamId")}/addstashtrigger", aObject.ToString(), (c, r) => { });
+        }
         #endregion
 
         #region Arkan
