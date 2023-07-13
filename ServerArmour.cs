@@ -9,12 +9,13 @@ using Oxide.Core.Libraries.Covalence;
 using Oxide.Core.Plugins;
 using Oxide.Game.Rust.Libraries;
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Text.RegularExpressions;
-using System.Threading.Tasks;
 using UnityEngine;
+using UnityEngine.Networking;
 using WebSocketSharp;
 using Application = UnityEngine.Application;
 using Time = Oxide.Core.Libraries.Time;
@@ -33,7 +34,7 @@ using Time = Oxide.Core.Libraries.Time;
  */
 namespace Oxide.Plugins
 {
-    [Info("Server Armour", "Pho3niX90", "2.29.20")]
+    [Info("Server Armour", "Pho3niX90", "2.29.25")]
     [Description("Protect your server! Auto ban known hackers, scripters and griefer accounts, and notify server owners of threats.")]
     class ServerArmour : CovalencePlugin
     {
@@ -168,21 +169,18 @@ namespace Oxide.Plugins
             // CheckOnlineUsers();
             // CheckLocalBans();
 
-            Puts("Server Armour is being initialized.");
-
             if (string.IsNullOrEmpty(config.ServerGPort))
             {
                 config.ServerGPort = server.Port.ToString();
                 SaveConfig();
             }
-            Puts($"Server IP is {covalence.Server.Address} / {server.Address}");
 
 
             string ServerGPort = ConVar.Server.port.ToString();
             string ServerQPort = ConVar.Server.queryport > 0 ? ConVar.Server.queryport.ToString() : ConVar.Server.port.ToString();
             string ServerRPort = Facepunch.RCon.Port.ToString();
 
-            Puts($"Server Ports are \nGame Port: {ServerGPort}\nQuery Port:{ServerQPort}\nRCON Port: {ServerRPort}");
+            Puts($"Server Ports are, Game Port: {ServerGPort} | Query Port:{ServerQPort} | RCON Port: {ServerRPort}");
 
             RegPerm(PermissionToBan);
             RegPerm(PermissionToUnBan);
@@ -267,14 +265,14 @@ namespace Oxide.Plugins
                     if (msg.Equals("connected"))
                     {
                         apiConnected = true;
-                        Puts("connected to SA API");
+                        Puts("Connected to SA API");
                         ServerStatusUpdate();
                         updateTimer = timer.Every(3 * 60, ServerStatusUpdate);
                     }
                     else
                     {
                         LogError("Server Armour has not initialized. Is your apikey correct? Get it from https://io.serverarmour.com/my-servers or join discord for support https://discord.gg/jxvRaPR");
-                        Interface.Oxide.UnloadPlugin(Name);
+                        timer.Once(5, () => Interface.Oxide.ReloadPlugin(Name));
                         return;
                     }
                     Puts("Server Armour has initialized.");
@@ -1378,6 +1376,7 @@ namespace Oxide.Plugins
         private void ServerStatusUpdate()
         {
             DoRequest("status", ServerGetString(), (c, r) => { });
+            timer.Once(15, () => CheckForUpdate());
         }
         #endregion
 
@@ -2026,7 +2025,7 @@ namespace Oxide.Plugins
         private void API_EspDetected(string jString)
         {
             JObject aObject = JObject.Parse(jString);
-            DoRequest($"player/{aObject.GetValue("steamId")}/addesp", $"radarUrl={aObject.GetValue("radarUrl")}&violations={aObject.GetValue("violations")}", (c, r) => {});
+            DoRequest($"player/{aObject.GetValue("steamId")}/addesp", $"radarUrl={aObject.GetValue("radarUrl")}&violations={aObject.GetValue("violations")}", (c, r) => { });
         }
         #endregion
 
@@ -2176,7 +2175,6 @@ namespace Oxide.Plugins
         #endregion
 
         #region Configuration
-
         private class SAConfig
         {
             // Config default vars
@@ -2236,6 +2234,7 @@ namespace Oxide.Plugins
             public string ClanBanPrefix = "Assoc Ban -> {playerId}: {reason}";
             public bool ClanBanTeams = true;
             public bool IgnoreAdmins = true;
+            public bool AutoUpdate = true;
 
             // Plugin reference
             private ServerArmour _plugin;
@@ -2307,6 +2306,8 @@ namespace Oxide.Plugins
                 GetConfig(ref ClanBanPrefix, "Clan Ban", "Reason Prefix");
                 GetConfig(ref ClanBanTeams, "Clan Ban", "Ban Native Team Members");
 
+                GetConfig(ref AutoUpdate, "Plugin", "Auto Update");
+
                 plugin.SaveConfig();
             }
 
@@ -2337,7 +2338,7 @@ namespace Oxide.Plugins
             }
             catch (InvalidCastException)
             {
-                PrintError("Your config seems to be corrupted. If you are upgrading from 0.5.*, please backup your config, delete it, reload, and repopulate the new config file.");
+                PrintError("Your config seems to be corrupted.");
                 Interface.Oxide.UnloadPlugin(Name);
             }
         }
@@ -2345,6 +2346,91 @@ namespace Oxide.Plugins
 
         #region BOT Helpers
 
+        #endregion
+
+        #region Auto Update
+        private string manifestUrl = "https://io.serverarmour.com/api/v1/stats/version/plugin/";
+
+        private void CheckForUpdate()
+        {
+            webrequest.Enqueue($"{manifestUrl}{this.Name}", string.Empty, (code, data) => HandleUpdateRequest(this, code, data), this);
+            timer.Once(15, () => CheckSupportingPlugins());
+        }
+
+        private void CheckSupportingPlugins()
+        {
+            var myPlugins = plugins.GetAll().Where(x => x.Author == this.Author);
+            myPlugins.ToList().ForEach(plugin =>
+            {
+                webrequest.Enqueue($"{manifestUrl}{plugin.Name}", string.Empty, (code, data) => HandleUpdateRequest(this, code, data), this);
+            });
+        }
+
+        private bool IsUpdateAvailable(string latestVersionFromApi)
+        {
+            Version currentVersion = new Version(this.Version.ToString());
+            Version latestVersion = new Version(latestVersionFromApi);
+
+            int comparison = currentVersion.CompareTo(latestVersion);
+
+            if (comparison < 0)
+            {
+                Puts("An update is available!");
+                return true;
+            }
+
+            return false;
+        }
+
+        private void HandleUpdateRequest(Plugin plugin, int code, string data)
+        {
+            if (code != 200)
+            {
+                Puts("Failed to retrieve update information.");
+                return;
+            }
+
+            try
+            {
+                var jObject = JObject.Parse(data);
+                var success = bool.Parse(jObject.GetValue("success").ToString());
+                if (!success)
+                {
+                    return;
+                }
+                var latestVersion = jObject.GetValue("latestVersion").ToString();
+                var downloadUrl = jObject.GetValue("downloadUrl").ToString();
+
+                if (IsUpdateAvailable(latestVersion) && config.AutoUpdate)
+                {
+                    ServerMgr.Instance.StartCoroutine(StartDownload(plugin, downloadUrl, latestVersion));
+                }
+            }
+            catch (Exception ex)
+            {
+                Puts($"Failed to parse update information: {ex.Message}");
+            }
+        }
+
+        private IEnumerator StartDownload(Plugin plugin, string downloadUrl, string newVersion)
+        {
+            PrintWarning($"Updating {plugin.Name} (version {this.Version} -> {newVersion})");
+            var www = new UnityWebRequest(downloadUrl)
+            {
+                downloadHandler = new DownloadHandlerFile(plugin.Filename)
+            };
+
+            yield return www.SendWebRequest();
+
+            if (www.responseCode == 200)
+            {
+                Puts("Update downloaded successfully!");
+            }
+            else
+            {
+                Puts($"Failed to download update: {www.error}");
+            }
+        }
         #endregion
     }
 }
