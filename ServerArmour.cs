@@ -13,6 +13,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Text.RegularExpressions;
+using System.Threading.Tasks;
 using UnityEngine;
 using WebSocketSharp;
 using Application = UnityEngine.Application;
@@ -32,7 +33,7 @@ using Time = Oxide.Core.Libraries.Time;
  */
 namespace Oxide.Plugins
 {
-    [Info("Server Armour", "Pho3niX90", "2.23.2")]
+    [Info("Server Armour", "Pho3niX90", "2.29.20")]
     [Description("Protect your server! Auto ban known hackers, scripters and griefer accounts, and notify server owners of threats.")]
     class ServerArmour : CovalencePlugin
     {
@@ -71,7 +72,6 @@ namespace Oxide.Plugins
 
         const string PermissionWhitelistRecentVacKick = "serverarmour.whitelist.recentvac";
         const string PermissionWhitelistBadIPKick = "serverarmour.whitelist.badip";
-        const string PermissionWhitelistKeywordKick = "serverarmour.whitelist.keyword";
         const string PermissionWhitelistVacCeilingKick = "serverarmour.whitelist.vacceiling";
         const string PermissionWhitelistServerCeilingKick = "serverarmour.whitelist.banceiling";
         const string PermissionWhitelistGameBanCeilingKick = "serverarmour.whitelist.gamebanceiling";
@@ -83,7 +83,7 @@ namespace Oxide.Plugins
 
         #region Plugins
 
-#pragma warning disable 0649
+#pragma warning disable 0649    
         [PluginReference] Plugin DiscordApi, DiscordMessages, BetterChat, Ember, Clans;
 #pragma warning restore 0649
         void DiscordSend(string steamId, string name, EmbedFieldList report, int color = 39423, bool isBan = false)
@@ -190,7 +190,6 @@ namespace Oxide.Plugins
             RegPerm(PermissionAdminWebsite);
 
             RegPerm(PermissionWhitelistBadIPKick);
-            RegPerm(PermissionWhitelistKeywordKick);
             RegPerm(PermissionWhitelistRecentVacKick);
             RegPerm(PermissionWhitelistServerCeilingKick);
             RegPerm(PermissionWhitelistVacCeilingKick);
@@ -332,7 +331,6 @@ namespace Oxide.Plugins
             }
         }
 
-
         void OnPluginLoaded(Plugin plugin)
         {
             if (plugin.Title == "BetterChat") RegisterTag();
@@ -461,14 +459,11 @@ namespace Oxide.Plugins
                     //string lSteamId = GetFamilyShare(isaPlayer.steamid);
                     //
 
-                    //LogDebug("Check for a twitter game ban");
-                    //if (config.AutoKick_KickTwitterGameBanned && !HasPerm(pSteamId, PermissionWhitelistTwitterBan))
-                    //{
-                    //    if (isaPlayer.twitterBanId > 0)
-                    //    {
-                    //        KickPlayer(isaPlayer?.steamid, $"https://twitter.com/rusthackreport/status/{isaPlayer.twitterBanId}", "C");
-                    //    }
-                    //}
+                    LogDebug("Check for a twitter/eac game ban");
+                    if (config.AutoKick_KickTwitterGameBanned && !HasPerm(pSteamId, PermissionWhitelistTwitterBan) && isaPlayer.eacBans.Count > 0)
+                    {
+                        KickPlayer(isaPlayer?.steamid, $"https://twitter.com/rusthackreport/status/{isaPlayer.eacBans[isaPlayer.eacBans.Count - 1]}", "C");
+                    }
 
                     LogDebug("Check for a recent vac");
                     bool pRecentVac = (isaPlayer.steamNumberOfVACBans > 0 || isaPlayer.steamDaysSinceLastBan > 0)
@@ -1906,6 +1901,7 @@ namespace Oxide.Plugins
             public int communityvisibilitystate { get; set; }
             public string personaname { get; set; }
             //public long? twitterBanId { get; set; }
+            public List<EacBan> eacBans { get; set; }
 
             public uint? cacheTimestamp { get; set; }
 
@@ -1975,6 +1971,20 @@ namespace Oxide.Plugins
 #pragma warning restore 0649
         }
 
+        public class EacBan
+        {
+#pragma warning disable 0649
+            public string id;
+            public string steamid;
+            public string createdAt;
+            public string lastChecked;
+            public string text;
+            public string steamProfile;
+            public bool isCron;
+            public bool isTemp;
+#pragma warning restore 0649
+        }
+
         public class ISABan
         {
 #pragma warning disable 0649
@@ -2016,7 +2026,7 @@ namespace Oxide.Plugins
         private void API_EspDetected(string jString)
         {
             JObject aObject = JObject.Parse(jString);
-            DoRequest($"player/{aObject.GetValue("steamId")}/addesp", aObject.ToString(), (c, r) => { });
+            DoRequest($"player/{aObject.GetValue("steamId")}/addesp", $"radarUrl={aObject.GetValue("radarUrl")}&violations={aObject.GetValue("violations")}", (c, r) => {});
         }
         #endregion
 
@@ -2024,7 +2034,14 @@ namespace Oxide.Plugins
         private void API_StashFoundTrigger(string jString)
         {
             JObject aObject = JObject.Parse(jString);
-            DoRequest($"player/{aObject.GetValue("steamId")}/addstashtrigger", aObject.ToString(), (c, r) => { });
+            Puts(jString);
+            DoRequest($"player/{aObject.GetValue("steamId")}/addstashtrigger",
+                $"isFalsePositive={aObject.GetValue("isFalsePositive")}&" +
+                $"isClanMember={aObject.GetValue("isClanMember")}&" +
+                $"location={aObject.GetValue("location")}&" +
+                $"position={aObject.GetValue("position")}&" +
+                $"stashOwnerSteamId={aObject.GetValue("stashOwnerSteamId")}"
+                , (c, r) => { });
         }
         #endregion
 
@@ -2097,6 +2114,58 @@ namespace Oxide.Plugins
                     timer.Once(retryInSeconds, () => DoRequest(url, body, callback));
 
             }, this, RequestMethod.POST, headers);
+        }
+        private void CalcElo(string steamIdKiller, string steamIdVictim, string killInfo, Action<int, string> callback, int retryInSeconds = 0)
+        {
+            webrequest.Enqueue($"{api_hostname}/api/v1/elo/{steamIdKiller}/{steamIdVictim}", killInfo, (code, response) =>
+            {
+                if (code < 299)
+                {
+                    Interface.CallHook("OnEloChange", JObject.Parse(response));
+                    if (callback != null)
+                        callback(code, response);
+                    return;
+                }
+
+                switch (code)
+                {
+                    case 429:
+                        Puts("Rate limited. Upgrade package on https://io.serverarmour.com");
+                        break;
+                    case 500:
+                        break;
+                }
+                if (retryInSeconds > 0)
+                    timer.Once(retryInSeconds, () => CalcElo(steamIdKiller, steamIdVictim, killInfo, callback));
+
+            }, this, RequestMethod.POST, headers);
+        }
+
+        private void FetchElo(string steamId) => FetchEloUpdate(steamId, (c, r) => { });
+        private void FetchEloUpdate(string steamId, Action<int, string> callback, int retryInSeconds = 0)
+        {
+            webrequest.Enqueue($"{api_hostname}/api/v1/elo/{steamId}", null, (code, response) =>
+            {
+                if (code < 299)
+                {
+                    Interface.CallHook("OnEloUpdate", JObject.Parse(response));
+                    Puts(response);
+                    callback(code, response);
+                    return;
+                }
+
+                switch (code)
+                {
+                    case 429:
+                        Puts("Rate limited. Upgrade package on https://io.serverarmour.com");
+                        break;
+                    case 500:
+                        break;
+                }
+                if (retryInSeconds > 0)
+                    timer.Once(retryInSeconds, () => FetchEloUpdate(steamId, callback));
+
+            }, this, RequestMethod.GET, headers);
         }
         #endregion
 
