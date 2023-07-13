@@ -71,7 +71,6 @@ namespace Oxide.Plugins
 
         const string PermissionWhitelistRecentVacKick = "serverarmour.whitelist.recentvac";
         const string PermissionWhitelistBadIPKick = "serverarmour.whitelist.badip";
-        const string PermissionWhitelistKeywordKick = "serverarmour.whitelist.keyword";
         const string PermissionWhitelistVacCeilingKick = "serverarmour.whitelist.vacceiling";
         const string PermissionWhitelistServerCeilingKick = "serverarmour.whitelist.banceiling";
         const string PermissionWhitelistGameBanCeilingKick = "serverarmour.whitelist.gamebanceiling";
@@ -190,7 +189,6 @@ namespace Oxide.Plugins
             RegPerm(PermissionAdminWebsite);
 
             RegPerm(PermissionWhitelistBadIPKick);
-            RegPerm(PermissionWhitelistKeywordKick);
             RegPerm(PermissionWhitelistRecentVacKick);
             RegPerm(PermissionWhitelistServerCeilingKick);
             RegPerm(PermissionWhitelistVacCeilingKick);
@@ -331,7 +329,6 @@ namespace Oxide.Plugins
                                                pair => pair.Value);
             }
         }
-
 
         void OnPluginLoaded(Plugin plugin)
         {
