@@ -34,7 +34,7 @@ using Time = Oxide.Core.Libraries.Time;
  */
 namespace Oxide.Plugins
 {
-    [Info("Server Armour", "Pho3niX90", "2.29.27")]
+    [Info("Server Armour", "Pho3niX90", "2.29.28")]
     [Description("Protect your server! Auto ban known hackers, scripters and griefer accounts, and notify server owners of threats.")]
     class ServerArmour : CovalencePlugin
     {
@@ -2038,7 +2038,6 @@ namespace Oxide.Plugins
         private void API_StashFoundTrigger(string jString)
         {
             JObject aObject = JObject.Parse(jString);
-            Puts(jString);
             DoRequest($"player/{aObject.GetValue("steamId")}/addstashtrigger",
                 $"isFalsePositive={aObject.GetValue("isFalsePositive")}&" +
                 $"isClanMember={aObject.GetValue("isClanMember")}&" +
@@ -2153,7 +2152,6 @@ namespace Oxide.Plugins
                 if (code < 299)
                 {
                     Interface.CallHook("OnEloUpdate", JObject.Parse(response));
-                    Puts(response);
                     callback(code, response);
                     return;
                 }
