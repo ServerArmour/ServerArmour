@@ -34,10 +34,14 @@ using Time = Oxide.Core.Libraries.Time;
  */
 namespace Oxide.Plugins
 {
-    [Info("Server Armour", "Pho3niX90", "2.29.25")]
+    [Info("Server Armour", "Pho3niX90", "2.29.27")]
     [Description("Protect your server! Auto ban known hackers, scripters and griefer accounts, and notify server owners of threats.")]
     class ServerArmour : CovalencePlugin
     {
+        bool isCarbon = false;
+#if CARBON
+        isCarbon = true
+#endif
         #region Variables
         string api_hostname = "https://io.serverarmour.com"; // 
         Dictionary<string, ISAPlayer> _playerData = new Dictionary<string, ISAPlayer>();
@@ -59,6 +63,7 @@ namespace Oxide.Plugins
         private Dictionary<string, string> headers;
         string adminIds = "";
         Timer updateTimer;
+
         #endregion
 
         #region Libraries
@@ -84,7 +89,7 @@ namespace Oxide.Plugins
 
         #region Plugins
 
-#pragma warning disable 0649    
+#pragma warning disable 0649
         [PluginReference] Plugin DiscordApi, DiscordMessages, BetterChat, Ember, Clans;
 #pragma warning restore 0649
         void DiscordSend(string steamId, string name, EmbedFieldList report, int color = 39423, bool isBan = false)
@@ -2235,6 +2240,7 @@ namespace Oxide.Plugins
             public bool ClanBanTeams = true;
             public bool IgnoreAdmins = true;
             public bool AutoUpdate = true;
+            public bool UseEloSystem = true;
 
             // Plugin reference
             private ServerArmour _plugin;
@@ -2307,6 +2313,7 @@ namespace Oxide.Plugins
                 GetConfig(ref ClanBanTeams, "Clan Ban", "Ban Native Team Members");
 
                 GetConfig(ref AutoUpdate, "Plugin", "Auto Update");
+                GetConfig(ref UseEloSystem, "Plugin", "Use ELO system?");
 
                 plugin.SaveConfig();
             }
@@ -2353,36 +2360,62 @@ namespace Oxide.Plugins
 
         private void CheckForUpdate()
         {
-            webrequest.Enqueue($"{manifestUrl}{this.Name}", string.Empty, (code, data) => HandleUpdateRequest(this, code, data), this);
+            webrequest.Enqueue($"{manifestUrl}{this.Name}", string.Empty, (code, data) => HandleUpdateRequest(PluginInfo.from(this), code, data), this);
             timer.Once(15, () => CheckSupportingPlugins());
         }
 
         private void CheckSupportingPlugins()
         {
             var myPlugins = plugins.GetAll().Where(x => x.Author == this.Author);
+            int counter = 1;
+            bool foundElo = false;
+            bool foundDiscordApi = false;
+
             myPlugins.ToList().ForEach(plugin =>
             {
-                webrequest.Enqueue($"{manifestUrl}{plugin.Name}", string.Empty, (code, data) => HandleUpdateRequest(this, code, data), this);
+                if (plugin.Name == "ServerArmourElo")
+                {
+                    foundElo = true;
+                }
+                if (plugin.Name == "DiscordMessages" || plugin.Name == "DiscordApi")
+                {
+                    foundDiscordApi = true;
+                }
+
+                timer.Once(counter++ * 2, () => webrequest.Enqueue($"{manifestUrl}{plugin.Name}", string.Empty, (code, data) =>
+                HandleUpdateRequest(PluginInfo.from(plugin), code, data), this));
             });
+
+            if (config.UseEloSystem && !foundElo)
+            {
+                Puts("Elo enabled, but plugin not found. Will now download.");
+                webrequest.Enqueue($"{manifestUrl}ServerArmourElo", string.Empty, (code, data) =>
+                HandleUpdateRequest(new PluginInfo { Name = "ServerArmourElo", Filename = this.Filename.Replace("ServerArmour", "ServerArmourElo"), Version = new VersionNumber(0, 0, 0) }, code, data), this);
+            }
+            if (!config.DiscordWebhookURL.IsNullOrEmpty() && !foundDiscordApi)
+            {
+                Puts("Discord Webhook configured, but plugin not found. Will now download.");
+                webrequest.Enqueue($"{manifestUrl}DiscordApi", string.Empty, (code, data) =>
+                HandleUpdateRequest(new PluginInfo { Name = "DiscordApi", Filename = this.Filename.Replace("ServerArmour", "DiscordApi"), Version = new VersionNumber(0, 0, 0) }, code, data), this);
+            }
         }
 
-        private bool IsUpdateAvailable(string latestVersionFromApi)
+        private bool IsUpdateAvailable(PluginInfo plugin, Version latestVersion)
         {
-            Version currentVersion = new Version(this.Version.ToString());
-            Version latestVersion = new Version(latestVersionFromApi);
+            Version currentVersion = new Version(plugin.Version.ToString());
 
             int comparison = currentVersion.CompareTo(latestVersion);
 
             if (comparison < 0)
             {
-                Puts("An update is available!");
+                Puts($"An update is available for {plugin.Name}!");
                 return true;
             }
 
             return false;
         }
 
-        private void HandleUpdateRequest(Plugin plugin, int code, string data)
+        private void HandleUpdateRequest(PluginInfo plugin, int code, string data)
         {
             if (code != 200)
             {
@@ -2398,12 +2431,26 @@ namespace Oxide.Plugins
                 {
                     return;
                 }
-                var latestVersion = jObject.GetValue("latestVersion").ToString();
-                var downloadUrl = jObject.GetValue("downloadUrl").ToString();
+                var latestVersionUmod = new Version(jObject.GetValue("latestVersion")?.ToString() ?? "0.0.0");
+                var downloadUrlUmod = jObject.GetValue("downloadUrl")?.ToString() ?? "";
 
-                if (IsUpdateAvailable(latestVersion) && config.AutoUpdate)
+                var latestVersionCode = new Version(jObject.GetValue("latestVersionCodeFling").ToString());
+                var downloadUrlCode = jObject.GetValue("downloadUrlCarbon").ToString();
+
+                var latestVersion = isCarbon ? latestVersionCode : latestVersionUmod;
+                var downloadUrl = isCarbon ? downloadUrlCode : downloadUrlUmod;
+                var downloadFrom = isCarbon ? "Codefling" : "uMod";
+
+                if (!isCarbon && latestVersionUmod.CompareTo(latestVersionCode) < 0)
                 {
-                    ServerMgr.Instance.StartCoroutine(StartDownload(plugin, downloadUrl, latestVersion));
+                    latestVersion = latestVersionCode;
+                    downloadUrl = downloadUrlCode;
+                    downloadFrom = "Codefling";
+                }
+
+                if (IsUpdateAvailable(plugin, latestVersion) && config.AutoUpdate)
+                {
+                    ServerMgr.Instance.StartCoroutine(StartDownload(plugin, downloadUrl, latestVersion, downloadFrom));
                 }
             }
             catch (Exception ex)
@@ -2412,9 +2459,9 @@ namespace Oxide.Plugins
             }
         }
 
-        private IEnumerator StartDownload(Plugin plugin, string downloadUrl, string newVersion)
+        private IEnumerator StartDownload(PluginInfo plugin, string downloadUrl, Version newVersion, string downloadFrom)
         {
-            PrintWarning($"Updating {plugin.Name} (version {this.Version} -> {newVersion})");
+            PrintWarning($"Updating {plugin.Name} from {downloadFrom} (version {plugin.Version} -> {newVersion})");
             var www = new UnityWebRequest(downloadUrl)
             {
                 downloadHandler = new DownloadHandlerFile(plugin.Filename)
@@ -2429,6 +2476,17 @@ namespace Oxide.Plugins
             else
             {
                 Puts($"Failed to download update: {www.error}");
+            }
+        }
+
+        public class PluginInfo
+        {
+            public string Name;
+            public string Filename;
+            public VersionNumber Version;
+            public static PluginInfo from(Plugin plugin)
+            {
+                return new PluginInfo() { Name = plugin.Name, Filename = plugin.Filename, Version = plugin.Version };
             }
         }
         #endregion
