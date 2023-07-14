@@ -2424,6 +2424,8 @@ namespace Oxide.Plugins
             try
             {
                 var jObject = JObject.Parse(data);
+                if (jObject == null)
+                    return;
                 var success = bool.Parse(jObject.GetValue("success").ToString());
                 if (!success)
                 {
