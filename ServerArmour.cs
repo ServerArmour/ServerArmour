@@ -465,7 +465,7 @@ namespace Oxide.Plugins
                     LogDebug("Check for a twitter/eac game ban");
                     if (config.AutoKick_KickTwitterGameBanned && !HasPerm(pSteamId, PermissionWhitelistTwitterBan) && isaPlayer.eacBans.Count > 0)
                     {
-                        KickPlayer(isaPlayer?.steamid, $"https://twitter.com/rusthackreport/status/{isaPlayer.eacBans[isaPlayer.eacBans.Count - 1].id}", "C");
+                        KickPlayer(isaPlayer?.steamid, $"https://twitter.com/rusthackreport/status/{isaPlayer.eacBans[isaPlayer.eacBans.Count - 1]}", "C");
                     }
 
                     LogDebug("Check for a recent vac");
