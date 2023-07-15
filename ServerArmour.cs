@@ -34,7 +34,7 @@ using Time = Oxide.Core.Libraries.Time;
  */
 namespace Oxide.Plugins
 {
-    [Info("Server Armour", "Pho3niX90", "2.29.31")]
+    [Info("Server Armour", "Pho3niX90", "2.29.32")]
     [Description("Protect your server! Auto ban known hackers, scripters and griefer accounts, and notify server owners of threats.")]
     class ServerArmour : CovalencePlugin
     {
@@ -631,7 +631,8 @@ namespace Oxide.Plugins
             try
             {
                 vTemp = new Version(args[2].ToString());
-            } catch (Exception)
+            }
+            catch (Exception)
             {
                 vTemp = new Version();
             }
@@ -2499,6 +2500,12 @@ namespace Oxide.Plugins
             if (www.responseCode == 200)
             {
                 Puts("Update downloaded successfully!");
+
+                timer.Once(1, () =>
+                {
+                    if (!plugins.PluginManager.GetPlugin(plugin.Filename).IsLoaded)
+                        Interface.Oxide.LoadPlugin(plugin.Filename);
+                });
             }
             else
             {
