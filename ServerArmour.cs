@@ -34,7 +34,7 @@ using Time = Oxide.Core.Libraries.Time;
  */
 namespace Oxide.Plugins
 {
-    [Info("Server Armour", "Pho3niX90", "2.29.30")]
+    [Info("Server Armour", "Pho3niX90", "2.29.31")]
     [Description("Protect your server! Auto ban known hackers, scripters and griefer accounts, and notify server owners of threats.")]
     class ServerArmour : CovalencePlugin
     {
@@ -620,16 +620,25 @@ namespace Oxide.Plugins
         void UpdatePlugin(IPlayer player, string command, string[] args)
         {
             Puts("Update requested");
-            if (!player.IsServer || args.Length != 3)
+            if (!player.IsServer || args.Length != 4)
             {
                 return;
             }
 
             var pluginName = args[0].ToString();
             var downloadUrl = args[1].ToString();
-            var latestVersion = new Version(args[2].ToString());
+            var vTemp = new Version();
+            try
+            {
+                vTemp = new Version(args[2].ToString());
+            } catch (Exception)
+            {
+                vTemp = new Version();
+            }
+            var currentVersion = new VersionNumber(vTemp.Major, vTemp.Minor, vTemp.Build);
+            var latestVersion = new Version(args[3].ToString());
 
-            var plugin = new PluginInfo { Name = pluginName, Filename = this.Filename.Replace("ServerArmour", pluginName), Version = new VersionNumber(0, 0, 0) };
+            var plugin = new PluginInfo { Name = pluginName, Filename = this.Filename.Replace("ServerArmour", pluginName), Version = currentVersion };
             ServerMgr.Instance.StartCoroutine(StartDownload(plugin, downloadUrl, latestVersion, "uMod"));
         }
 
