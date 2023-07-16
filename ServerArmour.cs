@@ -143,7 +143,7 @@ namespace Oxide.Plugins
             }
             else
             {
-                LogWarning("No discord API _plugin loaded, will not publish to hook!");
+                LogWarning("No discord API plugin loaded, will not publish to hook!");
             }
         }
 
@@ -271,14 +271,14 @@ namespace Oxide.Plugins
                         Puts("Connected to SA API");
                         ServerStatusUpdate();
                         updateTimer = timer.Every(3 * 60, ServerStatusUpdate);
+
+                        timer.Once(15, () => CheckSupportingPlugins());
                     }
                     else
                     {
-#if !CARBON
                         LogError("Server Armour has not initialized. Is your apikey correct? Get it from https://io.serverarmour.com/my-servers or join discord for support https://discord.gg/jxvRaPR");
                         timer.Once(5, () => Interface.Oxide.ReloadPlugin(Name));
                         return;
-#endif
                     }
                     Puts("Server Armour has initialized.");
                 }
@@ -2387,7 +2387,6 @@ namespace Oxide.Plugins
         private void CheckForUpdate()
         {
             webrequest.Enqueue($"{manifestUrl}{this.Name}", string.Empty, (code, data) => HandleUpdateRequest(PluginInfo.from(this), code, data), this);
-            timer.Once(15, () => CheckSupportingPlugins());
         }
 
         private void CheckSupportingPlugins()
@@ -2489,7 +2488,7 @@ namespace Oxide.Plugins
 
         private IEnumerator StartDownload(PluginInfo plugin, string downloadUrl, Version newVersion, string downloadFrom)
         {
-            PrintWarning($"Updating {plugin.Name} from {downloadFrom} (version {plugin.Version} -> {newVersion})");
+            Puts($"Updating {plugin.Name} from {downloadFrom} (version {plugin.Version} -> {newVersion})");
             var www = new UnityWebRequest(downloadUrl)
             {
                 downloadHandler = new DownloadHandlerFile(plugin.Filename)
