@@ -7,7 +7,6 @@ using Oxide.Core;
 using Oxide.Core.Libraries;
 using Oxide.Core.Libraries.Covalence;
 using Oxide.Core.Plugins;
-using Oxide.Core.Plugins.Watchers;
 using Oxide.Game.Rust.Libraries;
 using System;
 using System.Collections;
@@ -29,17 +28,19 @@ using Time = Oxide.Core.Libraries.Time;
 #pragma warning disable 8618
 #pragma warning disable 8625
 #pragma warning disable 8629
-
+/***
+ * Fixes this version.
+ * - Code cleanup
+ */
 namespace Oxide.Plugins
 {
-    [Info("Server Armour", "Pho3niX90", "2.29.33")]
+    [Info("Server Armour", "Pho3niX90", "2.29.32")]
     [Description("Protect your server! Auto ban known hackers, scripters and griefer accounts, and notify server owners of threats.")]
     class ServerArmour : CovalencePlugin
     {
-#if CARBON
-        bool isCarbon = true;
-#else
         bool isCarbon = false;
+#if CARBON
+        isCarbon = true
 #endif
         #region Variables
         string api_hostname = "https://io.serverarmour.com"; // 
@@ -275,11 +276,9 @@ namespace Oxide.Plugins
                     }
                     else
                     {
-#if !CARBON
                         LogError("Server Armour has not initialized. Is your apikey correct? Get it from https://io.serverarmour.com/my-servers or join discord for support https://discord.gg/jxvRaPR");
                         timer.Once(5, () => Interface.Oxide.ReloadPlugin(Name));
                         return;
-#endif
                     }
                     Puts("Server Armour has initialized.");
                 }
@@ -640,7 +639,7 @@ namespace Oxide.Plugins
             var currentVersion = new VersionNumber(vTemp.Major, vTemp.Minor, vTemp.Build);
             var latestVersion = new Version(args[3].ToString());
 
-            var plugin = new PluginInfo { Name = pluginName, Filename = $"{Interface.Oxide.PluginDirectory}/{pluginName}", Version = currentVersion };
+            var plugin = new PluginInfo { Name = pluginName, Filename = this.Filename.Replace("ServerArmour", pluginName), Version = currentVersion };
             ServerMgr.Instance.StartCoroutine(StartDownload(plugin, downloadUrl, latestVersion, "uMod"));
         }
 
@@ -2417,13 +2416,13 @@ namespace Oxide.Plugins
             {
                 Puts("Elo enabled, but plugin not found. Will now download.");
                 webrequest.Enqueue($"{manifestUrl}ServerArmourElo", string.Empty, (code, data) =>
-                HandleUpdateRequest(new PluginInfo { Name = "ServerArmourElo", Filename = $"{Interface.Oxide.PluginDirectory}/ServerArmourElo", Version = new VersionNumber(0, 0, 0) }, code, data), this);
+                HandleUpdateRequest(new PluginInfo { Name = "ServerArmourElo", Filename = this.Filename.Replace("ServerArmour", "ServerArmourElo"), Version = new VersionNumber(0, 0, 0) }, code, data), this);
             }
             if (!config.DiscordWebhookURL.IsNullOrEmpty() && !foundDiscordApi)
             {
                 Puts("Discord Webhook configured, but plugin not found. Will now download.");
                 webrequest.Enqueue($"{manifestUrl}DiscordApi", string.Empty, (code, data) =>
-                HandleUpdateRequest(new PluginInfo { Name = "DiscordApi", Filename = $"{Interface.Oxide.PluginDirectory}/DiscordApi", Version = new VersionNumber(0, 0, 0) }, code, data), this);
+                HandleUpdateRequest(new PluginInfo { Name = "DiscordApi", Filename = this.Filename.Replace("ServerArmour", "DiscordApi"), Version = new VersionNumber(0, 0, 0) }, code, data), this);
             }
         }
 
@@ -2501,17 +2500,12 @@ namespace Oxide.Plugins
             if (www.responseCode == 200)
             {
                 Puts("Update downloaded successfully!");
-#if !CARBON
+
                 timer.Once(1, () =>
                 {
-                    var pl = plugins.PluginManager.GetPlugin(plugin.Filename);
-                    if (pl == null || !pl.IsLoaded)
+                    if (!plugins.PluginManager.GetPlugin(plugin.Filename).IsLoaded)
                         Interface.Oxide.LoadPlugin(plugin.Filename);
-                    else if(!pl.Version.Equals(new VersionNumber(newVersion.Major, newVersion.Minor, newVersion.Build)))
-                        Interface.Oxide.ReloadPlugin(plugin.Filename);
-
                 });
-#endif
             }
             else
             {
@@ -2529,6 +2523,6 @@ namespace Oxide.Plugins
                 return new PluginInfo() { Name = plugin.Name, Filename = plugin.Filename, Version = plugin.Version };
             }
         }
-#endregion
+        #endregion
     }
 }
