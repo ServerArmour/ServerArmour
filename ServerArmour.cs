@@ -7,7 +7,6 @@ using Oxide.Core;
 using Oxide.Core.Libraries;
 using Oxide.Core.Libraries.Covalence;
 using Oxide.Core.Plugins;
-using Oxide.Core.Plugins.Watchers;
 using Oxide.Game.Rust.Libraries;
 using System;
 using System.Collections;
