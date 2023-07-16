@@ -32,7 +32,7 @@ using Time = Oxide.Core.Libraries.Time;
 
 namespace Oxide.Plugins
 {
-    [Info("Server Armour", "Pho3niX90", "2.29.33")]
+    [Info("Server Armour", "Pho3niX90", "2.29.34")]
     [Description("Protect your server! Auto ban known hackers, scripters and griefer accounts, and notify server owners of threats.")]
     class ServerArmour : CovalencePlugin
     {
@@ -640,7 +640,7 @@ namespace Oxide.Plugins
             var currentVersion = new VersionNumber(vTemp.Major, vTemp.Minor, vTemp.Build);
             var latestVersion = new Version(args[3].ToString());
 
-            var plugin = new PluginInfo { Name = pluginName, Filename = $"{Interface.Oxide.PluginDirectory}/{pluginName}", Version = currentVersion };
+            var plugin = new PluginInfo { Name = pluginName, Filename = $"{Interface.Oxide.PluginDirectory}/{pluginName}.cs", Version = currentVersion };
             ServerMgr.Instance.StartCoroutine(StartDownload(plugin, downloadUrl, latestVersion, "uMod"));
         }
 
@@ -2417,13 +2417,13 @@ namespace Oxide.Plugins
             {
                 Puts("Elo enabled, but plugin not found. Will now download.");
                 webrequest.Enqueue($"{manifestUrl}ServerArmourElo", string.Empty, (code, data) =>
-                HandleUpdateRequest(new PluginInfo { Name = "ServerArmourElo", Filename = $"{Interface.Oxide.PluginDirectory}/ServerArmourElo", Version = new VersionNumber(0, 0, 0) }, code, data), this);
+                HandleUpdateRequest(new PluginInfo { Name = "ServerArmourElo", Filename = $"{Interface.Oxide.PluginDirectory}/ServerArmourElo.cs", Version = new VersionNumber(0, 0, 0) }, code, data), this);
             }
             if (!config.DiscordWebhookURL.IsNullOrEmpty() && !foundDiscordApi)
             {
                 Puts("Discord Webhook configured, but plugin not found. Will now download.");
                 webrequest.Enqueue($"{manifestUrl}DiscordApi", string.Empty, (code, data) =>
-                HandleUpdateRequest(new PluginInfo { Name = "DiscordApi", Filename = $"{Interface.Oxide.PluginDirectory}/DiscordApi", Version = new VersionNumber(0, 0, 0) }, code, data), this);
+                HandleUpdateRequest(new PluginInfo { Name = "DiscordApi", Filename = $"{Interface.Oxide.PluginDirectory}/DiscordApi.cs", Version = new VersionNumber(0, 0, 0) }, code, data), this);
             }
         }
 
