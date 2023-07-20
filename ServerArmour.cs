@@ -31,7 +31,7 @@ using Time = Oxide.Core.Libraries.Time;
 
 namespace Oxide.Plugins
 {
-    [Info("Server Armour", "Pho3niX90", "2.29.34")]
+    [Info("Server Armour", "Pho3niX90", "2.29.37")]
     [Description("Protect your server! Auto ban known hackers, scripters and griefer accounts, and notify server owners of threats.")]
     class ServerArmour : CovalencePlugin
     {
@@ -52,7 +52,6 @@ namespace Oxide.Plugins
         const string DATE_FORMAT = "yyyy/MM/dd HH:mm";
         const string DATE_FORMAT2 = "yyyy-MM-dd HH:mm:ss";
         Regex logRegex = new Regex(@"(^assets.*prefab).*?position (.*) on");
-        ulong ServerArmourId = 76561199044451528L;
 
         bool debug = false;
         bool apiConnected = false;
@@ -83,6 +82,8 @@ namespace Oxide.Plugins
         const string PermissionWhitelistSteamProfile = "serverarmour.whitelist.steamprofile";
         const string PermissionWhitelistFamilyShare = "serverarmour.whitelist.familyshare";
         const string PermissionWhitelistTwitterBan = "serverarmour.whitelist.twitterban";
+        const string PermissionWhitelistAllowCountry = "serverarmour.whitelist.allowcountry";
+        const string PermissionWhitelistAllowHighPing = "serverarmour.whitelist.allowhighping";
         #endregion
 
         #region Plugins
@@ -150,6 +151,12 @@ namespace Oxide.Plugins
         #endregion
 
         #region Hooks
+        void OnServerSave()
+        {
+            if (config.AutoKickMaxPing > 0)
+                foreach (var player in players.Connected) timer.Once(5f, () => CheckPing(player));
+        }
+
         void OnServerInitialized(bool first)
         {
             LoadData();
@@ -171,13 +178,6 @@ namespace Oxide.Plugins
 
             // CheckOnlineUsers();
             // CheckLocalBans();
-
-            if (string.IsNullOrEmpty(config.ServerGPort))
-            {
-                config.ServerGPort = server.Port.ToString();
-                SaveConfig();
-            }
-
 
             string ServerGPort = ConVar.Server.port.ToString();
             string ServerQPort = ConVar.Server.queryport > 0 ? ConVar.Server.queryport.ToString() : ConVar.Server.port.ToString();
@@ -347,6 +347,10 @@ namespace Oxide.Plugins
         void OnUserBanned(string name, string id, string ipAddress, string reason)
         {
             //this is to make sure that if an app like battlemetrics for example, bans a player, we catch it.
+            if(config.IgnoreCheatDetected && reason.StartsWith("Cheat Detected"))
+            {
+                return;
+            }
             timer.Once(3f, () =>
             {
                 //lets make sure first it wasn't us. 
@@ -372,7 +376,6 @@ namespace Oxide.Plugins
             });
         }
 
-
         void OnPlayerReported(BasePlayer reporter, string targetName, string targetId, string subject, string message, string type)
         {
             if (!serverStarted)
@@ -396,6 +399,7 @@ namespace Oxide.Plugins
             if (player == null || player.Id == null) return;
             KickIfBanned(GetPlayerCache(player?.Id));
             WebCheckPlayer(player.Id, player.Address, player.IsConnected);
+            timer.Once(10f, () => CheckPing(player));
         }
 
         void GetPlayerBans(string playerId, string playerName)
@@ -535,7 +539,7 @@ namespace Oxide.Plugins
                         KickPlayer(isaPlayer?.steamid, GetMsg("Profile Low Level", new Dictionary<string, string> { ["level"] = config.AutoKick_MinSteamProfileLevel.ToString() }), "C");
                     }
 
-                    Puts($"IP/CACHE| ID:{id} ADD:{address} RATING:{isaPlayer?.ipInfo?.rating} AGE: {isaPlayer.ipInfo?.lastcheck}");
+                    Puts($"IP/CACHE| ID:{id} ADD:{address} COUNTRY: {isaPlayer.ipInfo.isocode} RATING:{isaPlayer?.ipInfo?.rating} AGE: {isaPlayer.ipInfo?.lastcheck}");
                     if (config.AutoKickOn && config.AutoKick_BadIp && !HasPerm(id, PermissionWhitelistBadIPKick) && config.AutoKick_BadIp)
                     {
                         if (IsBadIp(isaPlayer))
@@ -549,9 +553,23 @@ namespace Oxide.Plugins
                         }
                     }
 
+                    if (!HasPerm(id, PermissionWhitelistAllowCountry) && !config.AutoKickLimitCountry.IsNullOrEmpty() && config.AutoKickLimitCountry != isaPlayer?.ipInfo.isocode)
+                    {
+                        if (isaPlayer?.ipInfo?.isocode != null && isaPlayer.ipInfo.isocode != "")
+                            KickPlayer(id, GetMsg("Country Not Allowed", new Dictionary<string, string> { ["country"] = isaPlayer.ipInfo.isocode, ["country2"] = config.AutoKickLimitCountry.ToString() }), "C");
+                    }
+
                     GetPlayerReport(isaPlayer, connected);
 
                 }, 5);
+        }
+
+        void CheckPing(IPlayer player)
+        {
+            if (!HasPerm(player.Id, PermissionWhitelistAllowHighPing) && (config.AutoKickMaxPing < player.Ping))
+            {
+                KickPlayer(player.Id, GetMsg("Your Ping is too High", new Dictionary<string, string> { ["ping"] = player.Ping.ToString(), ["maPing"] = config.AutoKickMaxPing.ToString() }), "C");
+            }
         }
 
         void KickIfBanned(ISAPlayer isaPlayer)
@@ -1388,7 +1406,7 @@ namespace Oxide.Plugins
             string owner = Uri.EscapeDataString(config.OwnerSteamId);
             string gport = ConVar.Server.port.ToString();
             string qport = ConVar.Server.queryport.ToString();
-            string rport = Uri.EscapeDataString(config.ServerRPort);
+            string rport = Facepunch.RCon.Port.ToString();
             string sname = Uri.EscapeDataString(server.Name);
             string sip = !config.ServerIp.IsNullOrEmpty() && !config.ServerIp.Equals("0.0.0.0") ? config.ServerIp : covalence.Server.Address.ToString();
             string sipcov = covalence.Server.Address.ToString();
@@ -1778,6 +1796,8 @@ namespace Oxide.Plugins
                 ["Profile Low Level"] = "You need a level {level} steam profile for this server.",
                 ["Steam Level Hidden"] = "You are not allowed to hide your steam level on this server.",
                 ["Strange Steam64ID"] = "Your steam id does not conform to steam standards.",
+                ["Country Not Allowed"] = "Your country {country} is not allowed, only from {country2}",
+                ["Your Ping is too High"] = "Your ping {ping} was higher than {maxPing}",
                 ["Permanent"] = "Permanent"
             }, this, "en");
         }
@@ -1846,7 +1866,7 @@ namespace Oxide.Plugins
             if (!player.IsServer && player.IsConnected)
             {
                 BasePlayer bPlayer = player.Object as BasePlayer;
-                bPlayer?.SendConsoleCommand("chat.add", 2, ServerArmourId, FixColors(msg));
+                bPlayer?.SendConsoleCommand("chat.add", 2, config.IconSteamId, FixColors(msg));
             }
             else
             {
@@ -2145,7 +2165,7 @@ namespace Oxide.Plugins
 
             }, this, RequestMethod.POST, headers);
         }
-        private void CalcElo(string steamIdKiller, string steamIdVictim, string killInfo, Action<int, string> callback, int retryInSeconds = 0)
+        private void CalcElo(string steamIdKiller, string steamIdVictim, string killInfo, Action<int, string> callback = null, int retryInSeconds = 0)
         {
             webrequest.Enqueue($"{api_hostname}/api/v1/elo/{steamIdKiller}/{steamIdVictim}", killInfo, (code, response) =>
             {
@@ -2209,9 +2229,6 @@ namespace Oxide.Plugins
         {
             // Config default vars
             public string ServerIp = "";
-            public string ServerGPort = ConVar.Server.port.ToString();
-            public string ServerQPort = ConVar.Server.queryport > 0 ? ConVar.Server.queryport.ToString() : ConVar.Server.port.ToString();
-            public string ServerRPort = Facepunch.RCon.Port.ToString();
             public bool Debug = false;
             public bool ShowProtectedMsg = true;
             public bool AutoKickOn = true;
@@ -2267,6 +2284,12 @@ namespace Oxide.Plugins
             public bool AutoUpdate = true;
             public bool UseEloSystem = true;
 
+            public int AutoKickMaxPing = 250;
+            public string AutoKickLimitCountry = "";
+
+            public string IconSteamId = "76561199044451528";
+            public bool IgnoreCheatDetected = true;
+
             // Plugin reference
             private ServerArmour _plugin;
             public SAConfig(ServerArmour plugin)
@@ -2276,12 +2299,10 @@ namespace Oxide.Plugins
                  * Load all saved config values
                  * */
                 GetConfig(ref ServerIp, "Server Info", "Your Server IP");
-                GetConfig(ref ServerGPort, "Server Info", "Game Port");
-                GetConfig(ref ServerQPort, "Server Info", "Query Port");
-                GetConfig(ref ServerRPort, "Server Info", "RCON Port");
 
                 GetConfig(ref IgnoreAdmins, "General", "Ignore Admins");
                 GetConfig(ref Debug, "General", "Debug: Show additional debug console logs");
+                GetConfig(ref IconSteamId, "General", "SteamID for message icon");
 
 
                 GetConfig(ref ShowProtectedMsg, "Show Protected MSG");
@@ -2325,6 +2346,9 @@ namespace Oxide.Plugins
                 GetConfig(ref AutoKickFamilyShare, "Auto Kick", "Steam", "Family share accounts");
                 GetConfig(ref AutoKickFamilyShareIfDirty, "Auto Kick", "Steam", "Family share accounts that are dirty");
 
+                GetConfig(ref AutoKickMaxPing, "Auto Kick", "Ping", "Max Ping Allowed");
+                GetConfig(ref AutoKickLimitCountry, "Auto Kick", "Ping", "Limit players ONLY to this country ISO code, kick rest");
+
                 GetConfig(ref DiscordWebhookURL, "Discord", "Webhook URL");
                 GetConfig(ref DiscordBanWebhookURL, "Discord", "Bans Webhook URL");
                 GetConfig(ref DiscordQuickConnect, "Discord", "Show Quick Connect On report");
@@ -2336,6 +2360,8 @@ namespace Oxide.Plugins
 
                 GetConfig(ref ClanBanPrefix, "Clan Ban", "Reason Prefix");
                 GetConfig(ref ClanBanTeams, "Clan Ban", "Ban Native Team Members");
+
+                GetConfig(ref IgnoreCheatDetected, "Anti Hack", "Ignore Cheat Detected");
 
                 GetConfig(ref AutoUpdate, "Plugin", "Auto Update");
                 GetConfig(ref UseEloSystem, "Plugin", "Use ELO system?");
@@ -2505,7 +2531,7 @@ namespace Oxide.Plugins
                     var pl = plugins.PluginManager.GetPlugin(plugin.Filename);
                     if (pl == null || !pl.IsLoaded)
                         Interface.Oxide.LoadPlugin(plugin.Filename);
-                    else if(!pl.Version.Equals(new VersionNumber(newVersion.Major, newVersion.Minor, newVersion.Build)))
+                    else if (!pl.Version.Equals(new VersionNumber(newVersion.Major, newVersion.Minor, newVersion.Build)))
                         Interface.Oxide.ReloadPlugin(plugin.Filename);
 
                 });
@@ -2527,6 +2553,6 @@ namespace Oxide.Plugins
                 return new PluginInfo() { Name = plugin.Name, Filename = plugin.Filename, Version = plugin.Version };
             }
         }
-#endregion
+        #endregion
     }
 }
