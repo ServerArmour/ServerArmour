@@ -10,7 +10,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("Server Armour Elo", "Pho3niX90", "1.0.2")]
+    [Info("Server Armour Elo", "Pho3niX90", "1.0.3")]
     [Description("Elo System")]
     class ServerArmourElo : CovalencePlugin
     {
@@ -33,7 +33,7 @@ namespace Oxide.Plugins
                 return;
             }
 
-            string steamId = args[0].Length == 17 ? args[0] : player.Id;
+            string steamId = args.Length > 0 && args[0].Length == 17 ? args[0] : player.Id;
 
             string name = GetName(steamId);
             double elo = GetElo(steamId);
@@ -150,8 +150,6 @@ namespace Oxide.Plugins
             SaveElo(eloUpdate.steamId, eloUpdate.elo);
             string requestedBy = eloRequest.ContainsKey(playerId) ? eloRequest[playerId] : playerId;
 
-            var prefix = requestedBy == playerId ? "Your " : $"{name}'s ";
-
             try
             {
                 IPlayer player = covalence.Players.FindPlayerById(requestedBy);
@@ -195,15 +193,11 @@ namespace Oxide.Plugins
             BasePlayer attacker = victim.lastAttacker?.ToPlayer() ?? hitInfo.InitiatorPlayer;
 
             if (attacker == null || attacker == victim) return;
-            if (victim.IsNpc || !victim.userID.IsSteamId() || !attacker.userID.IsSteamId()) return;
+            if (victim.IsNpc || !victim.userID.IsSteamId() || !attacker.userID.IsSteamId() || hitInfo == null) return;
 
-            if (hitInfo == null && (attacker != null && victim.IsWounded()))
-            {
-                int distance = (int)Vector3.Distance(attacker.transform.position, victim.transform.position);
-                string killInfo = JsonConvert.SerializeObject(new { bone = hitInfo.boneName, hitInfo.ProjectileDistance, distance });
-                CalcElo(attacker.UserIDString, victim.UserIDString, killInfo);
-                return;
-            }
+            int distance = (int)Vector3.Distance(attacker.transform.position, victim.transform.position);
+            string killInfo = JsonConvert.SerializeObject(new { bone = hitInfo.boneName, hitInfo.ProjectileDistance, distance });
+            CalcElo(attacker.UserIDString, victim.UserIDString, killInfo);
         }
 
         private void Unload()

@@ -31,7 +31,7 @@ using Time = Oxide.Core.Libraries.Time;
 
 namespace Oxide.Plugins
 {
-    [Info("Server Armour", "Pho3niX90", "2.29.37")]
+    [Info("Server Armour", "Pho3niX90", "2.29.39")]
     [Description("Protect your server! Auto ban known hackers, scripters and griefer accounts, and notify server owners of threats.")]
     class ServerArmour : CovalencePlugin
     {
@@ -84,6 +84,11 @@ namespace Oxide.Plugins
         const string PermissionWhitelistTwitterBan = "serverarmour.whitelist.twitterban";
         const string PermissionWhitelistAllowCountry = "serverarmour.whitelist.allowcountry";
         const string PermissionWhitelistAllowHighPing = "serverarmour.whitelist.allowhighping";
+        #endregion
+
+        #region Update URLs
+        const string URL_SERVERARMOUR = "https://raw.githubusercontent.com/Pho3niX90/ServerArmour/master/ServerArmour.cs";
+        const string URL_SERVERARMOURELO = "https://raw.githubusercontent.com/Pho3niX90/ServerArmour/helper_plugins/ServerArmourElo.cs";
         #endregion
 
         #region Plugins
@@ -199,6 +204,8 @@ namespace Oxide.Plugins
             RegPerm(PermissionWhitelistSteamProfile);
             RegPerm(PermissionWhitelistFamilyShare);
             RegPerm(PermissionWhitelistTwitterBan);
+            RegPerm(PermissionWhitelistAllowCountry);
+            RegPerm(PermissionWhitelistAllowHighPing);
             RegisterTag();
 
             headers = new Dictionary<string, string> {
@@ -347,7 +354,7 @@ namespace Oxide.Plugins
         void OnUserBanned(string name, string id, string ipAddress, string reason)
         {
             //this is to make sure that if an app like battlemetrics for example, bans a player, we catch it.
-            if(config.IgnoreCheatDetected && reason.StartsWith("Cheat Detected"))
+            if (config.IgnoreCheatDetected && reason.StartsWith("Cheat Detected"))
             {
                 return;
             }
@@ -845,6 +852,9 @@ namespace Oxide.Plugins
         [Command("banid"), Permission(PermissionToBan)]
         void SCmdBanId(IPlayer player, string command, string[] args)
         {
+            var argString = string.Join(" ", args);
+            var matches = new Regex(@"([7]\d{16}).*?(\d{9,12})$").Match(argString);
+            var mG = matches.Groups;
             /*foreach(var ar in args) {
                 Puts(ar.ToString());
             }*/
@@ -860,15 +870,15 @@ namespace Oxide.Plugins
                 var reason = "No reason provided.";
                 var length = "permanent";
                 var lengthInt = -1;
+                if (mG.Count == 3)
+                {
+                    if (int.TryParse(mG[2].Value, out lengthInt))
+                        length = lengthInt == -1 ? length : lengthInt.ToString();
+                }
 
                 if (args.Length >= 3)
                 {
-                    reason = args[2];
-                    if (args.Length > 3)
-                    {
-                        if (int.TryParse(args[3], out lengthInt))
-                            length = lengthInt == -1 ? length : lengthInt.ToString();
-                    }
+                    reason = args[2].ToString() == length ? args[1] : args[2];
                 }
 
                 API_BanPlayer(player, playerId, reason, length, true);
@@ -1637,6 +1647,7 @@ namespace Oxide.Plugins
 
             IEnumerable<IPlayer> playersFound = players.FindPlayers(banPlayer);
             int playersFoundCount = playersFound.Count();
+            
             switch (playersFoundCount)
             {
                 case 0:
@@ -1652,19 +1663,19 @@ namespace Oxide.Plugins
                     errMsg = GetMsg("Multiple Players Found", new Dictionary<string, string> { ["players"] = playersFoundNamesString });
                     break;
             }
-
-            if (iPlayer.IsAdmin)
+            
+            if (iPlayer != null && iPlayer.IsAdmin)
             {
                 Puts($"You cannot ban a admin! Issued by {player?.Id ?? player?.Name}");
                 return;
             }
 
-
+            
             string playerId = iPlayer?.Id ?? banSteamId.ToString();
             string playerName = iPlayer?.Name ?? banSteamId.ToString();
 
             if (!ignoreSearch && iPlayer == null && !errMsg.Equals("")) { SendReplyWithIcon(player, errMsg); return; }
-
+            
             ISAPlayer isaPlayer;
 
             if (!ignoreSearch)
@@ -1679,7 +1690,6 @@ namespace Oxide.Plugins
                     isaPlayer = GetPlayerCache(banPlayer);
                 }
             }
-
 
             if (BanPlayer(new ISABan
             {
@@ -2500,6 +2510,14 @@ namespace Oxide.Plugins
                     downloadUrl = downloadUrlCode;
                     downloadFrom = "Codefling";
                 }
+                if (plugin.Name.Contains("ServerArmourElo"))
+                {
+                    downloadUrl = URL_SERVERARMOURELO;
+                }
+                else if (plugin.Name.Contains("ServerArmour"))
+                {
+                    downloadUrl = URL_SERVERARMOUR;
+                }
 
                 if (IsUpdateAvailable(plugin, latestVersion) && config.AutoUpdate)
                 {
@@ -2528,11 +2546,11 @@ namespace Oxide.Plugins
 #if !CARBON
                 timer.Once(1, () =>
                 {
-                    var pl = plugins.PluginManager.GetPlugin(plugin.Filename);
+                    var pl = plugins.PluginManager.GetPlugin(plugin.Name);
                     if (pl == null || !pl.IsLoaded)
-                        Interface.Oxide.LoadPlugin(plugin.Filename);
+                        Interface.Oxide.LoadPlugin(plugin.Name);
                     else if (!pl.Version.Equals(new VersionNumber(newVersion.Major, newVersion.Minor, newVersion.Build)))
-                        Interface.Oxide.ReloadPlugin(plugin.Filename);
+                        Interface.Oxide.ReloadPlugin(plugin.Name);
 
                 });
 #endif
