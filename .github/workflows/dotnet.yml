@@ -16,15 +16,15 @@ jobs:
 
     steps:
     - uses: actions/checkout@v3
+    - uses: actions/checkout@v3
       with:
         repository: OxideMod/Oxide.Rust.git
         ref: master
-    - uses: actions/checkout@v3
+        clean: false
     - name: Setup .NET
       uses: actions/setup-dotnet@v3
       with:
         dotnet-version: 6.0.x
-        clean: false
     - name: Restore dependencies
       run: dotnet restore
     - name: Build
