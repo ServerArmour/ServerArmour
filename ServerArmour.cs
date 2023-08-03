@@ -33,7 +33,7 @@ using Time = Oxide.Core.Libraries.Time;
 
 namespace Oxide.Plugins
 {
-    [Info("Server Armour", "Pho3niX90", "2.29.42")]
+    [Info("Server Armour", "Pho3niX90", "2.29.43")]
     [Description("Protect your server! Auto ban known hackers, scripters and griefer accounts, and notify server owners of threats.")]
     class ServerArmour : CovalencePlugin
     {
@@ -372,7 +372,7 @@ namespace Oxide.Plugins
             {
                 return;
             }
-            if (AdminToggle != null && AdminToggle.Call<bool>("IsAdmin", id))
+            if (AdminToggle != null && AdminToggle?.Call<bool>("IsAdmin", id))
             {
                 return;
             }
@@ -601,7 +601,7 @@ namespace Oxide.Plugins
         {
             if (isaPlayer == null) return;
             IPlayer iPlayer = covalence.Players.FindPlayer(isaPlayer.steamid);
-            if ((iPlayer != null && iPlayer.IsAdmin) || (AdminToggle != null && AdminToggle.Call<bool>("IsAdmin", iPlayer.Id)) && config.IgnoreAdmins) return;
+            if ((iPlayer != null && iPlayer.IsAdmin) || (AdminToggle != null && AdminToggle?.Call<bool>("IsAdmin", iPlayer.Id)) && config.IgnoreAdmins) return;
 
             LogDebug("KIB 1");
             ISABan ban = IsBanned(isaPlayer?.steamid);
@@ -1691,7 +1691,7 @@ namespace Oxide.Plugins
                     break;
             }
 
-            if ((iPlayer != null && iPlayer.IsAdmin) || (AdminToggle != null && AdminToggle.Call<bool>("IsAdmin", iPlayer.Id)))
+            if ((iPlayer != null && iPlayer.IsAdmin) || (AdminToggle != null && AdminToggle?.Call<bool>("IsAdmin", iPlayer.Id)))
             {
                 Puts($"You cannot ban a admin! Issued by {player?.Id ?? player?.Name}");
                 return;
