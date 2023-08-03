@@ -372,10 +372,14 @@ namespace Oxide.Plugins
             {
                 return;
             }
-            if (AdminToggle != null && AdminToggle?.Call<bool>("IsAdmin", id))
+            try
             {
-                return;
+                if (AdminToggle != null && AdminToggle?.Call<bool>("IsAdmin", id))
+                {
+                    return;
+                }
             }
+            catch (Exception ex) { }
             timer.Once(10f, () =>
             {
                 //lets make sure first it wasn't us. 
@@ -601,7 +605,12 @@ namespace Oxide.Plugins
         {
             if (isaPlayer == null) return;
             IPlayer iPlayer = covalence.Players.FindPlayer(isaPlayer.steamid);
-            if ((iPlayer != null && iPlayer.IsAdmin) || (AdminToggle != null && AdminToggle?.Call<bool>("IsAdmin", iPlayer.Id)) && config.IgnoreAdmins) return;
+            if (iPlayer != null && iPlayer.IsAdmin && config.IgnoreAdmins) return;
+            try
+            {
+                if (AdminToggle != null && AdminToggle?.Call<bool>("IsAdmin", iPlayer.Id) && config.IgnoreAdmins) return;
+            }
+            catch (Exception e) { }
 
             LogDebug("KIB 1");
             ISABan ban = IsBanned(isaPlayer?.steamid);
@@ -1691,11 +1700,18 @@ namespace Oxide.Plugins
                     break;
             }
 
-            if ((iPlayer != null && iPlayer.IsAdmin) || (AdminToggle != null && AdminToggle?.Call<bool>("IsAdmin", iPlayer.Id)))
+            if (iPlayer != null && iPlayer.IsAdmin)
             {
                 Puts($"You cannot ban a admin! Issued by {player?.Id ?? player?.Name}");
                 return;
             }
+            try
+            {
+                if (AdminToggle != null && AdminToggle?.Call<bool>("IsAdmin", iPlayer.Id))
+                {
+                    return;
+                }
+            } catch (Exception ex) { }
 
 
             string playerId = iPlayer?.Id ?? banSteamId.ToString();
