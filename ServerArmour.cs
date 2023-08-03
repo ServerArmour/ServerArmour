@@ -11,10 +11,8 @@ using Oxide.Game.Rust.Libraries;
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.ComponentModel;
 using System.Globalization;
 using System.Linq;
-using System.Net;
 using System.Text.RegularExpressions;
 using UnityEngine;
 using UnityEngine.Networking;
@@ -33,7 +31,7 @@ using Time = Oxide.Core.Libraries.Time;
 
 namespace Oxide.Plugins
 {
-    [Info("Server Armour", "Pho3niX90", "2.29.43")]
+    [Info("Server Armour", "Pho3niX90", "2.29.44")]
     [Description("Protect your server! Auto ban known hackers, scripters and griefer accounts, and notify server owners of threats.")]
     class ServerArmour : CovalencePlugin
     {
@@ -374,7 +372,7 @@ namespace Oxide.Plugins
             }
             try
             {
-                if (AdminToggle != null && AdminToggle?.Call<bool>("IsAdmin", id))
+                if (AdminToggle != null && AdminToggle.Call<bool>("IsAdmin", id))
                 {
                     return;
                 }
@@ -608,7 +606,7 @@ namespace Oxide.Plugins
             if (iPlayer != null && iPlayer.IsAdmin && config.IgnoreAdmins) return;
             try
             {
-                if (AdminToggle != null && AdminToggle?.Call<bool>("IsAdmin", iPlayer.Id) && config.IgnoreAdmins) return;
+                if (AdminToggle != null && AdminToggle.Call<bool>("IsAdmin", iPlayer.Id) && config.IgnoreAdmins) return;
             }
             catch (Exception e) { }
 
@@ -1707,7 +1705,7 @@ namespace Oxide.Plugins
             }
             try
             {
-                if (AdminToggle != null && AdminToggle?.Call<bool>("IsAdmin", iPlayer.Id))
+                if (AdminToggle != null && AdminToggle.Call<bool>("IsAdmin", iPlayer.Id))
                 {
                     return;
                 }
