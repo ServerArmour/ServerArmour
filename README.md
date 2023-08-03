@@ -8,11 +8,19 @@ You can also auto kick users that are on VPN, PROXY or a BAD IP (See more at the
 
 This tool is a combination of wealth of information regarding players, from their vac ban counts, economy bans, game bans and server bans. It also gives you the family share information, if they are lending, and whom they are lending from, as well if the lender is either vac banned or community banned. 
 
+## API Key
+* You can get your api key from [https://io.serverarmour.com/my-servers?action=servers](https://io.serverarmour.com/my-servers?action=servers)
+
 ## Disclaimer:
 * If you are an abusive & biased admin, your server ip will be blacklisted from using this service. 
 
 ## Discord: nd54sKX
 You can add the Server Armour bot to your discord by following this link:
+
+## Steam API Key
+A new config field has been added since version 1, "Steam API Key", whilst this is not necassary to work, it does provide you with a small docker container for your servers to check and reference information. Since the influx of servers we are not able to keep up with the information from our steam keys alone, and some information is cached. 
+
+This also gives you basic premium on the website. 
 
 [Add the ServerArmour discord bot to your discord.](https://discord.com/api/oauth2/authorize?client_id=781921686202220575&permissions=281373767&scope=bot)
 ## Permissions
@@ -68,7 +76,7 @@ serverarmour.whitelist.familyshare
     "Enabled": true, // Is auto kick enabled?
     "Max allowed previous bans": 3, // max allowed bans on other servers, for a player
     "Steam": {
-      "Min age of VAC ban allowed": 90, // Example: a player with a 89day vac should be kicked, 90+ wont.
+      "Min age of VAC ban allowed": 90, // Example: a player with a 89day vac should be kicked, 90  wont.
       "When Steam Level Hidden": false, // Kicks a player that has a hidden steam level, this includes private accounts.
       "Family share accounts": false, // kick family share accounts?
       "Family share accounts that are dirty": false, // kick family share accounts that are considered dirty?
@@ -113,7 +121,8 @@ serverarmour.whitelist.familyshare
     "Owner Email": "", // owner email, not required, but usefull for important communication (not spam)
     "Owner Real Name": "", // your name, the owner
     "Owner Steam64 ID": "", // the owners steam64id
-    "Server Key": "", // THIS WILL AUTO GENERATE ON FIRST CONNECT, NEVER LOSE THIS KEY. NEVER SHARE IT. IT WONT GENERATE AGAIN ON THE SAME IP/PORT
+    "Server Key": "", // Get this from the website
+    "Steam API Key": "" // This is your steam api key, not needed, but if provided, will give you more accurate and up to date information.
     "Share details with other server owners": true, // For future use, so that other server admins can send you emails for evidence etc, or discuss a ban.
     "Submit Arkan Data": true // if arkan data can be submitted to the cloud server, for analysis. 
   },

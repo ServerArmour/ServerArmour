@@ -357,3 +357,8 @@ MigrationBackup/
 /.idea/ServerArmour.iml
 /.idea/modules.xml
 /.idea/misc.xml
+/AutoDemoRecord.cs
+/StashWarning.cs
+/EspDetection.cs
+/StashWarning.zip
+/StashWarningSystem.cs
