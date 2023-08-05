@@ -31,7 +31,7 @@ using Time = Oxide.Core.Libraries.Time;
 
 namespace Oxide.Plugins
 {
-    [Info("Server Armour", "Pho3niX90", "2.39.17")]
+    [Info("Server Armour", "Pho3niX90", "2.39.18")]
     [Description("Protect your server! Auto ban known hackers, scripters and griefer accounts, and notify server owners of threats.")]
     class ServerArmour : CovalencePlugin
     {
@@ -347,9 +347,13 @@ namespace Oxide.Plugins
         {
             if (apiConnected)
             {
-                _playerData = _playerData?.Where(pair => MinutesAgo((uint)pair.Value.cacheTimestamp) < cacheLifetime)
-                                 .ToDictionary(pair => pair.Key,
-                                               pair => pair.Value);
+                try
+                {
+                    _playerData = _playerData?.Where(pair => MinutesAgo((uint)pair.Value.cacheTimestamp) < cacheLifetime)
+                                     ?.ToDictionary(pair => pair.Key,
+                                                   pair => pair.Value);
+                }
+                catch (Exception ex) { }
             }
         }
 
