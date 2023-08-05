@@ -31,7 +31,7 @@ using Time = Oxide.Core.Libraries.Time;
 
 namespace Oxide.Plugins
 {
-    [Info("Server Armour", "Pho3niX90", "2.39.18")]
+    [Info("Server Armour", "Pho3niX90", "2.39.19")]
     [Description("Protect your server! Auto ban known hackers, scripters and griefer accounts, and notify server owners of threats.")]
     class ServerArmour : CovalencePlugin
     {
@@ -41,7 +41,7 @@ namespace Oxide.Plugins
         bool isCarbon = false;
 #endif
         #region Variables
-        string api_hostname = "https://io.serverarmour.com"; // 
+        string api_hostname = "https://serverarmour.com"; // 
         Dictionary<string, ISAPlayer> _playerData = new Dictionary<string, ISAPlayer>();
         private Time _time = GetLibrary<Time>();
         private double cacheLifetime = 1; // minutes
@@ -2573,14 +2573,7 @@ namespace Oxide.Plugins
                     downloadUrl = downloadUrlCode;
                     downloadFrom = "Codefling";
                 }
-                if (plugin.Name.Contains("ServerArmourElo"))
-                {
-                    downloadUrl = URL_SERVERARMOURELO;
-                }
-                else if (plugin.Name.Contains("ServerArmour"))
-                {
-                    downloadUrl = URL_SERVERARMOUR;
-                }
+
 
                 if (IsUpdateAvailable(plugin, latestVersion) && config.AutoUpdate)
                 {
