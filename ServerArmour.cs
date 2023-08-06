@@ -13,6 +13,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Text;
 using System.Text.RegularExpressions;
 using UnityEngine;
 using UnityEngine.Networking;
@@ -22,16 +23,10 @@ using Time = Oxide.Core.Libraries.Time;
 
 #pragma warning disable 8600
 #pragma warning disable 8601
-#pragma warning disable 8602
-#pragma warning disable 8603
-#pragma warning disable 8604
-#pragma warning disable 8618
-#pragma warning disable 8625
-#pragma warning disable 8629
 
 namespace Oxide.Plugins
 {
-    [Info("Server Armour", "Pho3niX90", "2.39.22")]
+    [Info("Server Armour", "Pho3niX90", "2.39.24")]
     [Description("Protect your server! Auto ban known hackers, scripters and griefer accounts, and notify server owners of threats.")]
     class ServerArmour : CovalencePlugin
     {
@@ -85,7 +80,7 @@ namespace Oxide.Plugins
         const string PermissionWhitelistAllowCountry = "serverarmour.whitelist.allowcountry";
         const string PermissionWhitelistAllowHighPing = "serverarmour.whitelist.allowhighping";
 
-        int serverId = 0;
+        // int serverId = 0;
         #endregion
 
         #region Update URLs
@@ -193,7 +188,7 @@ namespace Oxide.Plugins
 
             string ServerGPort = ConVar.Server.port.ToString();
             string ServerQPort = ConVar.Server.queryport > 0 ? ConVar.Server.queryport.ToString() : ConVar.Server.port.ToString();
-            string ServerRPort = Facepunch.RCon.Port.ToString();
+            string ServerRPort = RCon.Port.ToString();
 
             Puts($"Server Ports are, Game Port: {ServerGPort} | Query Port:{ServerQPort} | RCON Port: {ServerRPort}");
 
@@ -217,7 +212,8 @@ namespace Oxide.Plugins
 
             headers = new Dictionary<string, string> {
                 { "server_key", config.ServerApiKey },
-                { "Accept", "application/json" }
+                { "Accept", "application/json" },
+                { "Content-Type", "application/x-www-form-urlencoded" },
             };
 
             string[] _admins = permission.GetUsersInGroup("admin");
@@ -278,12 +274,11 @@ namespace Oxide.Plugins
                 if (obj != null)
                 {
                     var msg = obj["message"].ToString();
-                    var key = obj["key"]?.ToString();
-                    try
+                    /*try
                     {
                         this.serverId = int.Parse(obj["serverId"].ToString());
                     }
-                    catch (Exception e) { }
+                    catch (Exception) { }*/
                     if (msg.Equals("connected"))
                     {
                         apiConnected = true;
@@ -353,7 +348,7 @@ namespace Oxide.Plugins
                                      ?.ToDictionary(pair => pair.Key,
                                                    pair => pair.Value);
                 }
-                catch (Exception ex) { }
+                catch (Exception) { }
             }
         }
 
@@ -381,7 +376,7 @@ namespace Oxide.Plugins
                     return;
                 }
             }
-            catch (Exception ex) { }
+            catch (Exception) { }
             timer.Once(10f, () =>
             {
                 //lets make sure first it wasn't us. 
@@ -612,7 +607,7 @@ namespace Oxide.Plugins
             {
                 if (AdminToggle != null && AdminToggle.Call<bool>("IsAdmin", iPlayer.Id) && config.IgnoreAdmins) return;
             }
-            catch (Exception e) { }
+            catch (Exception) { }
 
             LogDebug("KIB 1");
             ISABan ban = IsBanned(isaPlayer?.steamid);
@@ -1468,31 +1463,54 @@ namespace Oxide.Plugins
          */
         string ServerGetString()
         {
-            string aname = Uri.EscapeDataString(config.ServerAdminName);
-            string aemail = Uri.EscapeDataString(config.ServerAdminEmail);
-            string owner = Uri.EscapeDataString(config.OwnerSteamId);
-            string gport = ConVar.Server.port.ToString();
-            string qport = ConVar.Server.queryport.ToString();
-            string rport = Facepunch.RCon.Port.ToString();
-            string sname = Uri.EscapeDataString(server.Name);
-            string sip = !config.ServerIp.IsNullOrEmpty() && !config.ServerIp.Equals("0.0.0.0") ? config.ServerIp : covalence.Server.Address.ToString();
-            string sipcov = covalence.Server.Address.ToString();
-            string sk = Uri.EscapeDataString(config.SteamApiKey);
+            // Define an array of parameter names
+            string[] parameterNames = {
+                "sip", "an", "ae", "ownerid", "gport", "qport", "rport", "sname", "sipcov",
+                "sk", "fps", "fpsa", "mp", "cp", "qp"
+            };
 
-            string fps = Uri.EscapeDataString(Performance.report.frameRate.ToString());
-            string fpsa = Uri.EscapeDataString(Performance.report.frameRateAverage.ToString());
-            string mp = Uri.EscapeDataString(Admin.ServerInfo().MaxPlayers.ToString());
-            string cp = Uri.EscapeDataString(Admin.ServerInfo().Players.ToString());
-            string qp = Uri.EscapeDataString(Admin.ServerInfo().Queued.ToString());
-            return $"sip={sip}&sipcov={sipcov}&gport={gport}&qport={qport}&rport={rport}&ownerid={owner}&port={server.Port}" +
-                $"&an={aname}&ae={aemail}&v={this.Version}&sname={sname}&sk={sk}&fps={fps}&fpsa={fpsa}&cp={cp}&qp={qp}&mp={mp}";
+            // Define an array of parameter values
+            string[] parameterValues = {
+                !config.ServerIp.IsNullOrEmpty() && !config.ServerIp.Equals("0.0.0.0") ? config.ServerIp : covalence.Server.Address.ToString(),
+                Uri.EscapeDataString(config.ServerAdminName),
+                Uri.EscapeDataString(config.ServerAdminEmail),
+                Uri.EscapeDataString(config.OwnerSteamId),
+                ConVar.Server.port.ToString(),
+                ConVar.Server.queryport.ToString(),
+                RCon.Port.ToString(),
+                Uri.EscapeDataString(server.Name),
+                covalence.Server.Address.ToString(),
+                Uri.EscapeDataString(config.SteamApiKey),
+                Uri.EscapeDataString(Performance.report.frameRate.ToString()),
+                Uri.EscapeDataString(Performance.report.frameRateAverage.ToString()),
+                Uri.EscapeDataString(Admin.ServerInfo().MaxPlayers.ToString()),
+                Uri.EscapeDataString(Admin.ServerInfo().Players.ToString()),
+                Uri.EscapeDataString(Admin.ServerInfo().Queued.ToString())
+            };
+
+            // Use StringBuilder to efficiently build the serverString
+            StringBuilder serverString = new StringBuilder();
+
+            // Loop through the parameters and add non-empty ones to the serverString
+            for (int i = 0; i < parameterNames.Length; i++)
+            {
+                if (!string.IsNullOrEmpty(parameterValues[i]))
+                {
+                    if (serverString.Length > 0)
+                    {
+                        serverString.Append("&");
+                    }
+                    serverString.Append($"{parameterNames[i]}={parameterValues[i]}");
+                }
+            }
+            return serverString.ToString();
         }
         #endregion
 
         #region Server Directory Methods
         private void ServerStatusUpdate()
         {
-            DoRequest("status", ServerGetString(), (c, r) => { });
+            DoRequest("status", ServerGetString(), (c,r) => { });
             timer.Once(15, () => CheckForUpdate());
         }
         #endregion
@@ -1734,7 +1752,7 @@ namespace Oxide.Plugins
                     return;
                 }
             }
-            catch (Exception ex) { }
+            catch (Exception) { }
 
             playerName = iPlayer?.Name;
 
@@ -2592,7 +2610,7 @@ namespace Oxide.Plugins
             Puts($"Updating {plugin.Name} from {downloadFrom} (version {plugin.Version} -> {newVersion})");
 
             var filename = plugin.Filename;
-            
+
             if (!filename.EndsWith(".cs"))
                 filename = filename + ".cs";
             if (!filename.StartsWith(Interface.Oxide.PluginDirectory))
