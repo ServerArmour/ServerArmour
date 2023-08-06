@@ -31,7 +31,7 @@ using Time = Oxide.Core.Libraries.Time;
 
 namespace Oxide.Plugins
 {
-    [Info("Server Armour", "Pho3niX90", "2.39.20")]
+    [Info("Server Armour", "Pho3niX90", "2.39.22")]
     [Description("Protect your server! Auto ban known hackers, scripters and griefer accounts, and notify server owners of threats.")]
     class ServerArmour : CovalencePlugin
     {
@@ -713,7 +713,7 @@ namespace Oxide.Plugins
             var currentVersion = new VersionNumber(vTemp.Major, vTemp.Minor, vTemp.Build);
             var latestVersion = new Version(args[3].ToString());
 
-            var plugin = new PluginInfo { Name = pluginName, Filename = $"{Interface.Oxide.PluginDirectory}/{pluginName}.cs", Version = currentVersion };
+            var plugin = new PluginInfo { Name = pluginName.Replace(".cs", ""), Filename = pluginName, Version = currentVersion };
             ServerMgr.Instance.StartCoroutine(StartDownload(plugin, downloadUrl, latestVersion, "uMod"));
         }
 
@@ -2522,7 +2522,6 @@ namespace Oxide.Plugins
                 webrequest.Enqueue($"{manifestUrl}DiscordApi", string.Empty, (code, data) =>
                 HandleUpdateRequest(new PluginInfo { Name = "DiscordApi", Filename = $"{Interface.Oxide.PluginDirectory}/DiscordApi.cs", Version = new VersionNumber(0, 0, 0) }, code, data), this);
             }
-            Puts($"PluginDirectory " + Interface.Oxide.PluginDirectory);
         }
 
         private bool IsUpdateAvailable(PluginInfo plugin, Version latestVersion)
@@ -2589,18 +2588,20 @@ namespace Oxide.Plugins
 
         private IEnumerator StartDownload(PluginInfo plugin, string downloadUrl, Version newVersion, string downloadFrom)
         {
+
             Puts($"Updating {plugin.Name} from {downloadFrom} (version {plugin.Version} -> {newVersion})");
-#if CARBON
+
+            var filename = plugin.Filename;
+            
+            if (!filename.EndsWith(".cs"))
+                filename = filename + ".cs";
+            if (!filename.StartsWith(Interface.Oxide.PluginDirectory))
+                filename = Interface.Oxide.PluginDirectory + "/" + filename;
+
             var www = new UnityWebRequest(downloadUrl)
             {
-                downloadHandler = new DownloadHandlerFile(Interface.Oxide.PluginDirectory + "/" + plugin.Filename + ".cs")
+                downloadHandler = new DownloadHandlerFile(filename)
             };
-#else
-            var www = new UnityWebRequest(downloadUrl)
-            {
-                downloadHandler = new DownloadHandlerFile(plugin.Filename)
-            };
-#endif
 
             yield return www.SendWebRequest();
 
@@ -2635,6 +2636,6 @@ namespace Oxide.Plugins
                 return new PluginInfo() { Name = plugin.Name, Filename = plugin.Filename, Version = plugin.Version };
             }
         }
-#endregion
+        #endregion
     }
 }
