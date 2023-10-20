@@ -9,14 +9,12 @@ using Oxide.Core.Libraries.Covalence;
 using Oxide.Core.Plugins;
 using Oxide.Game.Rust.Libraries;
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
 using UnityEngine;
-using UnityEngine.Networking;
 using WebSocketSharp;
 using Application = UnityEngine.Application;
 using Time = Oxide.Core.Libraries.Time;
@@ -26,7 +24,7 @@ using Time = Oxide.Core.Libraries.Time;
 
 namespace Oxide.Plugins
 {
-    [Info("Server Armour", "Pho3niX90", "2.39.25")]
+    [Info("Server Armour", "Pho3niX90", "2.40.4")]
     [Description("Protect your server! Auto ban known hackers, scripters and griefer accounts, and notify server owners of threats.")]
     class ServerArmour : CovalencePlugin
     {
@@ -47,6 +45,7 @@ namespace Oxide.Plugins
         const string DATE_FORMAT = "yyyy/MM/dd HH:mm";
         const string DATE_FORMAT2 = "yyyy-MM-dd HH:mm:ss";
         Regex logRegex = new Regex(@"(^assets.*prefab).*?position (.*) on");
+        Regex logRegexNull = new Regex(@"(.*) changed its network group to null");
 
         bool debug = false;
         bool apiConnected = false;
@@ -55,6 +54,10 @@ namespace Oxide.Plugins
         private Dictionary<string, string> headers;
         string adminIds = "";
         Timer updateTimer;
+
+        // related to auto updating
+        Dictionary<string, byte[]> fileBackups = new Dictionary<string, byte[]>();
+        List<string> ignoredPlugins = new List<string>();
 
         #endregion
 
@@ -80,35 +83,38 @@ namespace Oxide.Plugins
         const string PermissionWhitelistAllowCountry = "serverarmour.whitelist.allowcountry";
         const string PermissionWhitelistAllowHighPing = "serverarmour.whitelist.allowhighping";
 
-        // int serverId = 0;
-        #endregion
+        const string DISCORD_INTRO_URL = "https://support.discordapp.com/hc/en-us/articles/228383668-Intro-to-Webhooks";
+        /**
+         * Plugin Name, Download Url
+         */
+        Dictionary<string, string> requiredPlugins = new Dictionary<string, string>
+        {
+            {"DiscordApi","https://serverarmour.com/api/v1/shop/product/379a27d9-d245-43c9-ad8f-332efa8a25e6/download" },
+            {"CombatLogInfo","https://serverarmour.com/api/v1/shop/product/4195c37c-8eb5-47f6-8908-45aaa06df59c/download" }
+        };
 
-        #region Update URLs
-        const string URL_SERVERARMOUR = "https://raw.githubusercontent.com/Pho3niX90/ServerArmour/master/ServerArmour.cs";
-        const string URL_SERVERARMOURELO = "https://raw.githubusercontent.com/Pho3niX90/ServerArmour/helper_plugins/ServerArmourElo.cs";
+        // int serverId = 0;
         #endregion
 
         #region Plugins
 
 #pragma warning disable 0649
-        [PluginReference] Plugin DiscordApi, DiscordMessages, BetterChat, Ember, Clans, AdminToggle;
+        [PluginReference] Plugin DiscordApi, DiscordMessages, BetterChat, Ember, Clans, AdminToggle, CombatLogInfo, ServerArmourUpdater;
 #pragma warning restore 0649
         void DiscordSend(string steamId, string name, EmbedFieldList report, int color = 39423, bool isBan = false)
         {
-            LogDebug("DiscordSend");
             string webHook;
             if (isBan)
             {
-                if (config.DiscordBanWebhookURL.IsNullOrEmpty() || config.DiscordBanWebhookURL.Equals("https://support.discordapp.com/hc/en-us/articles/228383668-Intro-to-Webhooks")) { Puts("Discord webhook not setup."); return; }
+                if (config.DiscordBanWebhookURL.IsNullOrEmpty() || config.DiscordBanWebhookURL.Equals(DISCORD_INTRO_URL)) { Puts("Discord webhook not setup."); return; }
                 webHook = config.DiscordBanWebhookURL;
             }
             else
             {
-                if (config.DiscordWebhookURL.IsNullOrEmpty() || config.DiscordWebhookURL.Equals("https://support.discordapp.com/hc/en-us/articles/228383668-Intro-to-Webhooks")) { Puts("Discord webhook not setup."); return; }
+                if (config.DiscordWebhookURL.IsNullOrEmpty() || config.DiscordWebhookURL.Equals(DISCORD_INTRO_URL)) { Puts("Discord webhook not setup."); return; }
                 webHook = config.DiscordWebhookURL;
             }
 
-            LogDebug("Discord Fields");
             List<EmbedFieldList> fields = new List<EmbedFieldList>();
             if (config.DiscordQuickConnect)
             {
@@ -120,7 +126,6 @@ namespace Oxide.Plugins
                 });
             }
 
-            LogDebug("Discord Embed 1");
             fields.Add(new EmbedFieldList()
             {
                 name = "Steam Profile",
@@ -128,15 +133,13 @@ namespace Oxide.Plugins
                 inline = !config.DiscordQuickConnect
             });
 
-            LogDebug("Discord Embed 2");
             fields.Add(new EmbedFieldList()
             {
                 name = "Server Armour Profile ",
-                value = $"[{name}\n{steamId}](https://io.serverarmour.com/profile/{steamId})",
+                value = $"[{name}\n{steamId}](https://serverarmour.com/profile/{steamId})",
                 inline = !config.DiscordQuickConnect
             });
 
-            LogDebug("Discord Add report");
             fields.Add(report);
             var fieldsObject = fields.Cast<object>().ToArray();
             string json = JsonConvert.SerializeObject(fieldsObject);
@@ -252,6 +255,23 @@ namespace Oxide.Plugins
 
             CheckServerConnection();
             Application.logMessageReceived += HandleLog;
+
+            if (ServerArmourUpdater != null && ServerArmourUpdater.IsLoaded)
+            {
+                foreach (var item in plugins.GetAll())
+                {
+                    if (item.Filename == null || item.Filename.Length == 0)
+                        continue;
+                    if (requiredPlugins.ContainsKey(item.Name))
+                        requiredPlugins.Remove(item.Name);
+                }
+
+                Puts($"Needed plugins = {requiredPlugins.Count}");
+                foreach (var plugin in requiredPlugins)
+                {
+                    ServerArmourUpdater?.Call("QueueDownload", plugin.Key, plugin.Value, "Server Armour");
+                }
+            }
         }
 
         void CheckServerConnection()
@@ -285,12 +305,10 @@ namespace Oxide.Plugins
                         Puts("Connected to SA API");
                         ServerStatusUpdate();
                         updateTimer = timer.Every(3 * 60, ServerStatusUpdate);
-
-                        timer.Once(15, () => CheckSupportingPlugins());
                     }
                     else
                     {
-                        LogError("Server Armour has not initialized. Is your apikey correct? Get it from https://io.serverarmour.com/my-servers or join discord for support https://discord.gg/jxvRaPR");
+                        LogError("Server Armour has not initialized. Is your apikey correct? Get it from https://serverarmour.com/my-servers or join discord for support https://discord.gg/jxvRaPR");
                         timer.Once(5, () => Interface.Oxide.ReloadPlugin(Name));
                         return;
                     }
@@ -314,7 +332,6 @@ namespace Oxide.Plugins
                 updateTimer.Destroy();
         }
 
-        //[Command("tc")]
         void OnUserConnected(IPlayer player)
         {
 
@@ -324,7 +341,6 @@ namespace Oxide.Plugins
             }
             else
             {
-
                 //lets check the userid first.
                 if (config.AutoKick_KickWeirdSteam64 && !player.Id.IsSteamId())
                 {
@@ -333,8 +349,18 @@ namespace Oxide.Plugins
                 }
 
                 GetPlayerBans(player);
+                try
+                {
+                    var connectedSeconds = BasePlayer.FindByID(ulong.Parse(player.Id))?.secondsConnected;
+                    if (connectedSeconds < 600)
+                        timer.Once(120, () =>
+                        {
+                            OnUserConnected(player);
+                        });
 
-                if (config.ShowProtectedMsg) SendReplyWithIcon(player, GetMsg("Protected MSG"));
+                    if (config.ShowProtectedMsg && connectedSeconds < 60) SendReplyWithIcon(player, GetMsg("Protected MSG"));
+                }
+                catch (Exception) { }
             }
         }
 
@@ -345,8 +371,7 @@ namespace Oxide.Plugins
                 try
                 {
                     _playerData = _playerData?.Where(pair => MinutesAgo((uint)pair.Value.cacheTimestamp) < cacheLifetime)
-                                     ?.ToDictionary(pair => pair.Key,
-                                                   pair => pair.Value);
+                                     ?.ToDictionary(pair => pair.Key, pair => pair.Value);
                 }
                 catch (Exception) { }
             }
@@ -592,7 +617,11 @@ namespace Oxide.Plugins
 
         void CheckPing(IPlayer player)
         {
-            if (!HasPerm(player.Id, PermissionWhitelistAllowHighPing) && (config.AutoKickMaxPing > 0 && config.AutoKickMaxPing < player.Ping))
+            // fix: https://discord.com/channels/751155344532570223/751155561776808158/1160293816104914974
+            if (player == null || !player.IsConnected)
+                return;
+
+            if (!HasPerm(player.Id, PermissionWhitelistAllowHighPing) && (config.AutoKickMaxPing > 0 && config.AutoKickMaxPing < player?.Ping))
             {
                 KickPlayer(player.Id, GetMsg("Your Ping is too High", new Dictionary<string, string> { ["ping"] = player.Ping.ToString(), ["maxPing"] = config.AutoKickMaxPing.ToString() }), "C");
             }
@@ -685,33 +714,6 @@ namespace Oxide.Plugins
             SaveConfig();
         }
 
-        [Command("sa.update_plugin")]
-        void UpdatePlugin(IPlayer player, string command, string[] args)
-        {
-            Puts("Update requested");
-            if (!player.IsServer || args.Length != 4)
-            {
-                return;
-            }
-
-            var pluginName = args[0].ToString();
-            var downloadUrl = args[1].ToString();
-            var vTemp = new Version();
-            try
-            {
-                vTemp = new Version(args[2].ToString());
-            }
-            catch (Exception)
-            {
-                vTemp = new Version();
-            }
-            var currentVersion = new VersionNumber(vTemp.Major, vTemp.Minor, vTemp.Build);
-            var latestVersion = new Version(args[3].ToString());
-
-            var plugin = new PluginInfo { Name = pluginName.Replace(".cs", ""), Filename = pluginName, Version = currentVersion };
-            ServerMgr.Instance.StartCoroutine(StartDownload(plugin, downloadUrl, latestVersion, "uMod"));
-        }
-
         [Command("sa.clb", "getreport")]
         void SCmdCheckLocalBans(IPlayer player, string command, string[] args)
         {
@@ -721,7 +723,6 @@ namespace Oxide.Plugins
         [Command("unban", "playerunban", "sa.unban"), Permission(PermissionToUnBan)]
         void SCmdUnban(IPlayer player, string command, string[] args)
         {
-
             if (args == null || (args.Length > 2 || args.Length < 1))
             {
                 SendReplyWithIcon(player, GetMsg("UnBan Syntax"));
@@ -735,21 +736,15 @@ namespace Oxide.Plugins
         void SilentBan(ulong steamId, TimeSpan timeSpan, string reason, IPlayer enforcer = null)
         {
             Unsubscribe(nameof(OnUserBanned));
-
             var username = covalence.Players.FindPlayerById(steamId.ToString())?.Name ?? "";
-
             NativeBan(steamId, reason, Convert.ToInt64(timeSpan.TotalSeconds), username, enforcer);
-
             Subscribe(nameof(OnUserBanned));
         }
         void SilentBan(ulong steamId, int timeSpan, string reason, IPlayer enforcer = null)
         {
             Unsubscribe(nameof(OnUserBanned));
-
             var username = covalence.Players.FindPlayerById(steamId.ToString())?.Name ?? "";
-
             NativeBan(steamId, reason, -1, username, enforcer);
-
             Subscribe(nameof(OnUserBanned));
         }
 
@@ -831,9 +826,7 @@ namespace Oxide.Plugins
 
         void SaUnban(string playerId, IPlayer admin = null, string reason = "")
         {
-
             IPlayer iPlayer = players.FindPlayer(playerId);
-
             SilentUnban(playerId, admin);
 
             ulong playerIdLong = 0;
@@ -913,15 +906,8 @@ namespace Oxide.Plugins
             var argString = string.Join(" ", args);
             var matches = new Regex(@"([7]\d{16}).*?(\d{9,12}|-1)$").Match(argString);
             var mG = matches.Groups;
-            /*foreach(var ar in args) {
-                Puts(ar.ToString());
-            }*/
-            /*
-            [0] steam64id
-            [1] username
-            [2] reason
-            [3] length
-            */
+
+            // [0] steam64id [1] username [2] reason [3] length
             if (args.Length > 0)
             {
                 var playerId = args[0];
@@ -1466,7 +1452,7 @@ namespace Oxide.Plugins
             // Define an array of parameter names
             string[] parameterNames = {
                 "sip", "an", "ae", "ownerid", "gport", "qport", "rport", "sname", "sipcov",
-                "sk", "fps", "fpsa", "mp", "cp", "qp"
+                "sk", "fps", "fpsa", "mp", "cp", "qp", "v"
             };
 
             // Define an array of parameter values
@@ -1485,7 +1471,8 @@ namespace Oxide.Plugins
                 Uri.EscapeDataString(Performance.report.frameRateAverage.ToString()),
                 Uri.EscapeDataString(Admin.ServerInfo().MaxPlayers.ToString()),
                 Uri.EscapeDataString(Admin.ServerInfo().Players.ToString()),
-                Uri.EscapeDataString(Admin.ServerInfo().Queued.ToString())
+                Uri.EscapeDataString(Admin.ServerInfo().Queued.ToString()),
+                Version.ToString(),
             };
 
             // Use StringBuilder to efficiently build the serverString
@@ -1510,8 +1497,7 @@ namespace Oxide.Plugins
         #region Server Directory Methods
         private void ServerStatusUpdate()
         {
-            DoRequest("status", ServerGetString(), (c,r) => { });
-            timer.Once(15, () => CheckForUpdate());
+            DoRequest("status", ServerGetString(), (c, r) => { });
         }
         #endregion
 
@@ -2049,41 +2035,11 @@ namespace Oxide.Plugins
 
             public IPInfo ipInfo { get; set; }
 
-            public ISAPlayer()
-            {
-            }
             public ISAPlayer(ulong steamId)
             {
                 steamid = steamId.ToString();
                 personaname = "";
                 this.bans = new List<ISABan>();
-            }
-            public ISAPlayer(IPlayer bPlayer)
-            {
-                CreatePlayer(bPlayer);
-            }
-            public ISAPlayer(string id)
-            {
-                CreatePlayer(id);
-            }
-
-            public ISAPlayer CreatePlayer(IPlayer bPlayer)
-            {
-                steamid = bPlayer.Id;
-                personaname = bPlayer.Name;
-                cacheTimestamp = new Time().GetUnixTimestamp();
-                lastConnected = new Time().GetUnixTimestamp();
-                bans = new List<ISABan>();
-                return this;
-            }
-            public ISAPlayer CreatePlayer(string id)
-            {
-                steamid = id;
-                personaname = "";
-                cacheTimestamp = new Time().GetUnixTimestamp();
-                lastConnected = new Time().GetUnixTimestamp();
-                bans = new List<ISABan>();
-                return this;
             }
         }
 
@@ -2166,7 +2122,7 @@ namespace Oxide.Plugins
         private void API_EspDetected(string jString)
         {
             JObject aObject = JObject.Parse(jString);
-            DoRequest($"player/{aObject.GetValue("steamId")}/addesp", $"radarUrl={aObject.GetValue("radarUrl")}&violations={aObject.GetValue("violations")}", (c, r) => { });
+            DoRequest($"player/{aObject.GetValue("steamId")}/addesp", $"radarUrl={aObject.GetValue("radarUrl")}&violations={aObject.GetValue("violations")}");
         }
         #endregion
 
@@ -2179,8 +2135,7 @@ namespace Oxide.Plugins
                 $"isClanMember={aObject.GetValue("isClanMember")}&" +
                 $"location={aObject.GetValue("location")}&" +
                 $"position={aObject.GetValue("position")}&" +
-                $"stashOwnerSteamId={aObject.GetValue("stashOwnerSteamId")}"
-                , (c, r) => { });
+                $"stashOwnerSteamId={aObject.GetValue("stashOwnerSteamId")}");
         }
         #endregion
 
@@ -2231,10 +2186,23 @@ namespace Oxide.Plugins
         #endregion
 
         #region webrequest
-        private void DoRequest(string url, string body, Action<int, string> callback, int retryInSeconds = 0)
+        private void TranslateCode(int statusCode)
+        {
+            switch (statusCode)
+            {
+                case 429:
+                    PrintWarning("Rate limited. Upgrade package on https://serverarmour.com");
+                    break;
+                case 500:
+                    break;
+            }
+        }
+
+        private void DoRequest(string url, string body, Action<int, string> callback = null, int retryInSeconds = 0)
         {
             webrequest.Enqueue($"{api_hostname}/api/v1/plugin/{url}", body, (code, response) =>
             {
+                LogDebug($"API ({url}) Response = {code}: \n{response}");
                 if (code < 299)
                 {
                     if (callback != null)
@@ -2242,19 +2210,14 @@ namespace Oxide.Plugins
                     return;
                 }
 
-                switch (code)
-                {
-                    case 429:
-                        LogDebug("Rate limited. Upgrade package on https://io.serverarmour.com");
-                        break;
-                    case 500:
-                        break;
-                }
+                TranslateCode(code);
+
                 if (retryInSeconds > 0)
                     timer.Once(retryInSeconds, () => DoRequest(url, body, callback));
 
             }, this, RequestMethod.POST, headers);
         }
+
         private void CalcElo(string steamIdKiller, string steamIdVictim, string killInfo, Action<int, string> callback = null, int retryInSeconds = 0)
         {
             webrequest.Enqueue($"{api_hostname}/api/v1/elo/{steamIdKiller}/{steamIdVictim}", killInfo, (code, response) =>
@@ -2267,15 +2230,8 @@ namespace Oxide.Plugins
                     return;
                 }
 
-                switch (code)
-                {
-                    case 429:
-                        LogDebug("Rate limited. Upgrade package on https://io.serverarmour.com");
-                        break;
-                    case 500:
-                        Puts(response);
-                        break;
-                }
+                TranslateCode(code);
+
                 if (retryInSeconds > 0)
                     timer.Once(retryInSeconds, () => CalcElo(steamIdKiller, steamIdVictim, killInfo, callback));
 
@@ -2294,18 +2250,22 @@ namespace Oxide.Plugins
                     return;
                 }
 
-                switch (code)
-                {
-                    case 429:
-                        LogDebug("Rate limited. Upgrade package on https://io.serverarmour.com");
-                        break;
-                    case 500:
-                        break;
-                }
+                TranslateCode(code);
                 if (retryInSeconds > 0)
                     timer.Once(retryInSeconds, () => FetchEloUpdate(steamId, callback));
 
             }, this, RequestMethod.GET, headers);
+        }
+        #endregion
+
+        #region Combat
+        private void UploadCombatEntries(string logEntries)
+        {
+            LogDebug("Combat Logs upload requested");
+            DoRequest("combat_log", $"entries={logEntries}", (c, r) =>
+            {
+                Interface.CallHook("OnEntriesUploaded", c, r);
+            });
         }
         #endregion
 
@@ -2354,8 +2314,8 @@ namespace Oxide.Plugins
             public bool AutoKick_BadIp = true;
             public bool AutoKick_BadIp_IgnoreComputing = true;
 
-            public string DiscordWebhookURL = "https://support.discordapp.com/hc/en-us/articles/228383668-Intro-to-Webhooks";
-            public string DiscordBanWebhookURL = "https://support.discordapp.com/hc/en-us/articles/228383668-Intro-to-Webhooks";
+            public string DiscordWebhookURL = DISCORD_INTRO_URL;
+            public string DiscordBanWebhookURL = DISCORD_INTRO_URL;
             public bool DiscordQuickConnect = true;
             public bool DiscordOnlySendDirtyReports = true;
             public bool DiscordJoinReports = true;
@@ -2372,10 +2332,9 @@ namespace Oxide.Plugins
             public string ClanBanPrefix = "Assoc Ban -> {playerId}: {reason}";
             public bool ClanBanTeams = true;
             public bool IgnoreAdmins = true;
-            public bool AutoUpdate = true;
             public bool UseEloSystem = true;
 
-            public int AutoKickMaxPing = 250;
+            public int AutoKickMaxPing = 450;
             public string AutoKickLimitCountry = "";
 
             public string IconSteamId = "76561199044451528";
@@ -2454,7 +2413,6 @@ namespace Oxide.Plugins
 
                 GetConfig(ref IgnoreCheatDetected, "Anti Hack", "Ignore Cheat Detected");
 
-                GetConfig(ref AutoUpdate, "Plugin", "Auto Update");
                 GetConfig(ref UseEloSystem, "Plugin", "Use ELO system?");
 
                 plugin.SaveConfig();
@@ -2489,169 +2447,6 @@ namespace Oxide.Plugins
             {
                 PrintError("Your config seems to be corrupted.");
                 Interface.Oxide.UnloadPlugin(Name);
-            }
-        }
-        #endregion
-
-        #region BOT Helpers
-
-        #endregion
-
-        #region Auto Update
-
-        private string manifestUrl = "https://io.serverarmour.com/api/v1/stats/version/plugin/";
-
-        private void CheckForUpdate()
-        {
-            webrequest.Enqueue($"{manifestUrl}{this.Name}", string.Empty, (code, data) => HandleUpdateRequest(PluginInfo.from(this), code, data), this);
-        }
-
-        private void CheckSupportingPlugins()
-        {
-            var myPlugins = plugins.GetAll().Where(x => x.Author == this.Author);
-            int counter = 1;
-            bool foundElo = false;
-            bool foundDiscordApi = false;
-
-            myPlugins.ToList().ForEach(plugin =>
-            {
-                if (plugin.Name == "ServerArmourElo")
-                {
-                    foundElo = true;
-                }
-                if (plugin.Name == "DiscordMessages" || plugin.Name == "DiscordApi")
-                {
-                    foundDiscordApi = true;
-                }
-
-                timer.Once(counter++ * 2, () => webrequest.Enqueue($"{manifestUrl}{plugin.Name}", string.Empty, (code, data) =>
-                HandleUpdateRequest(PluginInfo.from(plugin), code, data), this));
-            });
-
-            if (config.UseEloSystem && !foundElo)
-            {
-                LogDebug("Elo enabled, but plugin not found. Will now download.");
-                webrequest.Enqueue($"{manifestUrl}ServerArmourElo", string.Empty, (code, data) =>
-                HandleUpdateRequest(new PluginInfo { Name = "ServerArmourElo", Filename = $"{Interface.Oxide.PluginDirectory}/ServerArmourElo.cs", Version = new VersionNumber(0, 0, 0) }, code, data), this);
-            }
-            if (!config.DiscordWebhookURL.IsNullOrEmpty() && !foundDiscordApi)
-            {
-                LogDebug("Discord Webhook configured, but plugin not found. Will now download.");
-                webrequest.Enqueue($"{manifestUrl}DiscordApi", string.Empty, (code, data) =>
-                HandleUpdateRequest(new PluginInfo { Name = "DiscordApi", Filename = $"{Interface.Oxide.PluginDirectory}/DiscordApi.cs", Version = new VersionNumber(0, 0, 0) }, code, data), this);
-            }
-        }
-
-        private bool IsUpdateAvailable(PluginInfo plugin, Version latestVersion)
-        {
-            Version currentVersion = new Version(plugin.Version.ToString());
-
-            int comparison = currentVersion.CompareTo(latestVersion);
-
-            if (comparison < 0)
-            {
-                LogDebug($"An update is available for {plugin.Name}!");
-                return true;
-            }
-
-            return false;
-        }
-
-        private void HandleUpdateRequest(PluginInfo plugin, int code, string data)
-        {
-            if (code != 200)
-            {
-                LogDebug("Failed to retrieve update information.");
-                return;
-            }
-
-            try
-            {
-                var jObject = JObject.Parse(data);
-                if (jObject == null)
-                    return;
-                var success = bool.Parse(jObject.GetValue("success").ToString());
-                if (!success)
-                {
-                    return;
-                }
-                var latestVersionUmod = new Version(jObject.GetValue("latestVersion")?.ToString() ?? "0.0.0");
-                var downloadUrlUmod = jObject.GetValue("downloadUrl")?.ToString() ?? "";
-
-                var latestVersionCode = new Version(jObject.GetValue("latestVersionCodeFling").ToString());
-                var downloadUrlCode = jObject.GetValue("downloadUrlCarbon").ToString();
-
-                var latestVersion = isCarbon ? latestVersionCode : latestVersionUmod;
-                var downloadUrl = isCarbon ? downloadUrlCode : downloadUrlUmod;
-                var downloadFrom = isCarbon ? "Codefling" : "uMod";
-
-                if (!isCarbon && latestVersionUmod.CompareTo(latestVersionCode) < 0)
-                {
-                    latestVersion = latestVersionCode;
-                    downloadUrl = downloadUrlCode;
-                    downloadFrom = "Codefling";
-                }
-
-
-                if (IsUpdateAvailable(plugin, latestVersion) && config.AutoUpdate)
-                {
-                    ServerMgr.Instance.StartCoroutine(StartDownload(plugin, downloadUrl, latestVersion, downloadFrom));
-                }
-            }
-            catch (Exception ex)
-            {
-                Puts($"Failed to parse update information: {ex.Message}");
-            }
-        }
-
-        private IEnumerator StartDownload(PluginInfo plugin, string downloadUrl, Version newVersion, string downloadFrom)
-        {
-
-            Puts($"Updating {plugin.Name} from {downloadFrom} (version {plugin.Version} -> {newVersion})");
-
-            var filename = plugin.Filename;
-
-            if (!filename.EndsWith(".cs"))
-                filename = filename + ".cs";
-            if (!filename.StartsWith(Interface.Oxide.PluginDirectory))
-                filename = Interface.Oxide.PluginDirectory + "/" + filename;
-
-            var www = new UnityWebRequest(downloadUrl)
-            {
-                downloadHandler = new DownloadHandlerFile(filename)
-            };
-
-            yield return www.SendWebRequest();
-
-            if (www.responseCode == 200)
-            {
-                Puts("Update downloaded successfully!");
-#if !CARBON
-                timer.Once(1, () =>
-                {
-                    var pl = plugins.PluginManager.GetPlugin(plugin.Name);
-                    if (pl == null || !pl.IsLoaded)
-                        Interface.Oxide.LoadPlugin(plugin.Name);
-                    else if (!pl.Version.Equals(new VersionNumber(newVersion.Major, newVersion.Minor, newVersion.Build)))
-                        Interface.Oxide.ReloadPlugin(plugin.Name);
-
-                });
-#endif
-            }
-            else
-            {
-                Puts($"Failed to download update: {www.error}");
-            }
-        }
-
-        public class PluginInfo
-        {
-            public string Name;
-            public string Filename;
-            public VersionNumber Version;
-            public static PluginInfo from(Plugin plugin)
-            {
-                return new PluginInfo() { Name = plugin.Name, Filename = plugin.Filename, Version = plugin.Version };
             }
         }
         #endregion

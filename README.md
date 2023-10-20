@@ -127,9 +127,6 @@ serverarmour.whitelist.familyshare
     "Submit Arkan Data": true // if arkan data can be submitted to the cloud server, for analysis. 
   },
   "Server Info": {
-    "Game Port": "", // your normal port, that users connect to
-    "Query Port": "", // if you havent changed this, the default is the same as gameport.
-    "RCON Port": "", // not used now, for future management from io.serverarmour.com
     "Your Server IP": "" // your server IP ONLY, without : ports
   },
   "Show Protected MSG": true // shows that your server is protected by serverarmour, to a player that connects
