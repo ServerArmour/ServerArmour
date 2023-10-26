@@ -24,7 +24,7 @@ using Time = Oxide.Core.Libraries.Time;
 
 namespace Oxide.Plugins
 {
-    [Info("Server Armour", "Pho3niX90", "2.40.4")]
+    [Info("Server Armour", "Pho3niX90", "2.40.6")]
     [Description("Protect your server! Auto ban known hackers, scripters and griefer accounts, and notify server owners of threats.")]
     class ServerArmour : CovalencePlugin
     {
@@ -50,6 +50,7 @@ namespace Oxide.Plugins
         bool debug = false;
         bool apiConnected = false;
         bool serverStarted = false;
+        int serverId;
 
         private Dictionary<string, string> headers;
         string adminIds = "";
@@ -294,22 +295,25 @@ namespace Oxide.Plugins
                 if (obj != null)
                 {
                     var msg = obj["message"].ToString();
-                    /*try
+                    try
                     {
                         this.serverId = int.Parse(obj["serverId"].ToString());
                     }
-                    catch (Exception) { }*/
+                    catch (Exception) { }
+                    Puts(msg);
                     if (msg.Equals("connected"))
                     {
                         apiConnected = true;
                         Puts("Connected to SA API");
                         ServerStatusUpdate();
-                        updateTimer = timer.Every(3 * 60, ServerStatusUpdate);
+                        updateTimer = timer.Every(30, ServerStatusUpdate);
                     }
                     else
                     {
-                        LogError("Server Armour has not initialized. Is your apikey correct? Get it from https://serverarmour.com/my-servers or join discord for support https://discord.gg/jxvRaPR");
-                        timer.Once(5, () => Interface.Oxide.ReloadPlugin(Name));
+                        Puts($"ServerApiKey = {config.ServerApiKey}");
+                        var errMsg = "Server Armour has not initialized. Is your apikey correct? Get it from https://serverarmour.com/my-servers or join discord for support https://discord.gg/jxvRaPR";
+                        LogError(errMsg);
+                        timer.Once(500, () => LogError(errMsg));
                         return;
                     }
                     Puts("Server Armour has initialized.");
@@ -334,7 +338,11 @@ namespace Oxide.Plugins
 
         void OnUserConnected(IPlayer player)
         {
+            this.DoConnectionChecks(player);
+        }
 
+        void DoConnectionChecks(IPlayer player, string type = "C")
+        {
             if (!apiConnected)
             {
                 LogError("User not checked. Server armour is not loaded.");
@@ -344,24 +352,35 @@ namespace Oxide.Plugins
                 //lets check the userid first.
                 if (config.AutoKick_KickWeirdSteam64 && !player.Id.IsSteamId())
                 {
-                    KickPlayer(player.Id, GetMsg("Strange Steam64ID"), "C");
+                    KickPlayer(player.Id, GetMsg("Strange Steam64ID"), type);
                     return;
                 }
 
                 GetPlayerBans(player);
+
                 try
                 {
-                    var connectedSeconds = BasePlayer.FindByID(ulong.Parse(player.Id))?.secondsConnected;
+                    var connectedSeconds = GetConnectedSeconds(player);
                     if (connectedSeconds < 600)
                         timer.Once(120, () =>
                         {
-                            OnUserConnected(player);
+                            DoConnectionChecks(player);
                         });
 
                     if (config.ShowProtectedMsg && connectedSeconds < 60) SendReplyWithIcon(player, GetMsg("Protected MSG"));
                 }
                 catch (Exception) { }
             }
+        }
+
+        int GetConnectedSeconds(IPlayer player)
+        {
+            return BasePlayer.FindByID(ulong.Parse(player.Id))?.secondsConnected ?? int.MaxValue;
+        }
+
+        int GetConnectedSeconds(ISAPlayer player)
+        {
+            return BasePlayer.FindByID(ulong.Parse(player.steamid))?.secondsConnected ?? int.MaxValue;
         }
 
         void OnUserDisconnected(IPlayer player)
@@ -1399,7 +1418,11 @@ namespace Oxide.Plugins
 
                 if (config.DiscordJoinReports && ((config.DiscordOnlySendDirtyReports && IsPlayerDirty(isaPlayer.steamid)) || !config.DiscordOnlySendDirtyReports))
                 {
+                    if (GetConnectedSeconds(isaPlayer) > 30)
+                        return;
+
                     IPlayer iPlayer = players.FindPlayer(isaPlayer.steamid);
+
                     LogDebug($"Sending to discord.");
                     DiscordSend(iPlayer.Id, iPlayer.Name, new EmbedFieldList()
                     {
