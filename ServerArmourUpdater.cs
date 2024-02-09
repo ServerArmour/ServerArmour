@@ -1,19 +1,19 @@
-﻿using Oxide.Core.Plugins;
-using Oxide.Core;
+﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
-using System.Collections;
-using UnityEngine.Networking;
-using System;
 using Newtonsoft.Json.Linq;
-using UnityEngine;
 using System.IO;
 using Oxide.Core.Libraries.Covalence;
 using System.Text.RegularExpressions;
+using Oxide.Core;
+using Oxide.Core.Plugins;
+using UnityEngine.Networking;
+using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("Server Armour Updater", "Pho3niX90", "1.0.5")]
+    [Info("Server Armour Updater", "Pho3niX90", "1.0.7")]
     [Description("Automatically updates plugins from serverarmour.com")]
     class ServerArmourUpdater : CovalencePlugin
     {
@@ -26,12 +26,9 @@ namespace Oxide.Plugins
             timer.Once(10, CheckForUpdates);
         }
 
-        private string manifest(string plugin, string author) => $"https://serverarmour.com/api/v1/marketplace/search?plugin={plugin}&author={author}&market=ServerArmour";
-
         [Command("sa.update_plugin")]
         void UpdatePlugin(IPlayer player, string command, string[] args)
         {
-            Puts("Update requested");
             if (!player.IsServer || args.Length != 4)
             {
                 return;
@@ -40,6 +37,7 @@ namespace Oxide.Plugins
             var pluginName = args[0].ToString();
             var downloadUrl = args[1].ToString();
             var vTemp = new Version();
+            Puts($"Downlaod requested: {pluginName} from {downloadUrl}");
 
             try
             {
@@ -48,7 +46,9 @@ namespace Oxide.Plugins
             catch (Exception) { }
 
             var currentVersion = vTemp;
-            var latestVersion = new Version(args[3].ToString());
+
+            var v = new Version(args[3].ToString());
+            var latestVersion = new VersionNumber(v.Major, v.Minor, v.Revision);
 
             var plugin = new PluginInfo { Name = pluginName.Replace(".cs", ""), Filename = pluginName, Version = currentVersion };
             ServerMgr.Instance.StartCoroutine(StartDownload(plugin, downloadUrl, latestVersion, "uMod"));
@@ -59,21 +59,22 @@ namespace Oxide.Plugins
             ServerMgr.Instance.StartCoroutine(checkPlugins());
         }
 
-        IEnumerator checkPlugins()
+        private IEnumerator checkPlugins()
         {
             List<PluginInfo> plugins = GetAllPlugins();
             LogDebug("Starting update checking.");
-            foreach (PluginInfo plugin in plugins)
+            for (var index = 0; index < plugins.Count; index++)
             {
+                var plugin = plugins[index];
                 LogDebug($"Progress: {plugins.IndexOf(plugin) + 1}/{plugins.Count}");
-                webrequest.Enqueue(this.manifest(plugin.Name, plugin.Author), string.Empty, (code, data) => HandleUpdateRequest(plugin, code, data), this);
+                webrequest.Enqueue($"https://serverarmour.com/api/v1/marketplace/search?plugin={plugin.Name}&author={plugin.Author}&market=ServerArmour", string.Empty, (code, data) => HandleUpdateRequest(plugin, code, data), this);
                 yield return new WaitForSeconds(1);
             }
             LogDebug($"Progress: Done");
             timer.Once(15 * 60, CheckForUpdates);
         }
 
-        private bool IsUpdateAvailable(PluginInfo plugin, Version latestVersion)
+        private bool IsUpdateAvailable(PluginInfo plugin, VersionNumber latestVersion)
         {
             Version currentVersion = new Version(plugin.Version.ToString());
 
@@ -114,8 +115,8 @@ namespace Oxide.Plugins
 
                 if (jObject == null)
                     return;
-
-                var latestVersion = new Version(jObject.GetValue("latestVersion").ToString());
+                var v = new Version(jObject.GetValue("latestVersion").ToString());
+                var latestVersion = new VersionNumber(v.Major, v.Minor, v.Revision);
                 var downloadUrl = jObject.GetValue("downloadUrl")?.ToString() ?? "";
 
 
@@ -134,10 +135,10 @@ namespace Oxide.Plugins
         private void QueueDownload(string filename, string downloadUrl, string downloadFrom)
         {
             Puts($"Download request received for {filename}");
-            ServerMgr.Instance.StartCoroutine(StartDownload(new PluginInfo { Filename = filename, Name = filename, Version = new Version(0, 0) }, downloadUrl, new Version(1, 0), downloadFrom));
+            ServerMgr.Instance.StartCoroutine(StartDownload(new PluginInfo { Filename = filename, Name = filename, Version = new Version(0, 0) }, downloadUrl, new VersionNumber(1, 0, 0), downloadFrom));
         }
 
-        private IEnumerator StartDownload(PluginInfo plugin, string downloadUrl, Version newVersion, string downloadFrom)
+        private IEnumerator StartDownload(PluginInfo plugin, string downloadUrl, VersionNumber newVersion, string downloadFrom)
         {
             Puts($"Updating {plugin.Name} from {downloadFrom} (version {plugin.Version} -> {newVersion})");
 
@@ -177,7 +178,7 @@ namespace Oxide.Plugins
                     var pl = plugins.PluginManager.GetPlugin(plugin.Name);
                     if (pl == null || !pl.IsLoaded)
                         Interface.Oxide.LoadPlugin(plugin.Name);
-                    else if (!pl.Version.Equals(new VersionNumber(newVersion.Major, newVersion.Minor, newVersion.Build)))
+                    else if (!pl.Version.Equals(newVersion))
                         Interface.Oxide.ReloadPlugin(plugin.Name);
 
                 });

@@ -1,186 +1,211 @@
-using Facepunch.Extend;
 using Newtonsoft.Json;
 using Oxide.Core.Plugins;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
+using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("CombatLog Info", "Pho3niX90", "1.0.2")]
+    [Info("CombatLog Info", "Pho3niX90", "1.0.12")]
     [Description("Collects combat log entries, and submits them to SA for analysis.")]
     class CombatLogInfo : RustPlugin
     {
         const bool debug = false;
-        Dictionary<int, CLogEntry> logEntries = new Dictionary<int, CLogEntry>();
-        Dictionary<ulong, Timer> logTimers = new Dictionary<ulong, Timer>();
         [PluginReference] Plugin ServerArmour;
 
-        Timer mainTimer;
+        List<int> usedHashes = new List<int>();
 
         // Simple stats
         DateTime logsSince = DateTime.Now;
         int totalLogs = 0;
         int totalLogsUploaded = 0;
+        int pendingGeneration = 0;
+        int failedUploads = 0;
         //
 
         void OnServerInitialized(bool first)
         {
-            Server.Command("server.combatlogsize 80");
-            mainTimer = timer.Every(30, () =>
-            {
-                UploadLogs(logEntries);
-                if (logEntries.Count > (BasePlayer.activePlayerList.Count * 150))
-                {
-                    timer.Once(2, () => PurgeDb());
-                }
-            });
+            Server.Command("server.combatlogsize 45");
         }
 
-        void Unload()
+        void OnServerSave()
         {
-            UploadLogs(logEntries);
-            if (mainTimer != null)
-                mainTimer.Destroy();
-            foreach (var item in logTimers)
-            {
-                if (!item.Value.Destroyed)
-                {
-                    item.Value.Destroy();
-                }
-            }
+            this.cleanupHashes();
         }
 
         #region log generation
 
         private void GenCombatLog(BasePlayer forPlayer)
         {
+            if (forPlayer.IsNpc || !forPlayer.userID.IsSteamId())
+                return;
+
             var pInfo = new PInfo { Name = forPlayer.displayName, SteamId = forPlayer.UserIDString };
             var cLog = CombatLog.Get(forPlayer.userID);
 
-            if (!logTimers.ContainsKey(forPlayer.userID) || logTimers[forPlayer.userID].Destroyed)
+            pendingGeneration++;
+
+            timer.Once(ConVar.Server.combatlogdelay + 1, () =>
             {
-                logTimers[forPlayer.userID] = timer.Once(ConVar.Server.combatlogdelay, () =>
-                {
-                    foreach (CombatLog.Event evt in cLog)
-                    {
-                        AddEntry(forPlayer, evt);
-                    }
-                    logTimers.Remove(forPlayer.userID);
-                });
-            } else
-            {
-                LogDebug($"Log already queued, delaying {ConVar.Server.combatlogdelay}secs");
-                logTimers[forPlayer.userID].Reset(ConVar.Server.combatlogdelay);
-            }
+                AddEntries(forPlayer, cLog);
+            });
         }
         #endregion
 
         #region commands
-        [ConsoleCommand("clog.save")]
-        void forceSaveLogs(ConsoleSystem.Arg arg)
-        {
-            UploadLogs(logEntries);
-        }
         [ConsoleCommand("clog.stats")]
         void printStats(ConsoleSystem.Arg arg)
         {
-            arg.ReplyWith($"Stats since {logsSince}\n\nTotal Logs: {totalLogs}\nTotal Logs Uploaded: {totalLogsUploaded}\nPending Log Generation: {logTimers.Where(x=>!x.Value.Destroyed).Count()}\nPending Logs Upload: {CountEntries()}");
+            arg.ReplyWith($"Stats since {logsSince}\n\nTotal Logs: {totalLogs}\nTotal Logs Uploaded: {totalLogsUploaded}\nFailed Logs Upload: {failedUploads}\nPending Log Generation: {pendingGeneration}");
+        }
+
+        [ConsoleCommand("combatlog")]
+        void printCombatLog(ConsoleSystem.Arg arg)
+        {
+            BasePlayer player = arg.Player();
+            if (!player)
+                return;
+
+            TextTable textTable = new TextTable();
+
+            textTable.AddColumns("time","attacker", "id", "target", "id", "weapon", "ammo", "area", "distance", "old_hp", "new_hp", "info", "desync");
+
+            foreach (CombatLog.Event evt in CombatLog.Get(player.userID))
+            {
+                var entry = CLogEntry.from(player, evt);
+                if (entry != null)
+                {
+                    textTable.AddRow((Time.realtimeSinceStartup -  entry.EventTime).ToString("0.0s"),
+                        GetUsername(player, entry.AttackerSteamId) , entry.AttackerSteamId,
+                        GetUsername(player, entry.TargetSteamId) , entry.TargetSteamId,
+                        entry.Weapon, entry.Ammo, 
+                        entry.Area, entry.Distance.ToString("0.0m"), 
+                        entry.HealthOld.ToString("0.0"), entry.HealthNew.ToString("0.0"), entry.EventInfo, entry.Desync.ToString());
+                }
+            }
+            player.ConsoleMessage("---------- COMBATLOG  ----------\n");
+            player.ConsoleMessage(textTable.ToString());
+        }
+
+        string GetUsername(BasePlayer player, string id)
+        {
+            if (id == player.UserIDString || id == player.net.ID.Value.ToString())
+                return "you";
+
+            BasePlayer fp = null;
+
+            try
+            {
+                fp = BasePlayer.allPlayerList.FirstOrDefault(x => x.UserIDString == id || x.net.ID.Value.ToString() == id);
+            } catch (Exception e) { }
+
+            return fp?.displayName ?? "N/A";
+
         }
         #endregion
 
         #region hooks
+        void processingTask()
+        {
+            var task = Task.Run(() => { });
+        }
+
         object OnPlayerDeath(BasePlayer player, HitInfo info)
         {
-            GenCombatLog(player);
+            var initiator = info?.InitiatorPlayer;
+            if (initiator != null && initiator.userID.IsSteamId())
+            {
+                GenCombatLog(initiator ?? player);
+            }
+            else
+            {
+                GenCombatLog(player);
+            }
             return null;
         }
 
-        object OnPlayerAttack(BasePlayer attacker, HitInfo info)
-        {
-            GenCombatLog(attacker);
-            return null;
-        }
-
-        int pendingUploads = 0;
         private void UploadLogs(Dictionary<int, CLogEntry> logs)
         {
-            if (CountEntries() > 0)
+            pendingGeneration--;
+            totalLogs += logs.Count;
+
+            if (logs.Count > 0)
             {
-                pendingUploads += CountEntries();
 
-                if (ServerArmour == null | !ServerArmour.IsLoaded)
+                if (ServerArmour == null || !ServerArmour.IsLoaded)
+                {
+                    // LogDebug("ServerArmour plugin is not loaded. Cannot upload logs.");
+                    failedUploads += logs.Count;
                     return;
+                }
 
-                LogDebug($"Requested upload of {CountEntries()} entries");
-                ServerArmour.Call("UploadCombatEntries", JsonConvert.SerializeObject(LogEntries()));
+                try
+                {
+                    // LogDebug($"Requested upload of {logs.Count} entries");
+                    ServerArmour.Call("UploadCombatEntries", JsonConvert.SerializeObject(logs.Values));
+                    totalLogsUploaded += logs.Count;
+                }
+                catch (Exception ex)
+                {
+                    // LogDebug($"Exception during log upload: {ex}");
+                    failedUploads += logs.Count;
+                }
             }
             else
                 LogDebug($"Nothing to upload");
         }
-        /**
-         * Hook called by serverarmour after upload
-         */
-        private void OnEntriesUploaded(int c, string r)
-        {
-            if (c <= 299)
-            {
-                ClearDb();
-                totalLogsUploaded += pendingUploads;
-                LogDebug($"Uploaded {pendingUploads} entries");
-                pendingUploads = 0;
-            }
-            else
-            {
-                PrintWarning($"There was an upload error = {c}: {r}");
-            }
-        }
+
         #endregion
 
         #region helpers
-        private void AddEntry(BasePlayer forPlayer, CombatLog.Event evt)
+        private void AddEntries(BasePlayer forPlayer, Queue<CombatLog.Event> cLog)
+        {
+            Dictionary<int, CLogEntry> logEntries = new Dictionary<int, CLogEntry>();
+            foreach (CombatLog.Event evt in cLog)
+            {
+                var hash = evt.GetHashCode();
+                if (!logEntries.ContainsKey(hash) && !usedHashes.Contains(hash))
+                {
+                    var entry = CreateEntry(forPlayer, evt);
+                    if (entry != null)
+                    {
+                        usedHashes.Add(hash);
+                        logEntries.Add(hash, entry);
+                    }
+                }
+            }
+            UploadLogs(logEntries);
+            logEntries.Clear();
+        }
+
+        void cleanupHashes()
+        {
+            // Check if usedHashes exceeds 100000 entries, then cleanup
+            if (usedHashes.Count > 100000)
+            {
+                // Take the most recent 1000 entries and add a new one
+                usedHashes = usedHashes.Skip(usedHashes.Count - 1000).ToList();
+            }
+        }
+
+        private CLogEntry CreateEntry(BasePlayer forPlayer, CombatLog.Event evt)
         {
             if ((forPlayer is NPCPlayer || forPlayer.IsNpc || !forPlayer.userID.IsSteamId()) && !evt.target_id.IsSteamId())
             {
-                LogDebug($"Event = {evt.GetHashCode()} bot attacker and bot death. Skipped");
-                return;
+                // LogDebug($"Event = {evt.GetHashCode()} bot attacker and bot death. Skipped");
+                return null;
             }
-            int entriesBefore = CountEntries();
-            if (!logEntries.ContainsKey(evt.GetHashCode()))
-            {
-                totalLogs++;
-                logEntries.Add(evt.GetHashCode(), CLogEntry.from(forPlayer, evt));
-                LogDebug($"Event = {evt.GetHashCode()} saved.");
-            }
-            else
-            {
-                LogDebug($"Event = {evt.GetHashCode()} already saved. Skipped");
-            }
-            int entriesAfter = CountEntries();
-            LogDebug($"Entries: Before = {entriesBefore}, After = {entriesAfter}");
+            totalLogs++;
+            // LogDebug($"Event = {evt.GetHashCode()} saved.");
+            return CLogEntry.from(forPlayer, evt);
         }
 
         private void LogDebug(string txt)
         {
             if (debug) Puts($"DEBUG: {txt}");
         }
-
-        /**
-         * We clear the data, leaving the keys so that we do not create unnecessary network overhead by sending duplicates.
-         */
-        private void ClearDb()
-        {
-            foreach (var key in logEntries.Keys.ToList())
-                logEntries[key] = null;
-        }
-
-        /**
-         * We will purge the DB on a timer.
-         */
-        private void PurgeDb() => logEntries.Clear();
-
-        private int CountEntries() => logEntries.Where(x => x.Value != null).Count();
-        private List<CLogEntry> LogEntries() => logEntries.Values.Where(x => x != null).ToList();
 
         static private PInfo UintFind(ulong netId)
         {
@@ -195,10 +220,10 @@ namespace Oxide.Plugins
             return player != null ? new PInfo { Name = player.displayName, SteamId = player.UserIDString } : new PInfo { Name = netId.ToString(), SteamId = netId.ToString() };
         }
 
-        void findWeaponShortName(string weaponLong)
-        {
-
-        }
+        /**
+         * This avoids scientific notations
+         */
+        static public void RoundOrLimitFloat(ref float value) => value = (value > 1000000) ? value % 1000000 : value;
 
         public class PInfo
         {
@@ -230,6 +255,8 @@ namespace Oxide.Plugins
                 var pInfo = new PInfo { Name = forPlayer.displayName, SteamId = forPlayer.UserIDString };
                 var attacker = evt.attacker == "you" ? pInfo : UintFind(evt.attacker_id);
                 var target = evt.target == "you" ? pInfo : UintFind(evt.target_id);
+                RoundOrLimitFloat(ref evt.health_new);
+                RoundOrLimitFloat(ref evt.health_old);
                 return new CLogEntry
                 {
                     EventHash = evt.GetHashCode(),
