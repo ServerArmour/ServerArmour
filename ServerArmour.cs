@@ -24,7 +24,7 @@ using Time = Oxide.Core.Libraries.Time;
 
 namespace Oxide.Plugins
 {
-    [Info("Server Armour", "Pho3niX90", "2.59.0")]
+    [Info("Server Armour", "Pho3niX90", "2.59.1")]
     [Description("Protect your server! Auto ban known hackers, scripters and griefer accounts, and notify server owners of threats.")]
     class ServerArmour : CovalencePlugin
     {
@@ -161,6 +161,10 @@ namespace Oxide.Plugins
 
         void CheckPing(IPlayer player)
         {
+            // fix: https://discord.com/channels/751155344532570223/751155561776808158/1160293816104914974
+            if (player == null || !player.IsConnected)
+                return;
+
             try
             {
                 if (!HasPerm(player.Id, PermissionWhitelistAllowHighPing) && (config.AutoKickMaxPing > 0 && config.AutoKickMaxPing < player.Ping))
@@ -317,7 +321,7 @@ namespace Oxide.Plugins
                     if (msg.Equals("connected"))
                     {
                         apiConnected = true;
-                        Puts("Connected to SA API");
+                        Puts($"Connected to SA API | Server ID = {this.serverId}");
                         ServerStatusUpdate();
                         updateTimer = timer.Every(30, ServerStatusUpdate);
                     }
@@ -481,6 +485,7 @@ namespace Oxide.Plugins
             if (player == null || player.Id == null) return;
             KickIfBanned(GetPlayerCache(player?.Id));
             WebCheckPlayer(player.Id, player.Address, player.IsConnected);
+            timer.Once(10f, () => CheckPing(player));
         }
 
         void GetPlayerBans(string playerId, string playerName)
@@ -631,14 +636,6 @@ namespace Oxide.Plugins
                                 KickPlayer(id, GetMsg("Reason: Bad IP"), "C");
 
                             Interface.CallHook("OnSAVPNKick", id, isaPlayer?.ipInfo?.rating);
-                        }
-                    }
-
-                    void CheckPing(IPlayer player)
-                    {
-                        if (!HasPerm(player.Id, PermissionWhitelistAllowHighPing) && (config.AutoKickMaxPing > 0 && config.AutoKickMaxPing < player.Ping))
-                        {
-                            KickPlayer(player.Id, GetMsg("Your Ping is too High", new Dictionary<string, string> { ["ping"] = player.Ping.ToString(), ["maxPing"] = config.AutoKickMaxPing.ToString() }), "C");
                         }
                     }
 
