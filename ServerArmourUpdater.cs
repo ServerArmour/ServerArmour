@@ -19,7 +19,7 @@ namespace Oxide.Plugins
     {
         Dictionary<string, byte[]> fileBackups = new Dictionary<string, byte[]>();
         List<string> ignoredPlugins = new List<string>();
-        const bool debug = false;
+        const bool debug = true;
 
         void OnServerInitialized(bool first)
         {
@@ -76,9 +76,11 @@ namespace Oxide.Plugins
 
         private bool IsUpdateAvailable(PluginInfo plugin, VersionNumber latestVersion)
         {
-            Version currentVersion = new Version(plugin.Version.ToString());
+            Version currentVersion = plugin.Version;
 
-            int comparison = currentVersion.CompareTo(latestVersion);
+            LogDebug($"Plugin = {plugin.Name}, Current Version = {currentVersion.ToString()}");
+
+            int comparison = currentVersion.CompareTo(new Version(latestVersion.ToString()));
 
             if (comparison < 0)
             {
@@ -116,9 +118,10 @@ namespace Oxide.Plugins
                 if (jObject == null)
                     return;
                 var v = new Version(jObject.GetValue("latestVersion").ToString());
-                var latestVersion = new VersionNumber(v.Major, v.Minor, v.Revision);
+                var latestVersion = new VersionNumber(v.Major, v.Minor, v.Build);
                 var downloadUrl = jObject.GetValue("downloadUrl")?.ToString() ?? "";
 
+                LogDebug($"Plugin = {plugin.Name}, Latest Version = {latestVersion}");
 
                 if (IsUpdateAvailable(plugin, latestVersion))
                 {
@@ -128,7 +131,7 @@ namespace Oxide.Plugins
             catch (Exception ex)
             {
                 LogDebug(data);
-                LogDebug($"Failed to parse update information for  {plugin.Name}: {ex.Message}");
+                LogDebug($"Failed to parse update information for {plugin.Name}: {ex.Message}");
             }
         }
 
