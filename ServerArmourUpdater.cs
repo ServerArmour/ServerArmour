@@ -13,13 +13,13 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("Server Armour Updater", "Pho3niX90", "1.0.8")]
+    [Info("Server Armour Updater", "Pho3niX90", "1.0.9")]
     [Description("Automatically updates plugins from serverarmour.com")]
     class ServerArmourUpdater : CovalencePlugin
     {
         Dictionary<string, byte[]> fileBackups = new Dictionary<string, byte[]>();
         List<string> ignoredPlugins = new List<string>();
-        const bool debug = true;
+        const bool debug = false;
 
         void OnServerInitialized(bool first)
         {
