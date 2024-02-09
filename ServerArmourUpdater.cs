@@ -13,7 +13,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("Server Armour Updater", "Pho3niX90", "1.0.7")]
+    [Info("Server Armour Updater", "Pho3niX90", "1.0.8")]
     [Description("Automatically updates plugins from serverarmour.com")]
     class ServerArmourUpdater : CovalencePlugin
     {
