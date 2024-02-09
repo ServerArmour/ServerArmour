@@ -24,7 +24,7 @@ using Time = Oxide.Core.Libraries.Time;
 
 namespace Oxide.Plugins
 {
-    [Info("Server Armour", "Pho3niX90", "2.40.9")]
+    [Info("Server Armour", "Pho3niX90", "2.59.0")]
     [Description("Protect your server! Auto ban known hackers, scripters and griefer accounts, and notify server owners of threats.")]
     class ServerArmour : CovalencePlugin
     {
@@ -161,10 +161,14 @@ namespace Oxide.Plugins
 
         void CheckPing(IPlayer player)
         {
-            if (!HasPerm(player.Id, PermissionWhitelistAllowHighPing) && (config.AutoKickMaxPing > 0 && config.AutoKickMaxPing < player.Ping))
+            try
             {
-                KickPlayer(player.Id, GetMsg("Your Ping is too High", new Dictionary<string, string> { ["ping"] = player.Ping.ToString(), ["maPing"] = config.AutoKickMaxPing.ToString() }), "C");
+                if (!HasPerm(player.Id, PermissionWhitelistAllowHighPing) && (config.AutoKickMaxPing > 0 && config.AutoKickMaxPing < player.Ping))
+                {
+                    KickPlayer(player.Id, GetMsg("Your Ping is too High", new Dictionary<string, string> { ["ping"] = player.Ping.ToString(), ["maxPing"] = config.AutoKickMaxPing.ToString() }), "C");
+                }
             }
+            catch (Exception ex) { }
         }
 
         #endregion
@@ -173,7 +177,8 @@ namespace Oxide.Plugins
         void OnServerSave()
         {
             if (config.AutoKickMaxPing > 0)
-                foreach (var player in players.Connected) timer.Once(5f, () => CheckPing(player));
+                foreach (var player in players.Connected)
+                    timer.Once(5f, () => CheckPing(player));
         }
 
         void OnServerInitialized(bool first)
@@ -633,7 +638,7 @@ namespace Oxide.Plugins
                     {
                         if (!HasPerm(player.Id, PermissionWhitelistAllowHighPing) && (config.AutoKickMaxPing > 0 && config.AutoKickMaxPing < player.Ping))
                         {
-                            KickPlayer(player.Id, GetMsg("Your Ping is too High", new Dictionary<string, string> { ["ping"] = player.Ping.ToString(), ["maPing"] = config.AutoKickMaxPing.ToString() }), "C");
+                            KickPlayer(player.Id, GetMsg("Your Ping is too High", new Dictionary<string, string> { ["ping"] = player.Ping.ToString(), ["maxPing"] = config.AutoKickMaxPing.ToString() }), "C");
                         }
                     }
 
@@ -1548,18 +1553,30 @@ namespace Oxide.Plugins
             {
                 ISAPlayer isaPlayer = GetPlayerCache(steamid);
 
-                if (!config.OwnerSteamId.IsNullOrEmpty() && config.OwnerSteamId.StartsWith("7656") && config.AutoKick_NetworkBan)
+                if (isaPlayer?.bans?.Count() == 0)
                 {
-                    LogDebug("Check ban!");
-                    return isaPlayer?.bans?.Count() > 0 ? isaPlayer?.bans?.FirstOrDefault(x => (x.serverIp.Equals(config.ServerIp)
-                        || x.serverIp.Equals(covalence.Server.Address.ToString())
-                        || (x.adminSteamId != null && x.adminSteamId.Contains(config.OwnerSteamId)))
-                        && !DateIsPast(x.BanUntillDateTime())) : null;
+                    return null;
                 }
 
-                return isaPlayer?.bans?.Count() > 0 ?
-                    isaPlayer?.bans?.FirstOrDefault(x => x.serverIp.Equals(config.ServerIp)
-                    && !DateIsPast(x.BanUntillDateTime())) : null;
+                LogDebug("Check ban!");
+                foreach (ISABan ban in isaPlayer?.bans)
+                {
+                    var isServerIP = ban.serverIp.Equals(config.ServerIp)
+                        || ban.serverIp.Equals(covalence.Server.Address.ToString());
+                    var shouldNetworkCheck = (config.AutoKick_NetworkBan && !config.OwnerSteamId.IsNullOrEmpty() && ban.adminSteamId != null && ban.adminSteamId.Contains(config.OwnerSteamId));
+                    var isServerId = this.serverId == ban.serverId;
+                    if (isServerId || isServerIP || shouldNetworkCheck)
+                    {
+                        try
+                        {
+                            if (!DateIsPast(ban.BanUntillDateTime()))
+                                return ban;
+                        }
+                        catch (FormatException ex) { }
+                    }
+                }
+
+                return null;
             }
             catch (InvalidOperationException ioe)
             {
@@ -2063,6 +2080,7 @@ namespace Oxide.Plugins
 #pragma warning disable 0649
             public int id;
             public string adminSteamId;
+            public int serverId;
             public ulong steamid;
             public ulong bannedBy;
             public string reason;
@@ -2079,6 +2097,9 @@ namespace Oxide.Plugins
             {
                 return ConvertToTimestamp(banUntil);
             }
+
+            /// <summary>This method throws an exception when the date cannot be parsed, parmanent bans do not have a banUntil date.</summary>
+            /// <exception cref="FormatException">This exception is thrown if it's a pemanent ban</exception>
             public DateTime BanUntillDateTime()
             {
                 DateTime t;
@@ -2378,7 +2399,7 @@ namespace Oxide.Plugins
                 GetConfig(ref DissallowVacBanDays, "Auto Kick", "Steam", "Min age of VAC ban allowed");
                 GetConfig(ref AutoKickFamilyShare, "Auto Kick", "Steam", "Family share accounts");
                 GetConfig(ref AutoKickFamilyShareIfDirty, "Auto Kick", "Steam", "Family share accounts that are dirty");
-                
+
                 GetConfig(ref AutoKickMaxPing, "Auto Kick", "Ping", "Max Ping Allowed");
                 GetConfig(ref AutoKickLimitCountry, "Auto Kick", "Ping", "Limit players ONLY to this country ISO code, kick rest");
 
